@@ -39,11 +39,15 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
+// HttpContextAccessor (required for JwtHelper and HttpHelper)
+builder.Services.AddHttpContextAccessor();
+
 // AutoMapper
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 // Helpers
 builder.Services.AddScoped<JwtHelper>();
+builder.Services.AddScoped<HttpHelper>();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();

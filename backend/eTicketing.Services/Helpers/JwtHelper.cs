@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using eTicketing.Services.Database.Entities;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -10,10 +11,12 @@ namespace eTicketing.Services.Helpers;
 public class JwtHelper
 {
     private readonly IConfiguration _configuration;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public JwtHelper(IConfiguration configuration)
+    public JwtHelper(IConfiguration configuration, IHttpContextAccessor httpContextAccessor)
     {
         _configuration = configuration;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public string GenerateToken(User user)
@@ -57,5 +60,67 @@ public class JwtHelper
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var expirationMinutes = int.Parse(jwtSettings["ExpirationInMinutes"] ?? "1440");
         return DateTime.UtcNow.AddMinutes(expirationMinutes);
+    }
+
+    /// <summary>
+    /// Gets the current user ID from JWT token claims
+    /// </summary>
+    public int? GetUserId()
+    {
+        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier);
+        
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
+        {
+            return userId;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the current organization ID from JWT token claims
+    /// </summary>
+    public int? GetOrganizationId()
+    {
+        var organizationIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("OrganizationId");
+        
+        if (organizationIdClaim != null && int.TryParse(organizationIdClaim.Value, out int organizationId))
+        {
+            return organizationId;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the current user's email from JWT token claims
+    /// </summary>
+    public string? GetUserEmail()
+    {
+        return _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value;
+    }
+
+    /// <summary>
+    /// Gets the current user's role from JWT token claims
+    /// </summary>
+    public string? GetUserRole()
+    {
+        return _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Role)?.Value;
+    }
+
+    /// <summary>
+    /// Checks if the current user has a specific role
+    /// </summary>
+    public bool HasRole(string role)
+    {
+        return _httpContextAccessor.HttpContext?.User?.IsInRole(role) ?? false;
+    }
+
+    /// <summary>
+    /// Checks if the current user has any of the specified roles
+    /// </summary>
+    public bool HasAnyRole(params string[] roles)
+    {
+        return roles.Any(role => HasRole(role));
     }
 }

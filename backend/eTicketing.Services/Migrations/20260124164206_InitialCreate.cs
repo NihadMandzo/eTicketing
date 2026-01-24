@@ -112,33 +112,42 @@ namespace eTicketing.Services.Migrations
                 columns: new[] { "Id", "CreatedAt", "Description", "DisplayOrder", "IconUrl", "IsActive", "Name", "UpdatedAt" },
                 values: new object[,]
                 {
-                    { 1, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8826), "Music events and concerts", 1, "/icons/music.svg", true, "Music", null },
-                    { 2, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8830), "Sports events and games", 2, "/icons/sports.svg", true, "Sports", null },
-                    { 3, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8834), "Theater and performing arts", 3, "/icons/theater.svg", true, "Theater", null },
-                    { 4, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8838), "Conferences and seminars", 4, "/icons/conference.svg", true, "Conference", null }
+                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Music events and concerts", 1, "/icons/music.svg", true, "Music", null },
+                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Sports events and games", 2, "/icons/sports.svg", true, "Sports", null },
+                    { 3, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Theater and performing arts", 3, "/icons/theater.svg", true, "Theater", null },
+                    { 4, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Conferences and seminars", 4, "/icons/conference.svg", true, "Conference", null },
+                    { 5, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Art exhibitions and cultural events", 5, "/icons/arts.svg", true, "Arts & Culture", null }
                 });
 
             migrationBuilder.InsertData(
                 table: "Organizations",
                 columns: new[] { "Id", "Address", "CreatedAt", "Description", "Email", "IsActive", "LogoUrl", "Name", "PhoneNumber", "UpdatedAt", "Website" },
-                values: new object[] { 1, "123 Main St", new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8795), "Default system organization", "info@defaultorg.com", true, "", "Default Organization", "+1234567890", null, "https://defaultorg.com" });
+                values: new object[,]
+                {
+                    { 1, "123 Main St, City, Country", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Default system organization", "info@defaultorg.com", true, "/logos/default.png", "Default Organization", "+1234567890", null, "https://defaultorg.com" },
+                    { 2, "456 Event Ave, City, Country", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Demo organization for testing", "contact@demoevents.com", true, "/logos/demo.png", "Demo Events Inc", "+9876543210", null, "https://demoevents.com" }
+                });
 
             migrationBuilder.InsertData(
                 table: "Roles",
                 columns: new[] { "Id", "CreatedAt", "Description", "Name", "UpdatedAt" },
                 values: new object[,]
                 {
-                    { 1, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8523), "Super Administrator with full system access", "SuperAdmin", null },
-                    { 2, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8528), "Administrator with system-wide access", "Admin", null },
-                    { 3, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8531), "Organization Super Administrator", "OrganizationSuperAdmin", null },
-                    { 4, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8534), "Organization Administrator", "OrganizationAdmin", null },
-                    { 5, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8537), "Regular user", "User", null }
+                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Super Administrator with full system access", "SuperAdmin", null },
+                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Administrator with system-wide access", "Admin", null },
+                    { 3, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Organization Super Administrator", "OrganizationSuperAdmin", null },
+                    { 4, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Organization Administrator", "OrganizationAdmin", null },
+                    { 5, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Regular user", "User", null }
                 });
 
             migrationBuilder.InsertData(
                 table: "Users",
                 columns: new[] { "Id", "CreatedAt", "Email", "FirstName", "IsActive", "IsEmailVerified", "LastLoginAt", "LastName", "OrganizationId", "PasswordHash", "PasswordSalt", "PhoneNumber", "RoleId", "UpdatedAt" },
-                values: new object[] { 1, new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8876), "admin@eticketing.com", "Super", true, true, null, "Admin", null, "vx8ZPtLFkLPfJ8q7qBqRaQ==", "3i7kJUv8rz5mN9pQ2wX7yA==", "+1234567890", 1, null });
+                values: new object[,]
+                {
+                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@eticketing.com", "Super", true, true, null, "Admin", null, "6hcxIJO1EWqgFsQh7clsHhQXfqnmPgXebA2anKWDjQ0=", "t7xiN2v96Nbf604HrdVZOA94IiOFYS7+lLE9h4gJux8=", "+1234567890", 1, null },
+                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "user@eticketing.com", "Test", true, true, null, "User", 1, "JPujZ6IJUV6/hNmVsdqf2vnqDADJgB7STpIJP7mvDR4=", "HLgs9KjKo2y02rfK5b7P8Ewayl5aDpWynB0hYZ9hxCI=", "+1234567891", 5, null }
+                });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Categories_Name",

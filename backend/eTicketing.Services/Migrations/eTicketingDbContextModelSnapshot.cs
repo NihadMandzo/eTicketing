@@ -68,7 +68,7 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 1,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8826),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Music events and concerts",
                             DisplayOrder = 1,
                             IconUrl = "/icons/music.svg",
@@ -78,7 +78,7 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 2,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8830),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Sports events and games",
                             DisplayOrder = 2,
                             IconUrl = "/icons/sports.svg",
@@ -88,7 +88,7 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 3,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8834),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Theater and performing arts",
                             DisplayOrder = 3,
                             IconUrl = "/icons/theater.svg",
@@ -98,12 +98,22 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 4,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8838),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Conferences and seminars",
                             DisplayOrder = 4,
                             IconUrl = "/icons/conference.svg",
                             IsActive = true,
                             Name = "Conference"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Art exhibitions and cultural events",
+                            DisplayOrder = 5,
+                            IconUrl = "/icons/arts.svg",
+                            IsActive = true,
+                            Name = "Arts & Culture"
                         });
                 });
 
@@ -167,15 +177,28 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 1,
-                            Address = "123 Main St",
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8795),
+                            Address = "123 Main St, City, Country",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Default system organization",
                             Email = "info@defaultorg.com",
                             IsActive = true,
-                            LogoUrl = "",
+                            LogoUrl = "/logos/default.png",
                             Name = "Default Organization",
                             PhoneNumber = "+1234567890",
                             Website = "https://defaultorg.com"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Address = "456 Event Ave, City, Country",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Demo organization for testing",
+                            Email = "contact@demoevents.com",
+                            IsActive = true,
+                            LogoUrl = "/logos/demo.png",
+                            Name = "Demo Events Inc",
+                            PhoneNumber = "+9876543210",
+                            Website = "https://demoevents.com"
                         });
                 });
 
@@ -214,35 +237,35 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 1,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8523),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Super Administrator with full system access",
                             Name = "SuperAdmin"
                         },
                         new
                         {
                             Id = 2,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8528),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Administrator with system-wide access",
                             Name = "Admin"
                         },
                         new
                         {
                             Id = 3,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8531),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Organization Super Administrator",
                             Name = "OrganizationSuperAdmin"
                         },
                         new
                         {
                             Id = 4,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8534),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Organization Administrator",
                             Name = "OrganizationAdmin"
                         },
                         new
                         {
                             Id = 5,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8537),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Regular user",
                             Name = "User"
                         });
@@ -322,16 +345,31 @@ namespace eTicketing.Services.Migrations
                         new
                         {
                             Id = 1,
-                            CreatedAt = new DateTime(2026, 1, 24, 16, 21, 47, 402, DateTimeKind.Utc).AddTicks(8876),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "admin@eticketing.com",
                             FirstName = "Super",
                             IsActive = true,
                             IsEmailVerified = true,
                             LastName = "Admin",
-                            PasswordHash = "vx8ZPtLFkLPfJ8q7qBqRaQ==",
-                            PasswordSalt = "3i7kJUv8rz5mN9pQ2wX7yA==",
+                            PasswordHash = "6hcxIJO1EWqgFsQh7clsHhQXfqnmPgXebA2anKWDjQ0=",
+                            PasswordSalt = "t7xiN2v96Nbf604HrdVZOA94IiOFYS7+lLE9h4gJux8=",
                             PhoneNumber = "+1234567890",
                             RoleId = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "user@eticketing.com",
+                            FirstName = "Test",
+                            IsActive = true,
+                            IsEmailVerified = true,
+                            LastName = "User",
+                            OrganizationId = 1,
+                            PasswordHash = "JPujZ6IJUV6/hNmVsdqf2vnqDADJgB7STpIJP7mvDR4=",
+                            PasswordSalt = "HLgs9KjKo2y02rfK5b7P8Ewayl5aDpWynB0hYZ9hxCI=",
+                            PhoneNumber = "+1234567891",
+                            RoleId = 5
                         });
                 });
 
