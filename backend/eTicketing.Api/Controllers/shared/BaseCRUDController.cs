@@ -20,21 +20,14 @@ public abstract class BaseCRUDController<TResponse, TSearch, TRequest, TUpdateRe
     public virtual async Task<IActionResult> CreateAsync([FromBody] TRequest request, CancellationToken cancellationToken = default)
     {
         var result = await Service.CreateAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(GetByIdAsync), new { id = (result as dynamic)?.Id }, result);
+        return StatusCode(201, result);
     }
 
     [HttpPut("{id}")]
     public virtual async Task<IActionResult> UpdateAsync(int id, [FromBody] TUpdateRequest request, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await Service.UpdateAsync(id, request, cancellationToken);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        var result = await Service.UpdateAsync(id, request, cancellationToken);
+        return Ok(result);
     }
 
     [HttpDelete("{id}")]
@@ -45,6 +38,6 @@ public abstract class BaseCRUDController<TResponse, TSearch, TRequest, TUpdateRe
         if (!result)
             return NotFound();
         
-        return NoContent();
+        return StatusCode(200, new { statusCode = 200, message = "Deleted successfully" });
     }
 }
