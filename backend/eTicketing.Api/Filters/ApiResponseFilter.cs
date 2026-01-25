@@ -88,6 +88,20 @@ public class ApiResponseFilter : IActionFilter
             };
         }
 
+        // Handle UnauthorizedObjectResult
+        if (context.Result is UnauthorizedObjectResult unauthorizedObject)
+        {
+            var message = unauthorizedObject.Value?.ToString() ?? "Unauthorized";
+            context.Result = new ObjectResult(new ApiResponse
+            {
+                StatusCode = StatusCodes.Status401Unauthorized,
+                Message = message
+            })
+            {
+                StatusCode = StatusCodes.Status401Unauthorized
+            };
+        }
+
         // Handle ForbidResult
         if (context.Result is ForbidResult)
         {

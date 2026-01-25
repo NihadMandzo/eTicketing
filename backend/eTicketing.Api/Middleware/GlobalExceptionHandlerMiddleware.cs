@@ -21,8 +21,8 @@ public class GlobalExceptionHandlerMiddleware
         {
             await _next(context);
 
-            // Handle successful responses without body (404, 401, 403, etc.)
-            if (!context.Response.HasStarted && context.Response.StatusCode != StatusCodes.Status200OK)
+            // Handle error responses without body (404, 401, 403, etc.)
+            if (!context.Response.HasStarted && context.Response.StatusCode >= 400)
             {
                 await HandleStatusCodeAsync(context);
             }
@@ -30,7 +30,11 @@ public class GlobalExceptionHandlerMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred");
-            await HandleExceptionAsync(context, ex);
+            
+            if (!context.Response.HasStarted)
+            {
+                await HandleExceptionAsync(context, ex);
+            }
         }
     }
 
@@ -49,8 +53,8 @@ public class GlobalExceptionHandlerMiddleware
         {
             KeyNotFoundException => "Resource not found",
             UnauthorizedAccessException => "Unauthorized access",
-            ArgumentException => exception.Message,
-            InvalidOperationException => exception.Message,
+            ArgumentException => "Invalid request",
+            InvalidOperationException => "Operation not allowed",
             _ => "An internal server error occurred"
         };
 

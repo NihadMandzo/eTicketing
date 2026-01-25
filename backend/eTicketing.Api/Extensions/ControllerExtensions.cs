@@ -25,17 +25,17 @@ public static class ControllerExtensions
         };
     }
 
-    public static IActionResult BadRequest(this ControllerBase controller, string message)
+    public static IActionResult BadRequestError(this ControllerBase controller, string message)
     {
         return controller.Error(message, StatusCodes.Status400BadRequest);
     }
 
-    public static IActionResult Unauthorized(this ControllerBase controller, string message = "Unauthorized")
+    public static IActionResult UnauthorizedError(this ControllerBase controller, string message = "Unauthorized")
     {
         return controller.Error(message, StatusCodes.Status401Unauthorized);
     }
 
-    public static IActionResult Forbidden(this ControllerBase controller, string message = "Forbidden")
+    public static IActionResult ForbiddenError(this ControllerBase controller, string message = "Forbidden")
     {
         return controller.Error(message, StatusCodes.Status403Forbidden);
     }

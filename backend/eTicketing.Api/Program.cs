@@ -44,7 +44,6 @@ builder.Services.AddAuthentication(options =>
         {
             context.HandleResponse();
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.ContentType = "application/json";
             return context.Response.WriteAsJsonAsync(new
             {
                 statusCode = 401,
@@ -54,7 +53,6 @@ builder.Services.AddAuthentication(options =>
         OnForbidden = context =>
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            context.Response.ContentType = "application/json";
             return context.Response.WriteAsJsonAsync(new
             {
                 statusCode = 403,
