@@ -12,15 +12,15 @@ using eTicketing.Services.Database;
 namespace eTicketing.Services.Migrations
 {
     [DbContext(typeof(eTicketingDbContext))]
-    [Migration("20260124164206_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260125153144_InitialMigration")]
+    partial class InitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "9.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -76,7 +76,8 @@ namespace eTicketing.Services.Migrations
                             DisplayOrder = 1,
                             IconUrl = "/icons/music.svg",
                             IsActive = true,
-                            Name = "Music"
+                            Name = "Music",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
@@ -86,7 +87,8 @@ namespace eTicketing.Services.Migrations
                             DisplayOrder = 2,
                             IconUrl = "/icons/sports.svg",
                             IsActive = true,
-                            Name = "Sports"
+                            Name = "Sports",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
@@ -96,7 +98,8 @@ namespace eTicketing.Services.Migrations
                             DisplayOrder = 3,
                             IconUrl = "/icons/theater.svg",
                             IsActive = true,
-                            Name = "Theater"
+                            Name = "Theater",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
@@ -106,7 +109,8 @@ namespace eTicketing.Services.Migrations
                             DisplayOrder = 4,
                             IconUrl = "/icons/conference.svg",
                             IsActive = true,
-                            Name = "Conference"
+                            Name = "Conference",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
@@ -116,7 +120,8 @@ namespace eTicketing.Services.Migrations
                             DisplayOrder = 5,
                             IconUrl = "/icons/arts.svg",
                             IsActive = true,
-                            Name = "Arts & Culture"
+                            Name = "Arts & Culture",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -188,6 +193,7 @@ namespace eTicketing.Services.Migrations
                             LogoUrl = "/logos/default.png",
                             Name = "Default Organization",
                             PhoneNumber = "+1234567890",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Website = "https://defaultorg.com"
                         },
                         new
@@ -201,6 +207,7 @@ namespace eTicketing.Services.Migrations
                             LogoUrl = "/logos/demo.png",
                             Name = "Demo Events Inc",
                             PhoneNumber = "+9876543210",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Website = "https://demoevents.com"
                         });
                 });
@@ -242,35 +249,40 @@ namespace eTicketing.Services.Migrations
                             Id = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Super Administrator with full system access",
-                            Name = "SuperAdmin"
+                            Name = "SuperAdmin",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 2,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Administrator with system-wide access",
-                            Name = "Admin"
+                            Name = "Admin",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 3,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Organization Super Administrator",
-                            Name = "OrganizationSuperAdmin"
+                            Name = "OrganizationSuperAdmin",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 4,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Organization Administrator",
-                            Name = "OrganizationAdmin"
+                            Name = "OrganizationAdmin",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 5,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Regular user",
-                            Name = "User"
+                            Name = "User",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -309,6 +321,13 @@ namespace eTicketing.Services.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("OTP")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTime?>("OTPExpiration")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("OrganizationId")
                         .HasColumnType("int");
 
@@ -323,7 +342,6 @@ namespace eTicketing.Services.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("PhoneNumber")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
@@ -333,6 +351,11 @@ namespace eTicketing.Services.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
@@ -341,6 +364,9 @@ namespace eTicketing.Services.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.HasIndex("RoleId");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
 
                     b.ToTable("Users");
 
@@ -354,10 +380,12 @@ namespace eTicketing.Services.Migrations
                             IsActive = true,
                             IsEmailVerified = true,
                             LastName = "Admin",
-                            PasswordHash = "6hcxIJO1EWqgFsQh7clsHhQXfqnmPgXebA2anKWDjQ0=",
-                            PasswordSalt = "t7xiN2v96Nbf604HrdVZOA94IiOFYS7+lLE9h4gJux8=",
+                            PasswordHash = "YZxW8VUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba9876543210=",
+                            PasswordSalt = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRST=",
                             PhoneNumber = "+1234567890",
-                            RoleId = 1
+                            RoleId = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "superadmin"
                         },
                         new
                         {
@@ -369,10 +397,12 @@ namespace eTicketing.Services.Migrations
                             IsEmailVerified = true,
                             LastName = "User",
                             OrganizationId = 1,
-                            PasswordHash = "JPujZ6IJUV6/hNmVsdqf2vnqDADJgB7STpIJP7mvDR4=",
-                            PasswordSalt = "HLgs9KjKo2y02rfK5b7P8Ewayl5aDpWynB0hYZ9hxCI=",
+                            PasswordHash = "ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba0987654321=",
+                            PasswordSalt = "bcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTU=",
                             PhoneNumber = "+1234567891",
-                            RoleId = 5
+                            RoleId = 5,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "testuser"
                         });
                 });
 

@@ -19,7 +19,8 @@ public static class OrganizationSeed
                 Website = "https://defaultorg.com",
                 LogoUrl = "/logos/default.png",
                 IsActive = true,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new Organization
             {
@@ -32,7 +33,8 @@ public static class OrganizationSeed
                 Website = "https://demoevents.com",
                 LogoUrl = "/logos/demo.png",
                 IsActive = true,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
     }

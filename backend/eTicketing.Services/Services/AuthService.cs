@@ -42,14 +42,7 @@ public class AuthService : IAuthService
         var verificationCode = GenerateOTP();
         var otpExpiration = DateTime.UtcNow.AddMinutes(30);
 
-        // Get default role (User role with ID 2 based on typical seeding)
-        var defaultRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "User");
-        if (defaultRole == null)
-        {
-            throw new InvalidOperationException("Greška u konfiguraciji sistema");
-        }
-
-        // Create user
+        // Create user with basic user role (Role ID 5)
         var user = new User
         {
             FirstName = request.FirstName,
@@ -63,7 +56,7 @@ public class AuthService : IAuthService
             IsEmailVerified = false,
             OTP = verificationCode,
             OTPExpiration = otpExpiration,
-            RoleId = defaultRole.Id,
+            RoleId = 5, // Basic User role
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -174,7 +167,7 @@ public class AuthService : IAuthService
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null || string.IsNullOrWhiteSpace(user.OTP) || 
-            user.OTPExpiration < DateTime.UtcNow || user.OTP != request.Code)
+            !user.OTPExpiration.HasValue || user.OTPExpiration.Value < DateTime.UtcNow || user.OTP != request.Code)
         {
             throw new InvalidOperationException("Neispravan kod za resetovanje lozinke");
         }

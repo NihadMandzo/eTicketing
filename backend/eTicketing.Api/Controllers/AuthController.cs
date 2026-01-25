@@ -32,7 +32,7 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { message = ex.Message });
+            return Conflict(ex.Message);
         }
         catch (Exception ex)
         {
@@ -54,7 +54,7 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message );
         }
         catch (Exception ex)
         {
@@ -76,7 +76,7 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ex.Message );
         }
         catch (Exception ex)
         {
@@ -116,7 +116,7 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message );
         }
         catch (Exception ex)
         {
@@ -140,11 +140,11 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message);
         }
         catch (InvalidOperationException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ex.Message);
         }
         catch (Exception ex)
         {
@@ -167,7 +167,7 @@ public class AuthController : ControllerBase
             
             if (user == null)
             {
-                return Unauthorized(new { message = "Korisnik nije pronađen" });
+                return Unauthorized("Korisnik nije pronađen");
             }
 
             return Ok(user);
@@ -175,7 +175,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Greška pri dohvatanju korisničkih podataka");
-            return StatusCode(500, new { message = "Došlo je do greške pri dohvatanju podataka" });
+            return StatusCode(500, "Došlo je do greške pri dohvatanju podataka");
         }
     }
 
