@@ -49,7 +49,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var result = await _authService.VerifyEmailAsync(request);
+            await _authService.VerifyEmailAsync(request);
             return Ok(new { message = "Email uspješno verifikovan" });
         }
         catch (InvalidOperationException ex)
@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var result = await _authService.ResetPasswordAsync(request);
+            await _authService.ResetPasswordAsync(request);
             return Ok(new { message = "Lozinka je uspješno resetovana" });
         }
         catch (InvalidOperationException ex)
@@ -135,7 +135,7 @@ public class AuthController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-            var result = await _authService.ChangePasswordAsync(userId, request);
+            await _authService.ChangePasswordAsync(userId, request);
             return Ok(new { message = "Lozinka je uspješno promijenjena" });
         }
         catch (UnauthorizedAccessException ex)
@@ -167,7 +167,7 @@ public class AuthController : ControllerBase
             
             if (user == null)
             {
-                return NotFound(new { message = "Korisnik nije pronađen" });
+                return Unauthorized(new { message = "Korisnik nije pronađen" });
             }
 
             return Ok(user);
