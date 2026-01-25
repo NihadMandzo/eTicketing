@@ -51,11 +51,11 @@ public class GlobalExceptionHandlerMiddleware
 
         var message = exception switch
         {
-            KeyNotFoundException => "Resource not found",
-            UnauthorizedAccessException => "Unauthorized access",
-            ArgumentException => "Invalid request",
-            InvalidOperationException => "Operation not allowed",
-            _ => "An internal server error occurred"
+            KeyNotFoundException => "Objekat nije pronađen",
+            UnauthorizedAccessException => exception.Message,
+            ArgumentException => exception.Message,
+            InvalidOperationException => exception.Message,
+            _ => "Došlo je do greške na serveru"
         };
 
         return WriteResponseAsync(context, statusCode, message);
@@ -67,11 +67,11 @@ public class GlobalExceptionHandlerMiddleware
         
         var message = statusCode switch
         {
-            StatusCodes.Status401Unauthorized => "Unauthorized",
-            StatusCodes.Status403Forbidden => "Forbidden",
-            StatusCodes.Status404NotFound => "Not found",
-            StatusCodes.Status400BadRequest => "Bad request",
-            _ => "Request failed"
+            StatusCodes.Status401Unauthorized => "Neautorizovan pristup",
+            StatusCodes.Status403Forbidden => "Zabranjen pristup",
+            StatusCodes.Status404NotFound => "Stranica nije pronađena",
+            StatusCodes.Status400BadRequest => "Neispravan zahtjev",
+            _ => "Zahtjev nije uspio"
         };
 
         return WriteResponseAsync(context, statusCode, message);

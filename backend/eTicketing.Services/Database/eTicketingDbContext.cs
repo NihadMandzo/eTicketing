@@ -25,12 +25,15 @@ public class eTicketingDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Username).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PhoneNumber).HasMaxLength(20);
+            entity.Property(e => e.PhoneNumber).HasMaxLength(20).IsRequired(false);
             entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
             entity.Property(e => e.PasswordSalt).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.OTP).HasMaxLength(10);
 
             entity.HasIndex(e => e.Email).IsUnique();
+            entity.HasIndex(e => e.Username).IsUnique();
 
             entity.HasOne(e => e.Role)
                   .WithMany(r => r.Users)

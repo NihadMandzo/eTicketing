@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eTicketing.Services.Database;
 
@@ -11,9 +12,11 @@ using eTicketing.Services.Database;
 namespace eTicketing.Services.Migrations
 {
     [DbContext(typeof(eTicketingDbContext))]
-    partial class eTicketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260125143927_AddUsernameAndOTPToUser")]
+    partial class AddUsernameAndOTPToUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -327,6 +330,7 @@ namespace eTicketing.Services.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("PhoneNumber")
+                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
@@ -365,8 +369,8 @@ namespace eTicketing.Services.Migrations
                             IsActive = true,
                             IsEmailVerified = true,
                             LastName = "Admin",
-                            PasswordHash = "6FF1fth2YvSaobz7aF0Ld28b+jBc92IQ4CRpH55Cw00=",
-                            PasswordSalt = "A5Pk8krdT3jQpHSP/c7j+fS2vOThSVgU+ZxNnS8SRNY=",
+                            PasswordHash = "wUJKwbvAUHi7+hrdaDB1oAy63YTJxhnuEVYY/rhhPdg=",
+                            PasswordSalt = "0+7qf2HHcGTD7zAhbH0cMTz2hUbh+7R1W232UFOfXhY=",
                             PhoneNumber = "+1234567890",
                             RoleId = 1,
                             Username = ""
@@ -381,8 +385,8 @@ namespace eTicketing.Services.Migrations
                             IsEmailVerified = true,
                             LastName = "User",
                             OrganizationId = 1,
-                            PasswordHash = "0bDUo4uuorPWTZxrG0vU/tX341BtCutTJuw1T+y4a/Q=",
-                            PasswordSalt = "NUQTxY4haW3vI37SftNFmc0o3Aw0gbZpTWlGcrmcfLc=",
+                            PasswordHash = "UBmAZyNXUWFaGeeqSD5SpM9+MrFaYGSthrY/5gkye4M=",
+                            PasswordSalt = "pjqZRPCVk706ENbI3D4c/jb1yW+mU1z+Vfim4GGHGP8=",
                             PhoneNumber = "+1234567891",
                             RoleId = 5,
                             Username = ""
