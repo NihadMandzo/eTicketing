@@ -4,13 +4,16 @@ public class User : BaseEntity
 {
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public string PhoneNumber { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public string PasswordSalt { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public bool IsEmailVerified { get; set; } = false;
     public DateTime? LastLoginAt { get; set; }
+    public string? OTP { get; set; }
+    public DateTime? OTPExpiration { get; set; }
     
     // Foreign Keys
     public int RoleId { get; set; }

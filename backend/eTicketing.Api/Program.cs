@@ -47,7 +47,7 @@ builder.Services.AddAuthentication(options =>
             return context.Response.WriteAsJsonAsync(new
             {
                 statusCode = 401,
-                message = "Unauthorized"
+                message = "Neautorizovan pristup"
             });
         },
         OnForbidden = context =>
@@ -56,7 +56,7 @@ builder.Services.AddAuthentication(options =>
             return context.Response.WriteAsJsonAsync(new
             {
                 statusCode = 403,
-                message = "Forbidden"
+                message = "Zabranjen pristup"
             });
         }
     };
@@ -72,6 +72,9 @@ builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 // Helpers
 builder.Services.AddScoped<JwtHelper>();
+
+// Services
+builder.Services.AddScoped<eTicketing.Services.Interfaces.IAuthService, eTicketing.Services.Services.AuthService>();
 
 builder.Services.AddControllers(options =>
 {

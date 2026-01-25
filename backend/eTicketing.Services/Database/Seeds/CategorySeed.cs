@@ -16,7 +16,8 @@ public static class CategorySeed
                 IconUrl = "/icons/music.svg",
                 IsActive = true,
                 DisplayOrder = 1,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new Category
             {
@@ -26,7 +27,8 @@ public static class CategorySeed
                 IconUrl = "/icons/sports.svg",
                 IsActive = true,
                 DisplayOrder = 2,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new Category
             {
@@ -36,7 +38,8 @@ public static class CategorySeed
                 IconUrl = "/icons/theater.svg",
                 IsActive = true,
                 DisplayOrder = 3,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new Category
             {
@@ -46,7 +49,8 @@ public static class CategorySeed
                 IconUrl = "/icons/conference.svg",
                 IsActive = true,
                 DisplayOrder = 4,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new Category
             {
@@ -56,7 +60,8 @@ public static class CategorySeed
                 IconUrl = "/icons/arts.svg",
                 IsActive = true,
                 DisplayOrder = 5,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
     }
