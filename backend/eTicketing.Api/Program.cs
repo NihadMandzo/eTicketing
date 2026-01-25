@@ -75,6 +75,7 @@ builder.Services.AddScoped<JwtHelper>();
 
 // Services
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IAuthService, eTicketing.Services.Services.AuthService>();
+builder.Services.AddScoped<eTicketing.Services.Interfaces.ICategoryService, eTicketing.Services.Services.CategoryService>();
 
 builder.Services.AddControllers(options =>
 {
