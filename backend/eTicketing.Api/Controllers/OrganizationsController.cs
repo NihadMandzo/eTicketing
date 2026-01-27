@@ -55,9 +55,8 @@ public class OrganizationsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Došlo je do greške prilikom  organizacije {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });
-        }
+            _logger.LogError(ex, "Error retrieving organization {OrganizationId}", id);
+            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });        }
     }
 
     [HttpGet("{id}/detailed")]

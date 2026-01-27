@@ -91,6 +91,22 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
         }
 
+        // Validate unique admin email
+        var adminEmailExists = await Context.Set<User>()
+            .AnyAsync(u => u.Email == request.AdminEmail, cancellationToken);
+        if (adminEmailExists)
+        {
+            throw new InvalidOperationException($"Korisnik sa emailom '{request.AdminEmail}' već postoji");
+        }
+
+        // Validate unique admin username
+        var adminUsernameExists = await Context.Set<User>()
+            .AnyAsync(u => u.Username == request.AdminUsername, cancellationToken);
+        if (adminUsernameExists)
+        {
+            throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.AdminUsername}' već postoji");
+        }
+
         entity.CreatedAt = DateTime.UtcNow;
         entity.IsActive = true;
     }
@@ -98,22 +114,6 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     protected override async Task AfterCreateAsync(Organization entity, OrganizationInsertRequest request, 
         CancellationToken cancellationToken)
     {
-        // Validate unique email
-        var emailExists = await Context.Set<User>()
-            .AnyAsync(u => u.Email == request.AdminEmail, cancellationToken);
-        if (emailExists)
-        {
-            throw new InvalidOperationException($"Korisnik sa emailom '{request.AdminEmail}' već postoji");
-        }
-
-        // Validate unique username
-        var usernameExists = await Context.Set<User>()
-            .AnyAsync(u => u.Username == request.AdminUsername, cancellationToken);
-        if (usernameExists)
-        {
-            throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.AdminUsername}' već postoji");
-        }
-
         // Create Organization SuperAdmin user with provided password
         PasswordHelper.CreatePasswordHash(request.AdminPassword, out string passwordHash, out string passwordSalt);
 
