@@ -17,7 +17,7 @@ public static class PasswordHelper
     public static void CreatePasswordHash(string password, out string passwordHash, out string passwordSalt)
     {
         if (string.IsNullOrWhiteSpace(password))
-            throw new ArgumentException("Password cannot be empty", nameof(password));
+            throw new ArgumentException("Lozinka ne može biti prazna", nameof(password));
 
         // Generate a random salt
         byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);

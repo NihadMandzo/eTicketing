@@ -1,17 +1,15 @@
 using eTicketing.Model.Enums;
 using eTicketing.Services.Database;
-using eTicketing.Services.Helpers;
-using eTicketing.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace eTicketing.Services.Services;
+namespace eTicketing.Services.Helpers;
 
-public class AuthorizationService : IAuthorizationService
+public class AuthorizationHelper
 {
     private readonly JwtHelper _jwtHelper;
     private readonly eTicketingDbContext _context;
 
-    public AuthorizationService(JwtHelper jwtHelper, eTicketingDbContext context)
+    public AuthorizationHelper(JwtHelper jwtHelper, eTicketingDbContext context)
     {
         _jwtHelper = jwtHelper;
         _context = context;
@@ -32,8 +30,7 @@ public class AuthorizationService : IAuthorizationService
         return _jwtHelper.HasRole("OrganizationAdmin");
     }
 
-    public async Task<bool> CanManageOrganizationAsync(int organizationId, 
-        CancellationToken cancellationToken = default)
+    public bool CanManageOrganization(int organizationId)
     {
         // SuperAdmin can manage any organization
         if (IsSuperAdmin())
@@ -51,8 +48,7 @@ public class AuthorizationService : IAuthorizationService
         return false;
     }
 
-    public async Task<bool> CanDeleteOrganizationAsync(int organizationId, 
-        CancellationToken cancellationToken = default)
+    public bool CanDeleteOrganization(int organizationId)
     {
         // SuperAdmin can delete any organization
         if (IsSuperAdmin())
@@ -95,12 +91,11 @@ public class AuthorizationService : IAuthorizationService
         return false;
     }
 
-    public async Task ValidateOrganizationAccessAsync(int organizationId, 
-        CancellationToken cancellationToken = default)
+    public void ValidateOrganizationAccess(int organizationId)
     {
-        if (!await CanManageOrganizationAsync(organizationId, cancellationToken))
+        if (!CanManageOrganization(organizationId))
         {
-            throw new UnauthorizedAccessException("You don't have access to this organization");
+            throw new UnauthorizedAccessException("Nemate pristup ovoj organizaciji");
         }
     }
 }

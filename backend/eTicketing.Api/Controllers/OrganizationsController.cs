@@ -8,7 +8,6 @@ namespace eTicketing.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public class OrganizationsController : ControllerBase
 {
     private readonly IOrganizationService _organizationService;
@@ -22,9 +21,7 @@ public class OrganizationsController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Get all organizations (SuperAdmin sees all, others see their own)
-    /// </summary>
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] OrganizationSearchObject search)
     {
@@ -36,13 +33,10 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving organizations");
-            return StatusCode(500, new { message = "An error occurred while retrieving organizations" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacija" });
         }
     }
 
-    /// <summary>
-    /// Get organization by ID
-    /// </summary>
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -61,14 +55,11 @@ public class OrganizationsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while retrieving the organization" });
+            _logger.LogError(ex, "Došlo je do greške prilikom  organizacije {OrganizationId}", id);
+            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });
         }
     }
 
-    /// <summary>
-    /// Get organization with detailed information including administrators
-    /// </summary>
     [HttpGet("{id}/detailed")]
     public async Task<IActionResult> GetByIdDetailed(int id)
     {
@@ -88,15 +79,11 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving detailed organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while retrieving the organization" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });
         }
     }
 
-    /// <summary>
-    /// Create new organization (SuperAdmin only)
-    /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> Create([FromBody] OrganizationInsertRequest request)
     {
         try
@@ -115,15 +102,11 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating organization");
-            return StatusCode(500, new { message = "An error occurred while creating the organization" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom kreiranja organizacije" });
         }
     }
 
-    /// <summary>
-    /// Update organization (SuperAdmin or Organization SuperAdmin)
-    /// </summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "SuperAdmin,OrganizationSuperAdmin")]
     public async Task<IActionResult> Update(int id, [FromBody] OrganizationUpdateRequest request)
     {
         try
@@ -146,21 +129,17 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while updating the organization" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom ažuriranja organizacije" });
         }
     }
 
-    /// <summary>
-    /// Delete organization (SuperAdmin or Organization SuperAdmin - soft delete)
-    /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "SuperAdmin,OrganizationSuperAdmin")]
     public async Task<IActionResult> Delete(int id)
     {
         try
         {
             var result = await _organizationService.DeleteAsync(id);
-            return result ? NoContent() : NotFound(new { message = "Organization not found" });
+            return result ? NoContent() : NotFound(new { message = "Organizacija nije pronađena" });
         }
         catch (UnauthorizedAccessException)
         {
@@ -169,15 +148,12 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while deleting the organization" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom brisanja organizacije" });
         }
     }
 
-    /// <summary>
-    /// Get all users in an organization
-    /// </summary>
+
     [HttpGet("{id}/users")]
-    [Authorize(Roles = "SuperAdmin,OrganizationSuperAdmin,OrganizationAdmin")]
     public async Task<IActionResult> GetOrganizationUsers(int id)
     {
         try
@@ -192,15 +168,12 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving users for organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while retrieving organization users" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom preuzimanja korisnika organizacije" });
         }
     }
 
-    /// <summary>
-    /// Add user to organization (Organization SuperAdmin only)
-    /// </summary>
+
     [HttpPost("{id}/users")]
-    [Authorize(Roles = "SuperAdmin,OrganizationSuperAdmin")]
     public async Task<IActionResult> AddUser(int id, [FromBody] OrganizationUserRequest request)
     {
         try
@@ -219,21 +192,17 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding user to organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "An error occurred while adding the user" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom dodavanja korisnika" });
         }
     }
 
-    /// <summary>
-    /// Remove user from organization (Organization SuperAdmin only - soft delete)
-    /// </summary>
     [HttpDelete("{organizationId}/users/{userId}")]
-    [Authorize(Roles = "SuperAdmin,OrganizationSuperAdmin")]
     public async Task<IActionResult> RemoveUser(int organizationId, int userId)
     {
         try
         {
             var result = await _organizationService.RemoveUserAsync(organizationId, userId);
-            return result ? NoContent() : NotFound(new { message = "User not found" });
+            return result ? NoContent() : NotFound(new { message = "Korisnik nije pronađen" });
         }
         catch (InvalidOperationException ex)
         {
@@ -246,7 +215,7 @@ public class OrganizationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing user {UserId} from organization {OrganizationId}", userId, organizationId);
-            return StatusCode(500, new { message = "An error occurred while removing the user" });
+            return StatusCode(500, new { message = "Došlo je do greške prilikom uklanjanja korisnika" });
         }
     }
 }

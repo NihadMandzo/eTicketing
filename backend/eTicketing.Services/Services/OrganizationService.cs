@@ -16,23 +16,23 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     OrganizationSearchObject, OrganizationInsertRequest, OrganizationUpdateRequest>, IOrganizationService
 {
     private readonly JwtHelper _jwtHelper;
-    private readonly IAuthorizationService _authorizationService;
+    private readonly AuthorizationHelper _authorizationHelper;
 
     public OrganizationService(
         eTicketingDbContext context, 
         IMapper mapper,
         JwtHelper jwtHelper,
-        IAuthorizationService authorizationService) : base(context, mapper)
+        AuthorizationHelper authorizationHelper) : base(context, mapper)
     {
         _jwtHelper = jwtHelper;
-        _authorizationService = authorizationService;
+        _authorizationHelper = authorizationHelper;
     }
 
     protected override IQueryable<Organization> ApplyFilter(IQueryable<Organization> query, OrganizationSearchObject? search)
     {
         // SuperAdmin can see all organizations
         // Organization users can only see their own organization
-        if (!_authorizationService.IsSuperAdmin())
+        if (!_authorizationHelper.IsSuperAdmin())
         {
             var organizationId = _jwtHelper.GetOrganizationId();
             if (organizationId.HasValue)
@@ -68,9 +68,9 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         CancellationToken cancellationToken)
     {
         // Only SuperAdmin can create organizations
-        if (!_authorizationService.IsSuperAdmin())
+        if (!_authorizationHelper.IsSuperAdmin())
         {
-            throw new UnauthorizedAccessException("Only SuperAdmin can create organizations");
+            throw new UnauthorizedAccessException("Samo SuperAdmin može kreirati organizacije");
         }
 
         // Validate unique organization name
@@ -79,7 +79,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         
         if (exists)
         {
-            throw new InvalidOperationException($"Organization with name '{entity.Name}' already exists");
+            throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
         }
 
         // Validate unique email
@@ -88,7 +88,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         
         if (emailExists)
         {
-            throw new InvalidOperationException($"Organization with email '{entity.Email}' already exists");
+            throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
         }
 
         entity.CreatedAt = DateTime.UtcNow;
@@ -98,6 +98,22 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     protected override async Task AfterCreateAsync(Organization entity, OrganizationInsertRequest request, 
         CancellationToken cancellationToken)
     {
+        // Validate unique email
+        var emailExists = await Context.Set<User>()
+            .AnyAsync(u => u.Email == request.AdminEmail, cancellationToken);
+        if (emailExists)
+        {
+            throw new InvalidOperationException($"Korisnik sa emailom '{request.AdminEmail}' već postoji");
+        }
+
+        // Validate unique username
+        var usernameExists = await Context.Set<User>()
+            .AnyAsync(u => u.Username == request.AdminUsername, cancellationToken);
+        if (usernameExists)
+        {
+            throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.AdminUsername}' već postoji");
+        }
+
         // Create Organization SuperAdmin user with provided password
         PasswordHelper.CreatePasswordHash(request.AdminPassword, out string passwordHash, out string passwordSalt);
 
@@ -121,12 +137,11 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         Context.Set<User>().Add(adminUser);
         await Context.SaveChangesAsync(cancellationToken);
     }
-
     protected override async Task BeforeUpdateAsync(Organization entity, OrganizationUpdateRequest request, 
         CancellationToken cancellationToken)
     {
         // Check permissions
-        await _authorizationService.ValidateOrganizationAccessAsync(entity.Id, cancellationToken);
+        _authorizationHelper.ValidateOrganizationAccess(entity.Id);
 
         // Validate unique name (exclude current)
         var exists = await Context.Set<Organization>()
@@ -134,7 +149,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         
         if (exists)
         {
-            throw new InvalidOperationException($"Organization with name '{entity.Name}' already exists");
+            throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
         }
 
         entity.UpdatedAt = DateTime.UtcNow;
@@ -143,9 +158,9 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         // Check permissions
-        if (!await _authorizationService.CanDeleteOrganizationAsync(id, cancellationToken))
+        if (!_authorizationHelper.CanDeleteOrganization(id))
         {
-            throw new UnauthorizedAccessException("You don't have permission to delete this organization");
+            throw new UnauthorizedAccessException("Nemate dozvolu za brisanje ove organizacije");
         }
 
         var organization = await Context.Set<Organization>()
@@ -174,7 +189,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     public async Task<OrganizationDetailResponse> GetByIdDetailedAsync(int id, 
         CancellationToken cancellationToken = default)
     {
-        await _authorizationService.ValidateOrganizationAccessAsync(id, cancellationToken);
+        _authorizationHelper.ValidateOrganizationAccess(id);
 
         var organization = await Context.Set<Organization>()
             .Include(o => o.Users.Where(u => u.RoleId == (int)RoleType.OrganizationSuperAdmin || 
@@ -184,7 +199,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 
         if (organization == null)
         {
-            throw new KeyNotFoundException($"Organization with id {id} not found");
+            throw new KeyNotFoundException($"Organizacija sa ID-om {id} nije pronađena");
         }
 
         var response = Mapper.Map<OrganizationDetailResponse>(organization);
@@ -199,18 +214,18 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         CancellationToken cancellationToken = default)
     {
         // Only Organization SuperAdmin can add users
-        await _authorizationService.ValidateOrganizationAccessAsync(organizationId, cancellationToken);
+        _authorizationHelper.ValidateOrganizationAccess(organizationId);
 
-        if (!_authorizationService.IsOrganizationSuperAdmin() && !_authorizationService.IsSuperAdmin())
+        if (!_authorizationHelper.IsOrganizationSuperAdmin() && !_authorizationHelper.IsSuperAdmin())
         {
-            throw new UnauthorizedAccessException("Only Organization SuperAdmin can add users");
+            throw new UnauthorizedAccessException("Samo SuperAdmin organizacije može dodavati korisnike");
         }
 
         // Validate role
         if (request.RoleId != (int)RoleType.OrganizationSuperAdmin && 
             request.RoleId != (int)RoleType.OrganizationAdmin)
         {
-            throw new InvalidOperationException("Invalid role for organization user");
+            throw new InvalidOperationException("Neispravna uloga za korisnika organizacije");
         }
 
         // Check if email/username already exists
@@ -218,14 +233,14 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             .AnyAsync(u => u.Email == request.Email, cancellationToken);
         if (emailExists)
         {
-            throw new InvalidOperationException($"User with email '{request.Email}' already exists");
+            throw new InvalidOperationException($"Korisnik sa emailom '{request.Email}' već postoji");
         }
 
         var usernameExists = await Context.Set<User>()
             .AnyAsync(u => u.Username == request.Username, cancellationToken);
         if (usernameExists)
         {
-            throw new InvalidOperationException($"User with username '{request.Username}' already exists");
+            throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.Username}' već postoji");
         }
 
         // Create password hash with provided password
@@ -259,11 +274,11 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     public async Task<bool> RemoveUserAsync(int organizationId, int userId, 
         CancellationToken cancellationToken = default)
     {
-        await _authorizationService.ValidateOrganizationAccessAsync(organizationId, cancellationToken);
+        _authorizationHelper.ValidateOrganizationAccess(organizationId);
 
-        if (!await _authorizationService.CanManageUserAsync(userId, cancellationToken))
+        if (!await _authorizationHelper.CanManageUserAsync(userId, cancellationToken))
         {
-            throw new UnauthorizedAccessException("You don't have permission to remove this user");
+            throw new UnauthorizedAccessException("Nemate dozvolu za uklanjanje ovog korisnika");
         }
 
         var user = await Context.Set<User>()
@@ -278,7 +293,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         var currentUserId = _jwtHelper.GetUserId();
         if (currentUserId == userId)
         {
-            throw new InvalidOperationException("You cannot remove yourself");
+            throw new InvalidOperationException("Ne možete ukloniti sami sebe");
         }
 
         // Soft delete
@@ -292,7 +307,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     public async Task<List<UserResponse>> GetOrganizationUsersAsync(int organizationId, 
         CancellationToken cancellationToken = default)
     {
-        await _authorizationService.ValidateOrganizationAccessAsync(organizationId, cancellationToken);
+        _authorizationHelper.ValidateOrganizationAccess(organizationId);
 
         var users = await Context.Set<User>()
             .Include(u => u.Role)

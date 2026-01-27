@@ -65,7 +65,7 @@ public class CategoryService : BaseCRUDService<Category, CategoryResponse, BaseS
         
         if (exists)
         {
-            throw new InvalidOperationException($"Category with name '{name}' already exists.");
+            throw new InvalidOperationException($"Kategorija sa imenom '{name}' već postoji");
         }
     }
 }
