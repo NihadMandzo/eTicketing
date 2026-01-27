@@ -11,6 +11,7 @@ public class User : BaseEntity
     public string PasswordSalt { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public bool IsEmailVerified { get; set; } = false;
+    public bool IsFirstLogin { get; set; } = true;
     public DateTime? LastLoginAt { get; set; }
     public string? OTP { get; set; }
     public DateTime? OTPExpiration { get; set; }
