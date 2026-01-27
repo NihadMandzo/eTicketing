@@ -191,21 +191,39 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     {
         _authorizationHelper.ValidateOrganizationAccess(id);
 
-        var organization = await Context.Set<Organization>()
-            .Include(o => o.Users.Where(u => u.RoleId == (int)RoleType.OrganizationSuperAdmin || 
-                                              u.RoleId == (int)RoleType.OrganizationAdmin))
-            .ThenInclude(u => u.Role)
-            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+        // Optimized: Use a single query with projection to get organization, admins, and user count
+        var organizationData = await Context.Set<Organization>()
+            .Where(o => o.Id == id)
+            .Select(o => new
+            {
+                Organization = o,
+                Administrators = o.Users
+                    .Where(u => u.RoleId == (int)RoleType.OrganizationSuperAdmin || 
+                               u.RoleId == (int)RoleType.OrganizationAdmin)
+                    .Select(u => new { User = u, Role = u.Role })
+                    .ToList(),
+                UserCount = o.Users.Count(u => u.OrganizationId == id)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (organization == null)
+        if (organizationData == null)
         {
             throw new KeyNotFoundException($"Organizacija sa ID-om {id} nije pronađena");
         }
 
-        var response = Mapper.Map<OrganizationDetailResponse>(organization);
-        response.Administrators = Mapper.Map<List<UserResponse>>(organization.Users);
-        response.UserCount = await Context.Set<User>()
-            .CountAsync(u => u.OrganizationId == id, cancellationToken);
+        var response = Mapper.Map<OrganizationDetailResponse>(organizationData.Organization);
+        
+        // Map administrators with their roles
+        response.Administrators = organizationData.Administrators
+            .Select(a => 
+            {
+                var userResponse = Mapper.Map<UserResponse>(a.User);
+                userResponse.RoleName = a.Role.Name;
+                return userResponse;
+            })
+            .ToList();
+        
+        response.UserCount = organizationData.UserCount;
 
         return response;
     }
