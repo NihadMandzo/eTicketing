@@ -41,8 +41,8 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             }
             else
             {
-                // No organization - return empty
-                query = query.Where(x => false);
+                // User has no organization - deny access
+                throw new UnauthorizedAccessException("Korisnik nije dodijeljen nijednoj organizaciji");
             }
         }
 
@@ -173,6 +173,15 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         if (exists)
         {
             throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
+        }
+
+        // Validate unique email (exclude current)
+        var emailExists = await Context.Set<Organization>()
+            .AnyAsync(x => x.Email == entity.Email && x.Id != entity.Id, cancellationToken);
+        
+        if (emailExists)
+        {
+            throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
         }
 
         entity.UpdatedAt = DateTime.UtcNow;
@@ -332,6 +341,21 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             throw new InvalidOperationException("Ne možete ukloniti sami sebe");
         }
 
+        // Prevent removing the last OrganizationSuperAdmin
+        if (user.RoleId == (int)RoleType.OrganizationSuperAdmin)
+        {
+            var superAdminCount = await Context.Set<User>()
+                .CountAsync(u => u.OrganizationId == organizationId && 
+                               u.RoleId == (int)RoleType.OrganizationSuperAdmin && 
+                               u.IsActive, 
+                           cancellationToken);
+
+            if (superAdminCount <= 1)
+            {
+                throw new InvalidOperationException("Ne možete ukloniti poslednjeg SuperAdmina organizacije");
+            }
+        }
+
         // Soft delete
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
@@ -350,6 +374,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             .Where(u => u.OrganizationId == organizationId && u.IsActive)
             .OrderBy(u => u.Role.Name)
             .ThenBy(u => u.LastName)
+            .ThenBy(u => u.FirstName)
             .ToListAsync(cancellationToken);
 
         return Mapper.Map<List<UserResponse>>(users);
