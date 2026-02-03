@@ -64,6 +64,29 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         return query;
     }
 
+    public override async Task<OrganizationResponse?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    {
+        // Validate organization access before retrieving
+        _authorizationHelper.ValidateOrganizationAccess(id);
+
+        var organizationData = await Context.Set<Organization>()
+            .Where(o => o.Id == id)
+            .Select(o => new
+            {
+                Organization = o,
+                UserCount = o.Users.Count()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (organizationData == null)
+            return null;
+
+        var response = Mapper.Map<OrganizationResponse>(organizationData.Organization);
+        response.UserCount = organizationData.UserCount;
+
+        return response;
+    }
+
     protected override async Task BeforeCreateAsync(Organization entity, OrganizationInsertRequest request, 
         CancellationToken cancellationToken)
     {
@@ -202,7 +225,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
                                u.RoleId == (int)RoleType.OrganizationAdmin)
                     .Select(u => new { User = u, Role = u.Role })
                     .ToList(),
-                UserCount = o.Users.Count(u => u.OrganizationId == id)
+                UserCount = o.Users.Count()
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -231,13 +254,8 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
     public async Task<UserResponse> AddUserAsync(int organizationId, OrganizationUserRequest request, 
         CancellationToken cancellationToken = default)
     {
-        // Only Organization SuperAdmin can add users
+        // Validate organization access and ensure user is SuperAdmin or Organization SuperAdmin
         _authorizationHelper.ValidateOrganizationAccess(organizationId);
-
-        if (!_authorizationHelper.IsOrganizationSuperAdmin() && !_authorizationHelper.IsSuperAdmin())
-        {
-            throw new UnauthorizedAccessException("Samo SuperAdmin organizacije može dodavati korisnike");
-        }
 
         // Validate role
         if (request.RoleId != (int)RoleType.OrganizationSuperAdmin && 
