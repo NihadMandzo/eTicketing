@@ -36,7 +36,7 @@ public abstract class BaseCRUDService<TEntity, TResponse, TSearch, TRequest, TUp
         var entity = await Context.Set<TEntity>().FindAsync(new object[] { id }, cancellationToken);
         
         if (entity == null)
-            throw new KeyNotFoundException($"Entity with id {id} not found");
+            throw new KeyNotFoundException($"Entitet sa ID-om {id} nije pronađen");
         
         Mapper.Map(request, entity);
         entity.UpdatedAt = DateTime.UtcNow;
