@@ -29,7 +29,7 @@ public class GlobalExceptionHandlerMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred");
+            _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
             
             if (!context.Response.HasStarted)
             {
@@ -43,7 +43,7 @@ public class GlobalExceptionHandlerMiddleware
         var statusCode = exception switch
         {
             KeyNotFoundException => StatusCodes.Status404NotFound,
-            UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
+            UnauthorizedAccessException => StatusCodes.Status403Forbidden,
             ArgumentException => StatusCodes.Status400BadRequest,
             InvalidOperationException => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status500InternalServerError
@@ -51,10 +51,10 @@ public class GlobalExceptionHandlerMiddleware
 
         var message = exception switch
         {
-            KeyNotFoundException => "Objekat nije pronađen",
-            UnauthorizedAccessException => exception.Message,
-            ArgumentException => exception.Message,
-            InvalidOperationException => exception.Message,
+            KeyNotFoundException => "Resurs nije pronađen",
+            UnauthorizedAccessException => "Pristup odbijen",
+            ArgumentException => "Neispravan zahtjev",
+            InvalidOperationException => "Operacija nije dozvoljena",
             _ => "Došlo je do greške na serveru"
         };
 

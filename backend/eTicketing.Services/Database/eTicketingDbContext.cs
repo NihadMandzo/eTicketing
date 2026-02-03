@@ -14,6 +14,8 @@ public class eTicketingDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<Organization> Organizations { get; set; }
     public DbSet<Category> Categories { get; set; }
+    public DbSet<Event> Events { get; set; }
+    public DbSet<EventImage> EventImages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +80,41 @@ public class eTicketingDbContext : DbContext
             entity.Property(e => e.IconUrl).HasMaxLength(500);
 
             entity.HasIndex(e => e.Name).IsUnique();
+        });
+
+        // Event Configuration
+        modelBuilder.Entity<Event>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.EventDateTime).IsRequired();
+            entity.Property(e => e.Location).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Latitude).IsRequired();
+            entity.Property(e => e.Longitude).IsRequired();
+
+            entity.HasOne(e => e.Organization)
+                  .WithMany(o => o.Events)
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.OrganizationId);
+            entity.HasIndex(e => e.EventDateTime);
+        });
+
+        // EventImage Configuration
+        modelBuilder.Entity<EventImage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ImageUrl).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.IsPrimary).IsRequired();
+
+            entity.HasOne(e => e.Event)
+                  .WithMany(ev => ev.Images)
+                  .HasForeignKey(e => e.EventId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.EventId);
         });
 
         // Seed Data

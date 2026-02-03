@@ -13,4 +13,5 @@ public class Organization : BaseEntity
     
     // Navigation Properties
     public ICollection<User> Users { get; set; } = new List<User>();
+    public ICollection<Event> Events { get; set; } = new List<Event>();
 }

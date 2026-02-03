@@ -78,6 +78,8 @@ builder.Services.AddScoped<AuthorizationHelper>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IAuthService, eTicketing.Services.Services.AuthService>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.ICategoryService, eTicketing.Services.Services.CategoryService>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IOrganizationService, eTicketing.Services.Services.OrganizationService>();
+builder.Services.AddScoped<eTicketing.Services.Interfaces.IBlobStorageService, eTicketing.Services.Services.BlobStorageService>();
+builder.Services.AddScoped<eTicketing.Services.Interfaces.IEventService, eTicketing.Services.Services.EventService>();
 
 builder.Services.AddControllers(options =>
 {

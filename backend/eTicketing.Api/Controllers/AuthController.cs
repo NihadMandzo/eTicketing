@@ -11,12 +11,10 @@ namespace eTicketing.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
-    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -25,20 +23,8 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        try
-        {
-            var response = await _authService.RegisterAsync(request);
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom registracije");
-            return StatusCode(500, new { message = "Došlo je do greške tokom registracije" });
-        }
+        var response = await _authService.RegisterAsync(request);
+        return Ok(response);
     }
 
     /// <summary>
@@ -47,20 +33,8 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
     {
-        try
-        {
-            await _authService.VerifyEmailAsync(request);
-            return Ok(new { message = "Email uspješno verifikovan" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom verifikacije emaila");
-            return StatusCode(500, new { message = "Došlo je do greške tokom verifikacije" });
-        }
+        await _authService.VerifyEmailAsync(request);
+        return Ok(new { message = "Email uspješno verifikovan" });
     }
 
     /// <summary>
@@ -69,20 +43,8 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        try
-        {
-            var response = await _authService.LoginAsync(request);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ex.Message );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom prijave");
-            return StatusCode(500, new { message = "Došlo je do greške tokom prijave" });
-        }
+        var response = await _authService.LoginAsync(request);
+        return Ok(response);
     }
 
     /// <summary>
@@ -91,16 +53,8 @@ public class AuthController : ControllerBase
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
-        try
-        {
-            await _authService.ForgotPasswordAsync(request);
-            return Ok(new { message = "Ako email postoji, kod za resetovanje je poslan" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom zahtjeva za resetovanje lozinke");
-            return StatusCode(500, new { message = "Došlo je do greške tokom obrade zahtjeva" });
-        }
+        await _authService.ForgotPasswordAsync(request);
+        return Ok(new { message = "Ako email postoji, kod za resetovanje je poslan" });
     }
 
     /// <summary>
@@ -109,20 +63,8 @@ public class AuthController : ControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
-        try
-        {
-            await _authService.ResetPasswordAsync(request);
-            return Ok(new { message = "Lozinka je uspješno resetovana" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom resetovanja lozinke");
-            return StatusCode(500, new { message = "Došlo je do greške tokom resetovanja lozinke" });
-        }
+        await _authService.ResetPasswordAsync(request);
+        return Ok(new { message = "Lozinka je uspješno resetovana" });
     }
 
     /// <summary>
@@ -132,25 +74,12 @@ public class AuthController : ControllerBase
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            await _authService.ChangePasswordAsync(userId, request);
-            return Ok(new { message = "Lozinka je uspješno promijenjena" });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška tokom promjene lozinke");
-            return StatusCode(500, new { message = "Došlo je do greške tokom promjene lozinke" });
-        }
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { message = "Korisnik nije autentifikovan" });
+            
+        await _authService.ChangePasswordAsync(userId.Value, request);
+        return Ok(new { message = "Lozinka je uspješno promijenjena" });
     }
 
     /// <summary>
@@ -160,31 +89,24 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var user = await _authService.GetMeAsync(userId);
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { message = "Korisnik nije autentifikovan" });
             
-            if (user == null)
-            {
-                return Unauthorized("Korisnik nije pronađen");
-            }
+        var user = await _authService.GetMeAsync(userId.Value);
+        
+        if (user == null)
+            return Unauthorized(new { message = "Korisnik nije pronađen" });
 
-            return Ok(user);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Greška pri dohvatanju korisničkih podataka");
-            return StatusCode(500, "Došlo je do greške pri dohvatanju podataka");
-        }
+        return Ok(user);
     }
 
-    private int GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
         {
-            throw new UnauthorizedAccessException("Korisnik nije autentifikovan");
+            return null;
         }
         return userId;
     }
