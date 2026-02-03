@@ -42,7 +42,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             else
             {
                 // User has no organization - deny access
-                throw new UnauthorizedAccessException("Korisnik nije dodijeljen nijednoj organizaciji");
+                throw new UnauthorizedAccessException("Nemate pristup organizaciji");
             }
         }
 
@@ -93,7 +93,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         // Only SuperAdmin can create organizations
         if (!_authorizationHelper.IsSuperAdmin())
         {
-            throw new UnauthorizedAccessException("Samo SuperAdmin može kreirati organizacije");
+            throw new UnauthorizedAccessException("Nemate dozvolu za kreiranje organizacije");
         }
 
         // Validate unique organization name
