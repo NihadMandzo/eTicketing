@@ -41,8 +41,8 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             }
             else
             {
-                // User has no organization - deny access
-                throw new UnauthorizedAccessException("Nemate pristup organizaciji");
+                // User has no organization - return empty result set
+                query = query.Where(x => false);
             }
         }
 
@@ -175,13 +175,16 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
         }
 
-        // Validate unique email (exclude current)
-        var emailExists = await Context.Set<Organization>()
-            .AnyAsync(x => x.Email == entity.Email && x.Id != entity.Id, cancellationToken);
-        
-        if (emailExists)
+        // Validate unique email (exclude current) - only check if email is provided
+        if (!string.IsNullOrWhiteSpace(entity.Email))
         {
-            throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
+            var emailExists = await Context.Set<Organization>()
+                .AnyAsync(x => x.Email == entity.Email && x.Id != entity.Id, cancellationToken);
+            
+            if (emailExists)
+            {
+                throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
+            }
         }
 
         entity.UpdatedAt = DateTime.UtcNow;
