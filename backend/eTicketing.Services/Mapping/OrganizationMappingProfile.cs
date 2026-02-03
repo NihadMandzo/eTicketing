@@ -18,10 +18,5 @@ public class OrganizationMappingProfile : Profile
         
         CreateMap<OrganizationInsertRequest, Organization>();
         CreateMap<OrganizationUpdateRequest, Organization>();
-
-        // Add User to UserResponse mapping with RoleName from Role.Name
-        CreateMap<User, UserResponse>()
-            .ForMember(dest => dest.RoleName, opt => opt.MapFrom(src => src.Role.Name))
-            .ForMember(dest => dest.OrganizationName, opt => opt.MapFrom(src => src.Organization != null ? src.Organization.Name : null));
     }
 }
