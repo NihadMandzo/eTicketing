@@ -128,6 +128,24 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         return MapToResponse(eventEntity);
     }
 
+    public override async Task<EventResponse> UpdateAsync(int id, EventUpdateRequest request, 
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await base.UpdateAsync(id, request, cancellationToken);
+            // Base class calls AfterUpdateAsync which already removes the dictionary entry
+            return result;
+        }
+        catch
+        {
+            // On failure, cleanup the dictionary entry without deleting blobs
+            // (DB transaction failed, so entity state wasn't changed)
+            _blobsToDeleteAfterCommit.TryRemove(id, out _);
+            throw;
+        }
+    }
+
     protected override async Task BeforeCreateAsync(Event entity, EventInsertRequest request, 
         CancellationToken cancellationToken)
     {
