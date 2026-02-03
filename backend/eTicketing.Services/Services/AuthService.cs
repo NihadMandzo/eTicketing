@@ -122,10 +122,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Molimo verifikujte email adresu prije prijave");
         }
 
-        // Check if this is first login for organization admins
-        var isFirstLogin = user.IsFirstLogin;
-
-        // Update last login (but don't clear IsFirstLogin yet - only after password change)
+        // Update last login
         user.LastLoginAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
@@ -135,9 +132,7 @@ public class AuthService : IAuthService
 
         return new LoginResponse
         {
-            Token = token,
-            IsFirstLogin = isFirstLogin,
-            Message = isFirstLogin ? "Morate promijeniti lozinku prilikom prve prijave" : null
+            Token = token
         };
     }
 
@@ -211,7 +206,6 @@ public class AuthService : IAuthService
 
         user.PasswordHash = passwordHash;
         user.PasswordSalt = passwordSalt;
-        user.IsFirstLogin = false; // Clear first login flag after password change
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -241,7 +235,6 @@ public class AuthService : IAuthService
             PhoneNumber = user.PhoneNumber,
             IsActive = user.IsActive,
             IsEmailVerified = user.IsEmailVerified,
-            IsFirstLogin = user.IsFirstLogin,
             RoleName = user.Role.Name,
             OrganizationId = user.OrganizationId,
             OrganizationName = user.Organization?.Name,

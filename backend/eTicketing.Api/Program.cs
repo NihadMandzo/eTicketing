@@ -72,12 +72,10 @@ builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 // Helpers
 builder.Services.AddScoped<JwtHelper>();
-builder.Services.AddScoped<AuthorizationHelper>();
 
 // Services
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IAuthService, eTicketing.Services.Services.AuthService>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.ICategoryService, eTicketing.Services.Services.CategoryService>();
-builder.Services.AddScoped<eTicketing.Services.Interfaces.IOrganizationService, eTicketing.Services.Services.OrganizationService>();
 
 builder.Services.AddControllers(options =>
 {

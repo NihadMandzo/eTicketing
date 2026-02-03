@@ -310,9 +310,6 @@ namespace eTicketing.Services.Migrations
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsFirstLogin")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("datetime2");
 
@@ -379,7 +376,6 @@ namespace eTicketing.Services.Migrations
                             FirstName = "Super",
                             IsActive = true,
                             IsEmailVerified = true,
-                            IsFirstLogin = true,
                             LastName = "Admin",
                             PasswordHash = "YZxW8VUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba9876543210=",
                             PasswordSalt = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRST=",
@@ -396,7 +392,6 @@ namespace eTicketing.Services.Migrations
                             FirstName = "Test",
                             IsActive = true,
                             IsEmailVerified = true,
-                            IsFirstLogin = true,
                             LastName = "User",
                             OrganizationId = 1,
                             PasswordHash = "ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba0987654321=",
