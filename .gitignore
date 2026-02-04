@@ -331,3 +331,6 @@ lerna-debug.log*
 *.crt
 *.cer
 backend/API_REQUEST_FLOWS.md
+backend/CODE_REVIEW.md
+.gitignore
+backend/IMPROVEMENTS_SUMMARY.md
