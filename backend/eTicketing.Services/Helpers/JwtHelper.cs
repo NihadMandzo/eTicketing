@@ -21,8 +21,16 @@ public class JwtHelper
 
     public string GenerateToken(User user)
     {
-        var jwtSettings = _configuration.GetSection("JwtSettings");
-        var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+        var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+            ?? throw new InvalidOperationException("JWT SecretKey is not configured in .env file");
+        var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
+            ?? throw new InvalidOperationException("JWT Issuer is not configured in .env file");
+        var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+            ?? throw new InvalidOperationException("JWT Audience is not configured in .env file");
+        
+        var expirationMinutesStr = Environment.GetEnvironmentVariable("JWT_EXPIRATION_MINUTES");
+        var expirationMinutes = int.TryParse(expirationMinutesStr, out var parsedMinutes) ? parsedMinutes : 1440;
+        
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -31,22 +39,26 @@ public class JwtHelper
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
-            new Claim(ClaimTypes.Role, user.Role.Name),
             new Claim("FirstName", user.FirstName),
             new Claim("LastName", user.LastName)
         };
+
+        // Add role claim only if Role is loaded
+        if (user.Role != null)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, user.Role.Name));
+        }
 
         if (user.OrganizationId.HasValue)
         {
             claims.Add(new Claim("OrganizationId", user.OrganizationId.Value.ToString()));
         }
 
-        var expirationMinutes = int.Parse(jwtSettings["ExpirationInMinutes"] ?? "1440");
         var expiration = DateTime.UtcNow.AddMinutes(expirationMinutes);
 
         var token = new JwtSecurityToken(
-            issuer: jwtSettings["Issuer"],
-            audience: jwtSettings["Audience"],
+            issuer: issuer,
+            audience: audience,
             claims: claims,
             expires: expiration,
             signingCredentials: credentials
@@ -57,8 +69,7 @@ public class JwtHelper
 
     public DateTime GetTokenExpiration()
     {
-        var jwtSettings = _configuration.GetSection("JwtSettings");
-        var expirationMinutes = int.Parse(jwtSettings["ExpirationInMinutes"] ?? "1440");
+        var expirationMinutes = int.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRATION_MINUTES") ?? "1440");
         return DateTime.UtcNow.AddMinutes(expirationMinutes);
     }
 

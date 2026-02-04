@@ -1,3 +1,4 @@
+using eTicketing.Api.Resources;
 using eTicketing.Model.Requests;
 using eTicketing.Model.SearchObjects;
 using eTicketing.Services.Interfaces;
@@ -33,7 +34,7 @@ public class EventsController : ControllerBase
         var result = await _eventService.GetByIdAsync(id);
         
         if (result == null)
-            return NotFound(new { message = "Događaj nije pronađen" });
+            return NotFound(new { message = ErrorMessagesHr.EventNotFound });
         
         return Ok(result);
     }
@@ -43,10 +44,6 @@ public class EventsController : ControllerBase
     public async Task<IActionResult> Create([FromForm] EventInsertRequest request)
     {
         var result = await _eventService.CreateAsync(request);
-        
-        if (result == null)
-            return BadRequest(new { message = "Greška pri kreiranju događaja" });
-            
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
@@ -57,7 +54,7 @@ public class EventsController : ControllerBase
         var result = await _eventService.UpdateAsync(id, request);
         
         if (result == null)
-            return NotFound(new { message = "Događaj nije pronađen" });
+            return NotFound(new { message = ErrorMessagesHr.EventNotFound });
             
         return Ok(result);
     }
@@ -69,8 +66,8 @@ public class EventsController : ControllerBase
         var result = await _eventService.DeleteAsync(id);
         
         if (!result)
-            return NotFound(new { message = "Događaj nije pronađen" });
+            return NotFound(new { message = ErrorMessagesHr.EventNotFound });
         
-        return Ok(new { message = "Događaj je uspješno obrisan" });
+        return Ok(new { message = ErrorMessagesHr.EventDeleteSuccess });
     }
 }

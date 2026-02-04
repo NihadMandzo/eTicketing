@@ -14,8 +14,9 @@ public class BlobStorageService : IBlobStorageService
 
     public BlobStorageService(IConfiguration configuration, ILogger<BlobStorageService> logger)
     {
-        _connectionString = configuration.GetConnectionString("AzureBlobStorage") 
-            ?? throw new ArgumentNullException(nameof(configuration), "AzureBlobStorage connection string is not configured");
+        _connectionString = Environment.GetEnvironmentVariable("AZURE_BLOB_STORAGE_CONNECTION_STRING")
+            ?? configuration.GetConnectionString("AzureBlobStorage") 
+            ?? throw new ArgumentNullException(nameof(configuration), "AzureBlobStorage connection string is not configured in .env or appsettings");
         _logger = logger;
     }
 

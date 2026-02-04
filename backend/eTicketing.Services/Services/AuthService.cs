@@ -116,10 +116,10 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Neispravni pristupni podaci");
         }
 
-        // Check if email is verified
+        // Check if email is verified (use same message to prevent user enumeration)
         if (!user.IsEmailVerified)
         {
-            throw new UnauthorizedAccessException("Molimo verifikujte email adresu prije prijave");
+            throw new UnauthorizedAccessException("Neispravni pristupni podaci");
         }
 
         // Check if this is first login for organization admins
@@ -248,6 +248,12 @@ public class AuthService : IAuthService
             LastLoginAt = user.LastLoginAt,
             CreatedAt = user.CreatedAt
         };
+    }
+
+    public async Task<int?> GetCurrentUserIdAsync(CancellationToken cancellationToken = default)
+    {
+        var userId = _jwtHelper.GetUserId();
+        return await Task.FromResult(userId);
     }
 
     private static string GenerateOTP()

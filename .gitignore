@@ -330,3 +330,4 @@ lerna-debug.log*
 *.pem
 *.crt
 *.cer
+backend/API_REQUEST_FLOWS.md

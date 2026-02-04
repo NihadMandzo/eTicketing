@@ -10,7 +10,7 @@ public class EventMappingProfile : Profile
     public EventMappingProfile()
     {
         CreateMap<Event, EventResponse>()
-            .ForMember(dest => dest.OrganizationName, opt => opt.MapFrom(src => src.Organization.Name))
+            .ForMember(dest => dest.OrganizationName, opt => opt.MapFrom(src => src.Organization != null ? src.Organization.Name : null))
             .ForMember(dest => dest.Images, opt => opt.Ignore()); // Handled in service
         
         CreateMap<EventInsertRequest, Event>()

@@ -1,3 +1,4 @@
+using eTicketing.Api.Resources;
 using eTicketing.Model.Requests;
 using eTicketing.Model.SearchObjects;
 using eTicketing.Services.Interfaces;
@@ -30,7 +31,7 @@ public class OrganizationsController : ControllerBase
         var result = await _organizationService.GetByIdAsync(id);
         
         if (result == null)
-            return NotFound(new { message = "Organizacija nije pronađena" });
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
         
         return Ok(result);
     }
@@ -41,7 +42,7 @@ public class OrganizationsController : ControllerBase
         var result = await _organizationService.GetByIdDetailedAsync(id);
         
         if (result == null)
-            return NotFound(new { message = "Organizacija nije pronađena" });
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
             
         return Ok(result);
     }
@@ -59,7 +60,7 @@ public class OrganizationsController : ControllerBase
         var result = await _organizationService.UpdateAsync(id, request);
         
         if (result == null)
-            return NotFound(new { message = "Organizacija nije pronađena" });
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
             
         return Ok(result);
     }
@@ -68,7 +69,7 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         var result = await _organizationService.DeleteAsync(id);
-        return result ? NoContent() : NotFound(new { message = "Organizacija nije pronađena" });
+        return result ? NoContent() : NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
     }
 
     [HttpGet("{id}/users")]
@@ -84,7 +85,7 @@ public class OrganizationsController : ControllerBase
         var result = await _organizationService.AddUserAsync(id, request);
         
         if (result == null)
-            return NotFound(new { message = "Organizacija nije pronađena" });
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
             
         return CreatedAtAction(nameof(GetOrganizationUsers), new { id }, result);
     }
@@ -93,6 +94,6 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> RemoveUser(int organizationId, int userId)
     {
         var result = await _organizationService.RemoveUserAsync(organizationId, userId);
-        return result ? NoContent() : NotFound(new { message = "Korisnik nije pronađen" });
+        return result ? NoContent() : NotFound(new { message = ErrorMessagesHr.UserNotFound });
     }
 }

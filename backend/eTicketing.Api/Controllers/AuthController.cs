@@ -1,3 +1,4 @@
+using eTicketing.Api.Resources;
 using eTicketing.Model.Requests;
 using eTicketing.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -34,7 +35,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
     {
         await _authService.VerifyEmailAsync(request);
-        return Ok(new { message = "Email uspješno verifikovan" });
+        return Ok(new { message = ErrorMessagesHr.EmailVerifiedSuccess });
     }
 
     /// <summary>
@@ -54,7 +55,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
         await _authService.ForgotPasswordAsync(request);
-        return Ok(new { message = "Ako email postoji, kod za resetovanje je poslan" });
+        return Ok(new { message = ErrorMessagesHr.PasswordResetCodeSent });
     }
 
     /// <summary>
@@ -64,7 +65,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
         await _authService.ResetPasswordAsync(request);
-        return Ok(new { message = "Lozinka je uspješno resetovana" });
+        return Ok(new { message = ErrorMessagesHr.PasswordResetSuccess });
     }
 
     /// <summary>
@@ -74,12 +75,12 @@ public class AuthController : ControllerBase
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var userId = GetCurrentUserId();
+        var userId = await _authService.GetCurrentUserIdAsync();
         if (!userId.HasValue)
-            return Unauthorized(new { message = "Korisnik nije autentifikovan" });
+            return Unauthorized(new { message = ErrorMessagesHr.UserNotAuthenticated });
             
         await _authService.ChangePasswordAsync(userId.Value, request);
-        return Ok(new { message = "Lozinka je uspješno promijenjena" });
+        return Ok(new { message = ErrorMessagesHr.PasswordChangedSuccess });
     }
 
     /// <summary>
@@ -89,25 +90,15 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
     {
-        var userId = GetCurrentUserId();
+        var userId = await _authService.GetCurrentUserIdAsync();
         if (!userId.HasValue)
-            return Unauthorized(new { message = "Korisnik nije autentifikovan" });
+            return Unauthorized(new { message = ErrorMessagesHr.UserNotAuthenticated });
             
         var user = await _authService.GetMeAsync(userId.Value);
         
         if (user == null)
-            return Unauthorized(new { message = "Korisnik nije pronađen" });
+            return Unauthorized(new { message = ErrorMessagesHr.UserNotFound });
 
         return Ok(user);
-    }
-
-    private int? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-        {
-            return null;
-        }
-        return userId;
     }
 }

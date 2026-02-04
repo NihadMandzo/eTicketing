@@ -7,18 +7,43 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using Asp.Versioning;
+
+// Load .env file
+DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Override configuration with environment variables
+builder.Configuration.AddEnvironmentVariables();
+
 // Add services to the container.
+
+// Build connection string from environment variables
+var connectionString = $"Server={Environment.GetEnvironmentVariable("DB_SERVER") ?? "."};Database={Environment.GetEnvironmentVariable("DB_NAME") ?? "eTicketingDB"};Trusted_Connection={Environment.GetEnvironmentVariable("DB_TRUSTED_CONNECTION") ?? "True"};TrustServerCertificate={Environment.GetEnvironmentVariable("DB_TRUST_SERVER_CERTIFICATE") ?? "True"};MultipleActiveResultSets={Environment.GetEnvironmentVariable("DB_MULTIPLE_ACTIVE_RESULT_SETS") ?? "true"}";
 
 // Database Configuration
 builder.Services.AddDbContext<eTicketingDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(connectionString));
+
+// Health Checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<eTicketingDbContext>("database");
 
 // JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") 
+    ?? throw new InvalidOperationException("JWT SecretKey is not configured in .env file");
+
+// Validate secret key length (must be at least 32 bytes for HS256)
+if (Encoding.UTF8.GetByteCount(secretKey) < 32)
+{
+    throw new InvalidOperationException("JWT SecretKey must be at least 32 bytes (characters) long for secure token signing");
+}
+
+var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") 
+    ?? throw new InvalidOperationException("JWT Issuer is not configured in .env file");
+var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") 
+    ?? throw new InvalidOperationException("JWT Audience is not configured in .env file");
 
 builder.Services.AddAuthentication(options =>
 {
@@ -33,8 +58,8 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"] ?? throw new InvalidOperationException("JWT Issuer is not configured"),
-        ValidAudience = jwtSettings["Audience"] ?? throw new InvalidOperationException("JWT Audience is not configured"),
+        ValidIssuer = issuer,
+        ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
 
@@ -64,10 +89,43 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
+// CORS Configuration
+var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ORIGINS");
+var corsOrigins = string.IsNullOrWhiteSpace(corsOriginsEnv)
+    ? ["http://localhost:4200", "http://localhost:3000"]
+    : corsOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(o => o.Trim())
+                    .Where(o => !string.IsNullOrWhiteSpace(o))
+                    .ToArray();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(corsOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// API Versioning
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+}).AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
+
 // HttpContextAccessor (required for JwtHelper and HttpHelper)
 builder.Services.AddHttpContextAccessor();
 
-// AutoMapper
+// AutoMapper (scans all loaded assemblies for profiles)
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 // Helpers
@@ -112,6 +170,9 @@ using (var scope = app.Services.CreateScope())
 // Global Exception Handler (must be first)
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
+// CORS (must be before authentication)
+app.UseCors("AllowFrontend");
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -122,6 +183,9 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Health Check endpoint
+app.MapHealthChecks("/health");
 
 app.MapControllers();
 

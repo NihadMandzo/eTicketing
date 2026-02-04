@@ -98,6 +98,11 @@ public class eTicketingDbContext : DbContext
                   .HasForeignKey(e => e.OrganizationId)
                   .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(e => e.Category)
+                  .WithMany()
+                  .HasForeignKey(e => e.CategoryId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(e => e.OrganizationId);
             entity.HasIndex(e => e.EventDateTime);
         });

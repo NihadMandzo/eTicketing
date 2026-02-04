@@ -22,6 +22,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
     private readonly ILogger<EventService> _logger;
     private const string EventImagesContainer = "event-images";
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<string>> _blobsToDeleteAfterCommit = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<string>> _newlyUploadedBlobs = new();
 
     public EventService(
         eTicketingDbContext context, 
@@ -134,14 +135,29 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         try
         {
             var result = await base.UpdateAsync(id, request, cancellationToken);
-            // Base class calls AfterUpdateAsync which already removes the dictionary entry
+            // Base class calls AfterUpdateAsync which already removes the dictionary entries
             return result;
         }
         catch
         {
-            // On failure, cleanup the dictionary entry without deleting blobs
-            // (DB transaction failed, so entity state wasn't changed)
+            // On failure, cleanup newly uploaded blobs and dictionary entries
             _blobsToDeleteAfterCommit.TryRemove(id, out _);
+            
+            // Clean up newly uploaded blobs since database transaction failed
+            if (_newlyUploadedBlobs.TryRemove(id, out var newBlobs))
+            {
+                foreach (var blobUrl in newBlobs)
+                {
+                    try
+                    {
+                        await _blobStorageService.DeleteAsync(blobUrl, EventImagesContainer);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete newly uploaded blob after database failure: {BlobUrl}. Blob may be orphaned.", blobUrl);
+                    }
+                }
+            }
             throw;
         }
     }
@@ -202,7 +218,14 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                 // Rollback: Delete any uploaded blobs if there was an error
                 foreach (var uploadedUrl in uploadedImageUrls)
                 {
-                    await _blobStorageService.DeleteAsync(uploadedUrl, EventImagesContainer);
+                    try
+                    {
+                        await _blobStorageService.DeleteAsync(uploadedUrl, EventImagesContainer);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete newly uploaded blob during rollback: {BlobUrl}. Blob may be orphaned.", uploadedUrl);
+                    }
                 }
                 throw;
             }
@@ -275,13 +298,26 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                     });
                     hasPrimaryImage = true;
                 }
+                
+                // Store newly uploaded blobs for cleanup if database save fails
+                if (uploadedImageUrls.Any())
+                {
+                    _newlyUploadedBlobs[entity.Id] = uploadedImageUrls;
+                }
             }
             catch
             {
                 // Rollback: Delete any uploaded blobs if there was an error
                 foreach (var uploadedUrl in uploadedImageUrls)
                 {
-                    await _blobStorageService.DeleteAsync(uploadedUrl, EventImagesContainer);
+                    try
+                    {
+                        await _blobStorageService.DeleteAsync(uploadedUrl, EventImagesContainer);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete newly uploaded blob during rollback: {BlobUrl}. Blob may be orphaned.", uploadedUrl);
+                    }
                 }
                 throw;
             }
@@ -297,7 +333,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
     protected override async Task AfterUpdateAsync(Event entity, EventUpdateRequest request, 
         CancellationToken cancellationToken)
     {
-        // Delete blobs after successful DB commit
+        // Delete old blobs after successful DB commit
         if (_blobsToDeleteAfterCommit.TryRemove(entity.Id, out var imageUrlsToDelete))
         {
             foreach (var blobUrl in imageUrlsToDelete)
@@ -314,6 +350,9 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                 }
             }
         }
+        
+        // Clear newly uploaded blobs tracker since commit was successful
+        _newlyUploadedBlobs.TryRemove(entity.Id, out _);
     }
 
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)

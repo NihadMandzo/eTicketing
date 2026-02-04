@@ -12,8 +12,10 @@ public class Event : BaseEntity
     
     // Foreign Keys
     public int OrganizationId { get; set; }
+    public int? CategoryId { get; set; }
     
     // Navigation Properties
     public Organization Organization { get; set; } = null!;
+    public Category? Category { get; set; }
     public ICollection<EventImage> Images { get; set; } = new List<EventImage>();
 }
