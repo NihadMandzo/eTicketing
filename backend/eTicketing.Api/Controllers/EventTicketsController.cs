@@ -2,7 +2,6 @@ using eTicketing.Api.Resources;
 using eTicketing.Model.Requests;
 using eTicketing.Model.SearchObjects;
 using eTicketing.Services.Interfaces;
-using eTicketing.Services.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +13,6 @@ namespace eTicketing.Api.Controllers;
 public class EventTicketsController : ControllerBase
 {
     private readonly IEventTicketService _eventTicketService;
-    
 
     public EventTicketsController(IEventTicketService eventTicketService)
     {
@@ -47,29 +45,6 @@ public class EventTicketsController : ControllerBase
     {
         var result = await _eventTicketService.GetByEventIdAsync(eventId);
         return Ok(result);
-    }
-
-    [HttpGet("organization/{organizationId}")]
-    [Authorize(Roles = "SuperAdmin,Admin,OrganizationSuperAdmin,OrganizationAdmin")]
-    public async Task<IActionResult> GetByOrganizationId(int organizationId)
-    {
-        
-        var result = await _eventTicketService.GetByOrganizationIdAsync(organizationId);
-        return Ok(result);
-    }
-
-    [HttpGet("{id}/validate-availability")]
-    [AllowAnonymous]
-    public async Task<IActionResult> ValidateAvailability(int id, [FromQuery] int quantity = 1)
-    {
-        // Validate quantity parameter
-        if (quantity < 1)
-        {
-            return BadRequest(new { message = "Quantity must be at least 1" });
-        }
-        
-        var isAvailable = await _eventTicketService.ValidateTicketAvailabilityAsync(id, quantity);
-        return Ok(new { available = isAvailable });
     }
 
     [HttpPost]

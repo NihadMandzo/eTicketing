@@ -65,39 +65,9 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
             query = query.Where(x => x.OrganizationId == search.OrganizationId.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(search?.PriceType))
-        {
-            query = query.Where(x => x.PriceType == search.PriceType);
-        }
-
-        if (search?.MinPrice.HasValue == true)
-        {
-            query = query.Where(x => x.Price >= search.MinPrice.Value);
-        }
-
-        if (search?.MaxPrice.HasValue == true)
-        {
-            query = query.Where(x => x.Price <= search.MaxPrice.Value);
-        }
-
         if (search?.IsActive.HasValue == true)
         {
             query = query.Where(x => x.IsActive == search.IsActive.Value);
-        }
-
-        if (search?.HasAvailableTickets == true)
-        {
-            query = query.Where(x => x.TicketsSold < x.TotalTickets);
-        }
-
-        if (search?.SaleStartDateFrom.HasValue == true)
-        {
-            query = query.Where(x => x.SaleStartDate >= search.SaleStartDateFrom.Value);
-        }
-
-        if (search?.SaleEndDateTo.HasValue == true)
-        {
-            query = query.Where(x => x.SaleEndDate <= search.SaleEndDateTo.Value);
         }
 
         // Include related entities
@@ -319,30 +289,6 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         return true;
     }
 
-    public async Task<List<EventTicketResponse>> GetByOrganizationIdAsync(int organizationId, CancellationToken cancellationToken = default)
-    {
-        // Check authorization
-        var currentUserRole = _jwtHelper.GetUserRole();
-        var userOrganizationId = _jwtHelper.GetOrganizationId();
-
-        if (currentUserRole == "OrganizationSuperAdmin" || currentUserRole == "OrganizationAdmin")
-        {
-            if (!userOrganizationId.HasValue || userOrganizationId.Value != organizationId)
-            {
-                throw new ForbiddenException("You can only view tickets for your organization");
-            }
-        }
-
-        var tickets = await Context.Set<EventTicket>()
-            .Include(x => x.Event)
-            .Include(x => x.Organization)
-            .Where(x => x.OrganizationId == organizationId)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        return Mapper.Map<List<EventTicketResponse>>(tickets);
-    }
-
     public async Task<List<EventTicketResponse>> GetByEventIdAsync(int eventId, CancellationToken cancellationToken = default)
     {
         // Authorization check for organization users
@@ -373,54 +319,6 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
             .ToListAsync(cancellationToken);
 
         return Mapper.Map<List<EventTicketResponse>>(tickets);
-    }
-
-    public async Task<bool> ValidateTicketAvailabilityAsync(int ticketId, int quantity, CancellationToken cancellationToken = default)
-    {
-        var ticket = await Context.Set<EventTicket>()
-            .FirstOrDefaultAsync(x => x.Id == ticketId, cancellationToken);
-
-        if (ticket == null)
-        {
-            throw new ValidationException("Ticket not found");
-        }
-
-        if (!ticket.IsActive)
-        {
-            throw new ValidationException("This ticket type is not currently active");
-        }
-
-        // Check if sales have started
-        if (ticket.SaleStartDate.HasValue && ticket.SaleStartDate > DateTime.UtcNow)
-        {
-            throw new ValidationException("Ticket sales have not started yet");
-        }
-
-        // Check if sales have ended
-        if (ticket.SaleEndDate.HasValue && ticket.SaleEndDate < DateTime.UtcNow)
-        {
-            throw new ValidationException("Ticket sales have ended");
-        }
-
-        // Check availability
-        var remainingTickets = ticket.TotalTickets - ticket.TicketsSold;
-        if (remainingTickets < quantity)
-        {
-            throw new ValidationException($"Only {remainingTickets} tickets remaining");
-        }
-
-        // Check purchase quantity limits
-        if (ticket.MinPurchaseQuantity.HasValue && quantity < ticket.MinPurchaseQuantity.Value)
-        {
-            throw new ValidationException($"Minimum purchase quantity is {ticket.MinPurchaseQuantity.Value}");
-        }
-
-        if (ticket.MaxPurchaseQuantity.HasValue && quantity > ticket.MaxPurchaseQuantity.Value)
-        {
-            throw new ValidationException($"Maximum purchase quantity is {ticket.MaxPurchaseQuantity.Value}");
-        }
-
-        return true;
     }
 
     protected override EventTicketResponse MapToResponse(EventTicket entity)
