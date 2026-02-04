@@ -18,4 +18,5 @@ public class Event : BaseEntity
     public Organization Organization { get; set; } = null!;
     public Category? Category { get; set; }
     public ICollection<EventImage> Images { get; set; } = new List<EventImage>();
+    public ICollection<EventTicket> EventTickets { get; set; } = new List<EventTicket>();
 }

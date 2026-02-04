@@ -6,4 +6,5 @@ public class EventSearchObject : BaseSearchObject
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public bool? IsActive { get; set; }
+    public List<int>? CategoryIds { get; set; }
 }

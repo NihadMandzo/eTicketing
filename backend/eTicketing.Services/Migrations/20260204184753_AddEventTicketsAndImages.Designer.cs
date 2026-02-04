@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eTicketing.Services.Database;
 
@@ -11,9 +12,11 @@ using eTicketing.Services.Database;
 namespace eTicketing.Services.Migrations
 {
     [DbContext(typeof(eTicketingDbContext))]
-    partial class eTicketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260204184753_AddEventTicketsAndImages")]
+    partial class AddEventTicketsAndImages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -674,17 +677,17 @@ namespace eTicketing.Services.Migrations
                     b.HasOne("eTicketing.Services.Database.Entities.Category", "Category")
                         .WithMany("Images")
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("eTicketing.Services.Database.Entities.Event", "Event")
                         .WithMany()
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("eTicketing.Services.Database.Entities.Organization", "Organization")
                         .WithMany("Images")
                         .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Category");
 

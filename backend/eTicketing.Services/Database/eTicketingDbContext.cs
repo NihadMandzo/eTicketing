@@ -16,6 +16,8 @@ public class eTicketingDbContext : DbContext
     public DbSet<Category> Categories { get; set; }
     public DbSet<Event> Events { get; set; }
     public DbSet<EventImage> EventImages { get; set; }
+    public DbSet<EventTicket> EventTickets { get; set; }
+    public DbSet<Image> Images { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -120,6 +122,65 @@ public class eTicketingDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.EventId);
+        });
+
+        // EventTicket Configuration
+        // Note: OrganizationId is denormalized from Event for query performance (analytics)
+        // Consistency is enforced at application level in EventTicketService
+        modelBuilder.Entity<EventTicket>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TicketType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Price).IsRequired().HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Currency).IsRequired().HasMaxLength(3);
+            entity.Property(e => e.PriceType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.TotalTickets).IsRequired();
+            entity.Property(e => e.TicketsSold).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+
+            entity.HasOne(e => e.Event)
+                  .WithMany(ev => ev.EventTickets)
+                  .HasForeignKey(e => e.EventId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Organization)
+                  .WithMany(o => o.EventTickets)
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.EventId);
+            entity.HasIndex(e => e.OrganizationId);
+            entity.HasIndex(e => e.IsActive);
+        });
+
+        // Image Configuration (Generic image for Organization, Category, Event)
+        // Using Restrict/ClientCascade to avoid multiple cascade paths on SQL Server
+        modelBuilder.Entity<Image>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ImageUrl).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.IsPrimary).IsRequired();
+            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
+
+            entity.HasOne(e => e.Event)
+                  .WithMany()
+                  .HasForeignKey(e => e.EventId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Organization)
+                  .WithMany(o => o.Images)
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Category)
+                  .WithMany(c => c.Images)
+                  .HasForeignKey(e => e.CategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.EventId);
+            entity.HasIndex(e => e.OrganizationId);
+            entity.HasIndex(e => e.CategoryId);
+            entity.HasIndex(e => e.EntityType);
         });
 
         // Seed Data
