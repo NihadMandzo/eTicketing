@@ -129,8 +129,15 @@ else
     }
     
     corsOrigins = validOrigins.ToArray();
+    
+    
+     if (corsOrigins.Length == 0)
+    {
+        throw new InvalidOperationException(
+            "CORS_ORIGINS environment variable is set but contains no valid origins. " +
+            "Provide valid HTTP/HTTPS URLs or unset the variable to use defaults.");
+    }
 }
-
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
