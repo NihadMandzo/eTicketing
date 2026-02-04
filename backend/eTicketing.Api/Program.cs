@@ -91,12 +91,45 @@ builder.Services.AddAuthorization();
 
 // CORS Configuration
 var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ORIGINS");
-var corsOrigins = string.IsNullOrWhiteSpace(corsOriginsEnv)
-    ? ["http://localhost:4200", "http://localhost:3000"]
-    : corsOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(o => o.Trim())
-                    .Where(o => !string.IsNullOrWhiteSpace(o))
-                    .ToArray();
+string[] corsOrigins;
+
+if (string.IsNullOrWhiteSpace(corsOriginsEnv))
+{
+    corsOrigins = ["http://localhost:4200", "http://localhost:3000"];
+}
+else
+{
+    var parsedOrigins = corsOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                      .Select(o => o.Trim())
+                                      .Where(o => !string.IsNullOrWhiteSpace(o))
+                                      .ToArray();
+    
+    // Validate each origin is a well-formed URI
+    var invalidOrigins = new List<string>();
+    var validOrigins = new List<string>();
+    
+    foreach (var origin in parsedOrigins)
+    {
+        if (Uri.TryCreate(origin, UriKind.Absolute, out var uri) && 
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            validOrigins.Add(origin);
+        }
+        else
+        {
+            invalidOrigins.Add(origin);
+        }
+    }
+    
+    if (invalidOrigins.Any())
+    {
+        throw new InvalidOperationException(
+            $"Invalid CORS origins detected in CORS_ORIGINS environment variable: {string.Join(", ", invalidOrigins)}. " +
+            "All origins must be valid absolute HTTP or HTTPS URLs.");
+    }
+    
+    corsOrigins = validOrigins.ToArray();
+}
 
 builder.Services.AddCors(options =>
 {

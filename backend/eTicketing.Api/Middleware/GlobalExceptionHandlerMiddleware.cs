@@ -91,7 +91,13 @@ public class GlobalExceptionHandlerMiddleware
             
             // 401 & 403 - Authentication & Authorization
             UnauthorizedAccessException => (
-                StatusCodes.Status403Forbidden,
+                StatusCodes.Status401Unauthorized, // Authentication failure - not logged in or invalid token
+                "UNAUTHORIZED",
+                ErrorMessagesHr.Unauthorized,
+                null
+            ),
+            ForbiddenException => (
+                StatusCodes.Status403Forbidden, // Authorization failure - logged in but insufficient permissions
                 "FORBIDDEN",
                 ErrorMessagesHr.AccessDenied,
                 null

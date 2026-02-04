@@ -250,10 +250,10 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task<int?> GetCurrentUserIdAsync(CancellationToken cancellationToken = default)
+    public Task<int?> GetCurrentUserIdAsync(CancellationToken cancellationToken = default)
     {
         var userId = _jwtHelper.GetUserId();
-        return await Task.FromResult(userId);
+        return Task.FromResult(userId);
     }
 
     private static string GenerateOTP()

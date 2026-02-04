@@ -29,6 +29,9 @@ public class EventUpdateRequest
     public double? Longitude { get; set; }
     
     public bool IsActive { get; set; } = true;
+    
+    [MaxLength(5, ErrorMessage = "Maksimalno 5 slika može biti dodato po ažuriranju")]
     public List<IFormFile>? NewImages { get; set; }
+    
     public List<int>? ImageIdsToDelete { get; set; }
 }

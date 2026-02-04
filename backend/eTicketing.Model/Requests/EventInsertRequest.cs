@@ -32,5 +32,6 @@ public class EventInsertRequest
     [Range(1, int.MaxValue, ErrorMessage = "ID organizacije mora biti pozitivan broj")]
     public int OrganizationId { get; set; }
     
+    [MaxLength(5, ErrorMessage = "Maksimalno 5 slika može biti dodato po događaju")]
     public List<IFormFile>? Images { get; set; }
 }

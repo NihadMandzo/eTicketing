@@ -21,8 +21,8 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
     private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<EventService> _logger;
     private const string EventImagesContainer = "event-images";
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<string>> _blobsToDeleteAfterCommit = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<string>> _newlyUploadedBlobs = new();
+    private readonly Dictionary<int, List<string>> _blobsToDeleteAfterCommit = new();
+    private readonly Dictionary<int, List<string>> _newlyUploadedBlobs = new();
 
     public EventService(
         eTicketingDbContext context, 
@@ -47,15 +47,9 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         // OrganizationSuperAdmin and OrganizationAdmin can only see their organization's events
         if (currentUserRole == "OrganizationSuperAdmin" || currentUserRole == "OrganizationAdmin")
         {
-            if (organizationId.HasValue)
-            {
-                query = query.Where(x => x.OrganizationId == organizationId.Value);
-            }
-            else
-            {
-                // No organization - return empty
-                query = query.Where(x => false);
-            }
+            query = organizationId.HasValue
+                ? query.Where(x => x.OrganizationId == organizationId.Value)
+                : query.Where(x => false); // No organization - return empty
         }
         // SuperAdmin, Admin, and User can see all events (no filtering)
 
@@ -135,16 +129,18 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         try
         {
             var result = await base.UpdateAsync(id, request, cancellationToken);
-            // Base class calls AfterUpdateAsync which already removes the dictionary entries
+            // Success: base class has called AfterUpdateAsync which clears both dictionaries
             return result;
         }
         catch
         {
-            // On failure, cleanup newly uploaded blobs and dictionary entries
-            _blobsToDeleteAfterCommit.TryRemove(id, out _);
+            // On failure during BeforeUpdateAsync or SaveChangesAsync:
+            // - Clean up newly uploaded blobs (not yet committed to DB)
+            // - Clear old blobs queue (DB wasn't updated, so don't delete them)
             
-            // Clean up newly uploaded blobs since database transaction failed
-            if (_newlyUploadedBlobs.TryRemove(id, out var newBlobs))
+            _blobsToDeleteAfterCommit.Remove(id);
+            
+            if (_newlyUploadedBlobs.Remove(id, out var newBlobs))
             {
                 foreach (var blobUrl in newBlobs)
                 {
@@ -334,7 +330,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         CancellationToken cancellationToken)
     {
         // Delete old blobs after successful DB commit
-        if (_blobsToDeleteAfterCommit.TryRemove(entity.Id, out var imageUrlsToDelete))
+        if (_blobsToDeleteAfterCommit.Remove(entity.Id, out var imageUrlsToDelete))
         {
             foreach (var blobUrl in imageUrlsToDelete)
             {
@@ -352,7 +348,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         }
         
         // Clear newly uploaded blobs tracker since commit was successful
-        _newlyUploadedBlobs.TryRemove(entity.Id, out _);
+        _newlyUploadedBlobs.Remove(entity.Id);
     }
 
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
