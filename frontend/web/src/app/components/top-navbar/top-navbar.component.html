@@ -1,0 +1,45 @@
+<header class="top-navbar">
+  <div class="navbar-container">
+    <a routerLink="/" class="logo">
+      <span class="logo-text">Kuda</span>
+    </a>
+    
+    <nav class="nav-links">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">
+        Home
+      </a>
+      <a routerLink="/events" routerLinkActive="active" class="nav-link">
+        Events
+      </a>
+      <a routerLink="/tickets" routerLinkActive="active" class="nav-link">
+        My Tickets
+      </a>
+      <a routerLink="/about" routerLinkActive="active" class="nav-link">
+        About
+      </a>
+    </nav>
+
+    <div class="nav-actions">
+      <a routerLink="/search" class="icon-btn" aria-label="Search">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.3-4.3"></path>
+        </svg>
+      </a>
+      <a routerLink="/cart" class="icon-btn" aria-label="Cart">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="21" r="1"></circle>
+          <circle cx="19" cy="21" r="1"></circle>
+          <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>
+        </svg>
+        <span class="cart-badge">0</span>
+      </a>
+      <a routerLink="/profile" routerLinkActive="active" class="profile-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </a>
+    </div>
+  </div>
+</header>
