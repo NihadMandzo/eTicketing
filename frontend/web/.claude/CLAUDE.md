@@ -54,3 +54,8 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Design services around a single responsibility
 - Use the `providedIn: 'root'` option for singleton services
 - Use the `inject()` function instead of constructor injection
+
+## Naming
+
+- All files must be named in English
+- All user-facing text content inside component.html must be in Bosnian
