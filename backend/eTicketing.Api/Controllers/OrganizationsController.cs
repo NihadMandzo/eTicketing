@@ -1,3 +1,4 @@
+using eTicketing.Api.Resources;
 using eTicketing.Model.Requests;
 using eTicketing.Model.SearchObjects;
 using eTicketing.Services.Interfaces;
@@ -11,210 +12,88 @@ namespace eTicketing.Api.Controllers;
 public class OrganizationsController : ControllerBase
 {
     private readonly IOrganizationService _organizationService;
-    private readonly ILogger<OrganizationsController> _logger;
 
-    public OrganizationsController(
-        IOrganizationService organizationService,
-        ILogger<OrganizationsController> logger)
+    public OrganizationsController(IOrganizationService organizationService)
     {
         _organizationService = organizationService;
-        _logger = logger;
     }
-
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] OrganizationSearchObject search)
     {
-        try
-        {
-            var result = await _organizationService.GetAsync(search);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving organizations");
-            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacija" });
-        }
+        var result = await _organizationService.GetAsync(search);
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
-        try
-        {
-            var result = await _organizationService.GetByIdAsync(id);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });        }
+        var result = await _organizationService.GetByIdAsync(id);
+        
+        if (result == null)
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
+        
+        return Ok(result);
     }
 
     [HttpGet("{id}/detailed")]
     public async Task<IActionResult> GetByIdDetailed(int id)
     {
-        try
-        {
-            var result = await _organizationService.GetByIdDetailedAsync(id);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving detailed organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom prikazivanja organizacije" });
-        }
+        var result = await _organizationService.GetByIdDetailedAsync(id);
+        
+        if (result == null)
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
+            
+        return Ok(result);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] OrganizationInsertRequest request)
     {
-        try
-        {
-            var result = await _organizationService.CreateAsync(request);
-            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating organization");
-            return StatusCode(500, new { message = "Došlo je do greške prilikom kreiranja organizacije" });
-        }
+        var result = await _organizationService.CreateAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] OrganizationUpdateRequest request)
     {
-        try
-        {
-            var result = await _organizationService.UpdateAsync(id, request);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom ažuriranja organizacije" });
-        }
+        var result = await _organizationService.UpdateAsync(id, request);
+        
+        if (result == null)
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
+            
+        return Ok(result);
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        try
-        {
-            var result = await _organizationService.DeleteAsync(id);
-            return result ? NoContent() : NotFound(new { message = "Organizacija nije pronađena" });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom brisanja organizacije" });
-        }
+        var result = await _organizationService.DeleteAsync(id);
+        return result ? NoContent() : NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
     }
-
 
     [HttpGet("{id}/users")]
     public async Task<IActionResult> GetOrganizationUsers(int id)
     {
-        try
-        {
-            var result = await _organizationService.GetOrganizationUsersAsync(id);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving users for organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom preuzimanja korisnika organizacije" });
-        }
+        var result = await _organizationService.GetOrganizationUsersAsync(id);
+        return Ok(result);
     }
-
 
     [HttpPost("{id}/users")]
     public async Task<IActionResult> AddUser(int id, [FromBody] OrganizationUserRequest request)
     {
-        try
-        {
-            var result = await _organizationService.AddUserAsync(id, request);
-            return CreatedAtAction(nameof(GetOrganizationUsers), new { id }, result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding user to organization {OrganizationId}", id);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom dodavanja korisnika" });
-        }
+        var result = await _organizationService.AddUserAsync(id, request);
+        
+        if (result == null)
+            return NotFound(new { message = ErrorMessagesHr.OrganizationNotFound });
+            
+        return CreatedAtAction(nameof(GetOrganizationUsers), new { id }, result);
     }
 
     [HttpDelete("{organizationId}/users/{userId}")]
     public async Task<IActionResult> RemoveUser(int organizationId, int userId)
     {
-        try
-        {
-            var result = await _organizationService.RemoveUserAsync(organizationId, userId);
-            return result ? NoContent() : NotFound(new { message = "Korisnik nije pronađen" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing user {UserId} from organization {OrganizationId}", userId, organizationId);
-            return StatusCode(500, new { message = "Došlo je do greške prilikom uklanjanja korisnika" });
-        }
+        var result = await _organizationService.RemoveUserAsync(organizationId, userId);
+        return result ? NoContent() : NotFound(new { message = ErrorMessagesHr.UserNotFound });
     }
 }

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using eTicketing.Api.Models;
+using eTicketing.Api.Resources;
+using eTicketing.Model.Exceptions;
 
 namespace eTicketing.Api.Middleware;
 
@@ -29,7 +31,7 @@ public class GlobalExceptionHandlerMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred");
+            _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
             
             if (!context.Response.HasStarted)
             {
@@ -38,59 +40,130 @@ public class GlobalExceptionHandlerMiddleware
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        var statusCode = exception switch
+        var traceId = context.TraceIdentifier;
+        
+        // Log exception details for ArgumentException and InvalidOperationException
+        if (exception is ArgumentException argEx)
         {
-            KeyNotFoundException => StatusCodes.Status404NotFound,
-            UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
-            ArgumentException => StatusCodes.Status400BadRequest,
-            InvalidOperationException => StatusCodes.Status400BadRequest,
-            _ => StatusCodes.Status500InternalServerError
+            _logger.LogWarning(argEx, "Invalid argument: {Message}", argEx.Message);
+        }
+        else if (exception is InvalidOperationException invalidOpEx)
+        {
+            _logger.LogWarning(invalidOpEx, "Invalid operation: {Message}", invalidOpEx.Message);
+        }
+        
+        // Determine status code and error details based on exception type
+        var (statusCode, errorCode, message, errors) = exception switch
+        {
+            // 400 - Bad Request (Client errors)
+            ValidationException validationEx => (
+                StatusCodes.Status400BadRequest,
+                "VALIDATION_ERROR",
+                ErrorMessagesHr.ValidationFailed,
+                validationEx.Errors
+            ),
+            DuplicateResourceException duplicateEx => (
+                StatusCodes.Status409Conflict, // 409 is more appropriate for duplicates
+                "DUPLICATE_RESOURCE",
+                duplicateEx.Message,
+                null
+            ),
+            ArgumentException => (
+                StatusCodes.Status400BadRequest,
+                "INVALID_ARGUMENT",
+                ErrorMessagesHr.InvalidArgument,
+                null
+            ),
+            BusinessLogicException businessEx => (
+                StatusCodes.Status400BadRequest,
+                "BUSINESS_LOGIC_ERROR",
+                businessEx.Message,
+                null
+            ),
+            InvalidOperationException => (
+                StatusCodes.Status400BadRequest,
+                "INVALID_OPERATION",
+                ErrorMessagesHr.InvalidOperation,
+                null
+            ),
+            
+            // 401 & 403 - Authentication & Authorization
+            UnauthorizedAccessException => (
+                StatusCodes.Status401Unauthorized, // Authentication failure - not logged in or invalid token
+                "UNAUTHORIZED",
+                ErrorMessagesHr.Unauthorized,
+                null
+            ),
+            ForbiddenException => (
+                StatusCodes.Status403Forbidden, // Authorization failure - logged in but insufficient permissions
+                "FORBIDDEN",
+                ErrorMessagesHr.AccessDenied,
+                null
+            ),
+            
+            // 404 - Not Found
+            KeyNotFoundException => (
+                StatusCodes.Status404NotFound,
+                "NOT_FOUND",
+                ErrorMessagesHr.ResourceNotFound,
+                null
+            ),
+            
+            // 500 - Internal Server Error (Server errors)
+            _ => (
+                StatusCodes.Status500InternalServerError,
+                "INTERNAL_ERROR",
+                ErrorMessagesHr.InternalServerError,
+                null
+            )
         };
 
-        var message = exception switch
-        {
-            KeyNotFoundException => "Objekat nije pronađen",
-            UnauthorizedAccessException => exception.Message,
-            ArgumentException => exception.Message,
-            InvalidOperationException => exception.Message,
-            _ => "Došlo je do greške na serveru"
-        };
-
-        return WriteResponseAsync(context, statusCode, message);
+        return WriteErrorResponseAsync(context, statusCode, errorCode, message, errors, traceId);
     }
 
     private static Task HandleStatusCodeAsync(HttpContext context)
     {
         var statusCode = context.Response.StatusCode;
+        var traceId = context.TraceIdentifier;
         
-        var message = statusCode switch
+        var (errorCode, message) = statusCode switch
         {
-            StatusCodes.Status401Unauthorized => "Neautorizovan pristup",
-            StatusCodes.Status403Forbidden => "Zabranjen pristup",
-            StatusCodes.Status404NotFound => "Stranica nije pronađena",
-            StatusCodes.Status400BadRequest => "Neispravan zahtjev",
-            _ => "Zahtjev nije uspio"
+            StatusCodes.Status401Unauthorized => ("UNAUTHORIZED", ErrorMessagesHr.Unauthorized),
+            StatusCodes.Status403Forbidden => ("FORBIDDEN", ErrorMessagesHr.AccessDenied),
+            StatusCodes.Status404NotFound => ("NOT_FOUND", ErrorMessagesHr.ResourceNotFound),
+            StatusCodes.Status400BadRequest => ("BAD_REQUEST", ErrorMessagesHr.InvalidRequest),
+            _ => ("REQUEST_FAILED", ErrorMessagesHr.RequestFailed)
         };
 
-        return WriteResponseAsync(context, statusCode, message);
+        return WriteErrorResponseAsync(context, statusCode, errorCode, message, null, traceId);
     }
 
-    private static Task WriteResponseAsync(HttpContext context, int statusCode, string message)
+    private static Task WriteErrorResponseAsync(
+        HttpContext context, 
+        int statusCode, 
+        string errorCode, 
+        string message,
+        IDictionary<string, string[]>? errors,
+        string traceId)
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = statusCode;
 
-        var response = new ApiResponse
+        var response = new ErrorResponse
         {
             StatusCode = statusCode,
-            Message = message
+            ErrorCode = errorCode,
+            Message = message,
+            Errors = errors,
+            TraceId = traceId
         };
 
         var jsonOptions = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
         return context.Response.WriteAsync(JsonSerializer.Serialize(response, jsonOptions));

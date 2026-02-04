@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eTicketing.Services.Database;
 
@@ -11,9 +12,11 @@ using eTicketing.Services.Database;
 namespace eTicketing.Services.Migrations
 {
     [DbContext(typeof(eTicketingDbContext))]
-    partial class eTicketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260203144639_AddEventEntities")]
+    partial class AddEventEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -130,9 +133,6 @@ namespace eTicketing.Services.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("CategoryId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -170,8 +170,6 @@ namespace eTicketing.Services.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
 
                     b.HasIndex("EventDateTime");
 
@@ -460,58 +458,19 @@ namespace eTicketing.Services.Migrations
 
                     b.ToTable("Users");
 
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "admin@eticketing.com",
-                            FirstName = "Super",
-                            IsActive = true,
-                            IsEmailVerified = true,
-                            IsFirstLogin = true,
-                            LastName = "Admin",
-                            PasswordHash = "YZxW8VUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba9876543210=",
-                            PasswordSalt = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRST=",
-                            PhoneNumber = "+1234567890",
-                            RoleId = 1,
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "superadmin"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "user@eticketing.com",
-                            FirstName = "Test",
-                            IsActive = true,
-                            IsEmailVerified = true,
-                            IsFirstLogin = true,
-                            LastName = "User",
-                            OrganizationId = 1,
-                            PasswordHash = "ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba0987654321=",
-                            PasswordSalt = "bcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTU=",
-                            PhoneNumber = "+1234567891",
-                            RoleId = 5,
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "testuser"
-                        });
+                    // NOTE: User seeding with credentials has been removed from migration.
+                    // Create initial users via a secure post-deployment script that reads
+                    // credentials from environment variables or a secure secret store.
+                    // This prevents hardcoded credentials from being committed to source control.
                 });
 
             modelBuilder.Entity("eTicketing.Services.Database.Entities.Event", b =>
                 {
-                    b.HasOne("eTicketing.Services.Database.Entities.Category", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("eTicketing.Services.Database.Entities.Organization", "Organization")
                         .WithMany("Events")
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Category");
 
                     b.Navigation("Organization");
                 });
