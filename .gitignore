@@ -332,5 +332,7 @@ lerna-debug.log*
 *.cer
 backend/API_REQUEST_FLOWS.md
 backend/CODE_REVIEW.md
-.gitignore
+
 backend/IMPROVEMENTS_SUMMARY.md
+frontend/web/.claude/CLAUDE.md
+    
