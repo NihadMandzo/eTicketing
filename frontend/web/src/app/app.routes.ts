@@ -29,7 +29,13 @@ export const routes: Routes = [
       {
         path: 'kontakt',
         loadChildren: () => import('./pages/contact/contact.routes').then(m => m.CONTACT_ROUTES)
-      }
+      },
+      // Redirects for old English paths
+      { path: 'events', redirectTo: 'dogadjaji', pathMatch: 'full' },
+      { path: 'help', redirectTo: 'pomoc', pathMatch: 'full' },
+      { path: 'terms', redirectTo: 'uslovi', pathMatch: 'full' },
+      { path: 'privacy', redirectTo: 'privatnost', pathMatch: 'full' },
+      { path: 'contact', redirectTo: 'kontakt', pathMatch: 'full' }
     ]
   }
 ];

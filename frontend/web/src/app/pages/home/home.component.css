@@ -13,7 +13,12 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(135deg, rgba(13, 124, 102, 0.1) 0%, rgba(65, 201, 180, 0.1) 50%, rgba(255, 111, 60, 0.1) 100%);
-  animation: gradient-shift 10s ease infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-bg {
+    animation: gradient-shift 10s ease infinite;
+  }
 }
 
 @keyframes gradient-shift {
@@ -57,59 +62,7 @@
   flex-wrap: wrap;
 }
 
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  font-size: 15px;
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius);
-  text-decoration: none;
-  transition: all 0.2s ease;
-  border: none;
-  cursor: pointer;
-}
-
-.btn:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.btn-lg {
-  padding: 16px 32px;
-  font-size: 16px;
-}
-
-.btn-sm {
-  padding: 8px 16px;
-  font-size: 14px;
-}
-
-.btn-primary {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-}
-
-.btn-primary:hover {
-  background-color: var(--secondary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.btn-outline {
-  background-color: transparent;
-  color: var(--foreground);
-  border: 2px solid var(--border);
-}
-
-.btn-outline:hover {
-  background-color: var(--muted);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
+/* Page-specific button styles */
 .btn-accent {
   background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   color: white;

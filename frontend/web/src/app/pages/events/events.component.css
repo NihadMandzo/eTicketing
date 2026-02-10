@@ -129,44 +129,6 @@
   color: var(--primary);
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  font-size: 15px;
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius);
-  text-decoration: none;
-  transition: all 0.2s ease;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-sm {
-  padding: 8px 16px;
-  font-size: 14px;
-}
-
-.btn-primary {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-}
-
-.btn-primary:hover,
-.btn-primary:focus,
-.btn-primary:focus-visible {
-  background-color: var(--secondary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.btn-primary:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
 @media (max-width: 768px) {
   .page-header {
     padding: 80px 16px 40px;
