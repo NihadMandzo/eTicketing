@@ -23,6 +23,11 @@ public class CategoryService : BaseCRUDService<Category, CategoryResponse, BaseS
             query = query.Where(x => x.Name.Contains(search.FTS) || (x.Description != null && x.Description.Contains(search.FTS)));
         }
 
+        if (search?.IsActive.HasValue == true)
+        {
+            query = query.Where(x => x.IsActive == search.IsActive.Value);
+        }
+
         query = query.OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name);
 
         return query;

@@ -82,6 +82,11 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
             query = query.Where(x => x.IsActive == search.IsActive.Value);
         }
 
+        if (search?.CategoryIds != null && search.CategoryIds.Any())
+        {
+            query = query.Where(x => x.CategoryId.HasValue && search.CategoryIds.Contains(x.CategoryId.Value));
+        }
+
         // Include related entities
         query = query.Include(x => x.Organization)
                      .Include(x => x.Images);
@@ -245,6 +250,9 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         {
             throw new UnauthorizedAccessException("Možete uređivati samo događaje svoje organizacije");
         }
+
+        // Note: OrganizationId cannot be changed as it's not included in EventUpdateRequest
+        // This maintains data consistency with associated EventTickets which have denormalized OrganizationId
 
         // Load existing images
         await Context.Entry(entity)

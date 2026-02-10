@@ -50,6 +50,27 @@ public static class ErrorMessagesHr
     // Category errors
     public const string CategoryNameExists = "Kategorija sa ovim imenom već postoji";
     
+    // Ticket errors
+    public const string TicketNotFound = "Ulaznica nije pronađena";
+    public const string TicketDeletedSuccess = "Ulaznica je uspješno obrisana";
+    public const string TicketNoPermissionToAccess = "Nemate dozvolu za pristup ovoj ulaznici";
+    public const string TicketNoOrganizationAssigned = "Nemate dodijeljenu organizaciju";
+    public const string TicketCanOnlyCreateForOwnOrganization = "Možete kreirati ulaznice samo za događaje vaše organizacije";
+    public const string TicketCanOnlyUpdateForOwnOrganization = "Možete ažurirati ulaznice samo za događaje vaše organizacije";
+    public const string TicketCanOnlyDeleteForOwnOrganization = "Možete obrisati ulaznice samo za događaje vaše organizacije";
+    public const string TicketSaleStartMustBeBeforeEnd = "Datum početka prodaje mora biti prije datuma kraja prodaje";
+    public const string TicketSaleEndCannotBeInPast = "Datum kraja prodaje ne može biti u prošlosti";
+    public const string TicketMaxQuantityMustBeGreaterThanMin = "Maksimalna količina kupovine mora biti veća ili jednaka minimalnoj količini kupovine";
+    public const string TicketMinQuantityCannotExceedTotal = "Minimalna količina kupovine ne može premašiti ukupan broj ulaznica";
+    public const string TicketMaxQuantityCannotExceedTotal = "Maksimalna količina kupovine ne može premašiti ukupan broj ulaznica";
+    public const string TicketTotalCannotBeLessThanMinQuantity = "Ukupan broj ulaznica ne može biti manji od minimalne količine kupovine";
+    public const string TicketCannotReduceBelowSold = "Ne možete smanjiti ukupan broj ulaznica ispod broja već prodanih";
+    public const string TicketFreeTicketsMustHaveZeroPrice = "Besplatne ulaznice moraju imati cijenu 0";
+    public const string TicketCannotDeleteWithSoldTickets = "Ne možete obrisati tip ulaznice jer su ulaznice već prodane";
+    public const string TicketEventNotFound = "Događaj nije pronađen";
+    public const string TicketUserNotAssociatedWithOrganization = "Trenutni korisnik nije povezan sa organizacijom";
+    public const string TicketNotAuthorizedForEvent = "Nemate dozvolu za pristup ulaznicama ovog događaja";
+    
     // Authentication errors
     public const string InvalidCredentials = "Neispravni pristupni podaci";
     public const string EmailNotVerified = "Molimo verifikujte email adresu prije prijave";
