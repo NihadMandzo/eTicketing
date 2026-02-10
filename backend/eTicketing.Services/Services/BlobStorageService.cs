@@ -16,14 +16,14 @@ public class BlobStorageService : IBlobStorageService
     {
         _connectionString = Environment.GetEnvironmentVariable("AZURE_BLOB_STORAGE_CONNECTION_STRING")
             ?? configuration.GetConnectionString("AzureBlobStorage") 
-            ?? throw new ArgumentNullException(nameof(configuration), "AzureBlobStorage connection string is not configured in .env or appsettings");
+            ?? throw new ArgumentNullException(nameof(configuration), "AzureBlobStorage connection string nije konfigurisan u .env ili appsettings");
         _logger = logger;
     }
 
     public async Task<string> UploadAsync(IFormFile file, string containerName)
     {
         if (file == null || file.Length == 0)
-            throw new ArgumentException("File is empty or null", nameof(file));
+            throw new ArgumentException("Datoteka je prazna ili ne postoji", nameof(file));
 
         // Create a unique filename
         var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";

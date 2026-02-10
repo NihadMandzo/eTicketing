@@ -99,7 +99,7 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
             }
             else
             {
-                throw new ForbiddenException("You don't have permission to access this ticket");
+                throw new ForbiddenException("Nemate dozvolu za pristup ovoj ulaznici");
             }
         }
 
@@ -120,7 +120,7 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
         if (eventEntity == null)
         {
-            throw new ValidationException("Event not found");
+            throw new ValidationException("Događaj nije pronađen");
         }
 
         // Check authorization - user must belong to the event's organization
@@ -131,12 +131,12 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         {
             if (!organizationId.HasValue)
             {
-                throw new ForbiddenException("You don't have an organization assigned");
+                throw new ForbiddenException("Nemate dodijeljenu organizaciju");
             }
 
             if (eventEntity.OrganizationId != organizationId.Value)
             {
-                throw new ForbiddenException("You can only create tickets for your organization's events");
+                throw new ForbiddenException("Možete kreirati ulaznice samo za događaje vaše organizacije");
             }
         }
 
@@ -147,35 +147,35 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue &&
             request.SaleStartDate >= request.SaleEndDate)
         {
-            throw new ValidationException("Sale start date must be before sale end date");
+            throw new ValidationException("Datum početka prodaje mora biti prije datuma kraja prodaje");
         }
 
         if (request.SaleEndDate.HasValue && request.SaleEndDate < DateTime.UtcNow)
         {
-            throw new ValidationException("Sale end date cannot be in the past");
+            throw new ValidationException("Datum kraja prodaje ne može biti u prošlosti");
         }
 
         // Validate purchase quantities
         if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue &&
             request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
         {
-            throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
+            throw new ValidationException("Maksimalna količina kupovine mora biti veća ili jednaka minimalnoj količini kupovine");
         }
 
         if (request.MinPurchaseQuantity.HasValue && request.TotalTickets < request.MinPurchaseQuantity)
         {
-            throw new ValidationException("Minimum purchase quantity cannot exceed total tickets");
+            throw new ValidationException("Minimalna količina kupovine ne može premašiti ukupan broj ulaznica");
         }
 
         if (request.MaxPurchaseQuantity.HasValue && request.MaxPurchaseQuantity > request.TotalTickets)
         {
-            throw new ValidationException("Maximum purchase quantity cannot exceed total tickets");
+            throw new ValidationException("Maksimalna količina kupovine ne može premašiti ukupan broj ulaznica");
         }
 
         // Validate price for free tickets
         if (request.PriceType == "Free" && request.Price != 0)
         {
-            throw new ValidationException("Free tickets must have a price of 0");
+            throw new ValidationException("Besplatne ulaznice moraju imati cijenu 0");
         }
 
         _logger.LogInformation("Creating new ticket type '{TicketType}' for event ID {EventId}", 
@@ -192,12 +192,12 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         {
             if (!organizationId.HasValue)
             {
-                throw new ForbiddenException("You don't have an organization assigned");
+                throw new ForbiddenException("Nemate dodijeljenu organizaciju");
             }
 
             if (entity.OrganizationId != organizationId.Value)
             {
-                throw new ForbiddenException("You can only update tickets for your organization's events");
+                throw new ForbiddenException("Možete ažurirati ulaznice samo za događaje vaše organizacije");
             }
         }
 
@@ -205,7 +205,7 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue &&
             request.SaleStartDate >= request.SaleEndDate)
         {
-            throw new ValidationException("Sale start date must be before sale end date");
+            throw new ValidationException("Datum početka prodaje mora biti prije datuma kraja prodaje");
         }
 
         // Only enforce "not in the past" rule when actually changing the sale end date
@@ -213,38 +213,38 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
             request.SaleEndDate != entity.SaleEndDate && 
             request.SaleEndDate < DateTime.UtcNow)
         {
-            throw new ValidationException("Sale end date cannot be in the past");
+            throw new ValidationException("Datum kraja prodaje ne može biti u prošlosti");
         }
 
         // Validate purchase quantities
         if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue &&
             request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
         {
-            throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
+            throw new ValidationException("Maksimalna količina kupovine mora biti veća ili jednaka minimalnoj količini kupovine");
         }
 
         // Compute effective minimum (use request value if provided, otherwise use existing entity value)
         var effectiveMin = request.MinPurchaseQuantity ?? entity.MinPurchaseQuantity;
         if (effectiveMin.HasValue && request.TotalTickets < effectiveMin)
         {
-            throw new ValidationException("Total tickets cannot be less than minimum purchase quantity");
+            throw new ValidationException("Ukupan broj ulaznica ne može biti manji od minimalne količine kupovine");
         }
 
         // Validate total tickets - cannot reduce below tickets already sold
         if (request.TotalTickets < entity.TicketsSold)
         {
-            throw new ValidationException($"Cannot reduce total tickets below {entity.TicketsSold} (already sold)");
+            throw new ValidationException($"Ne možete smanjiti ukupan broj ulaznica ispod {entity.TicketsSold} (već prodano)");
         }
 
         if (request.MaxPurchaseQuantity.HasValue && request.MaxPurchaseQuantity > request.TotalTickets)
         {
-            throw new ValidationException("Maximum purchase quantity cannot exceed total tickets");
+            throw new ValidationException("Maksimalna količina kupovine ne može premašiti ukupan broj ulaznica");
         }
 
         // Validate price for free tickets
         if (request.PriceType == "Free" && request.Price != 0)
         {
-            throw new ValidationException("Free tickets must have a price of 0");
+            throw new ValidationException("Besplatne ulaznice moraju imati cijenu 0");
         }
 
         _logger.LogInformation("Updating ticket ID {TicketId} for event ID {EventId}", 
@@ -268,19 +268,19 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         {
             if (!organizationId.HasValue)
             {
-                throw new ForbiddenException("You don't have an organization assigned");
+                throw new ForbiddenException("Nemate dodijeljenu organizaciju");
             }
 
             if (entity.OrganizationId != organizationId.Value)
             {
-                throw new ForbiddenException("You can only delete tickets for your organization's events");
+                throw new ForbiddenException("Možete obrisati ulaznice samo za događaje vaše organizacije");
             }
         }
 
         // Prevent deletion if tickets have been sold
         if (entity.TicketsSold > 0)
         {
-            throw new BusinessLogicException($"Cannot delete ticket type. {entity.TicketsSold} tickets have already been sold.");
+            throw new BusinessLogicException($"Ne možete obrisati tip ulaznice. {entity.TicketsSold} ulaznica je već prodano.");
         }
 
         Context.Set<EventTicket>().Remove(entity);
@@ -300,7 +300,7 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
         if (eventEntity == null)
         {
-            throw new KeyNotFoundException($"Event with id {eventId} not found");
+            throw new KeyNotFoundException($"Događaj sa ID-om {eventId} nije pronađen");
         }
 
         // Authorization check for organization users
@@ -312,12 +312,12 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         {
             if (!organizationId.HasValue)
             {
-                throw new ForbiddenException("Current user is not associated with an organization");
+                throw new ForbiddenException("Trenutni korisnik nije povezan sa organizacijom");
             }
 
             if (eventEntity.OrganizationId != organizationId.Value)
             {
-                throw new ForbiddenException("You are not authorized to access tickets for this event");
+                throw new ForbiddenException("Nemate dozvolu za pristup ulaznicama ovog događaja");
             }
         }
 
