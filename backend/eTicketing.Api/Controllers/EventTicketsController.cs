@@ -34,7 +34,7 @@ public class EventTicketsController : ControllerBase
         var result = await _eventTicketService.GetByIdAsync(id);
         
         if (result == null)
-            return NotFound(new { message = "Ticket not found" });
+            return NotFound(new { message = ErrorMessages.TicketNotFound });
         
         return Ok(result);
     }
@@ -66,7 +66,7 @@ public class EventTicketsController : ControllerBase
         var result = await _eventTicketService.UpdateAsync(id, request);
         
         if (result == null)
-            return NotFound(new { message = "Ticket not found" });
+            return NotFound(new { message = ErrorMessages.TicketNotFound });
             
         return Ok(result);
     }
@@ -80,8 +80,8 @@ public class EventTicketsController : ControllerBase
         var result = await _eventTicketService.DeleteAsync(id);
         
         if (!result)
-            return NotFound(new { message = "Ticket not found" });
+            return NotFound(new { message = ErrorMessages.TicketNotFound });
         
-        return Ok(new { message = "Ticket deleted successfully" });
+        return Ok(new { message = ErrorMessages.TicketDeletedSuccess });
     }
 }

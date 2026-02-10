@@ -50,6 +50,10 @@ public static class ErrorMessages
     // Category errors
     public const string CategoryNameExists = "Category with this name already exists";
     
+    // Ticket errors
+    public const string TicketNotFound = "Ticket not found";
+    public const string TicketDeletedSuccess = "Ticket deleted successfully";
+    
     // Authentication errors
     public const string InvalidCredentials = "Invalid credentials";
     public const string EmailNotVerified = "Please verify your email address before logging in";

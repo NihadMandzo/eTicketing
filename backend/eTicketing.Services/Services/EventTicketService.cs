@@ -142,15 +142,12 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
         // Set the organization ID from the event
         entity.OrganizationId = eventEntity.OrganizationId;
-        
 
         // Validate dates
-        if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue)
+        if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue &&
+            request.SaleStartDate >= request.SaleEndDate)
         {
-            if (request.SaleStartDate >= request.SaleEndDate)
-            {
-                throw new ValidationException("Sale start date must be before sale end date");
-            }
+            throw new ValidationException("Sale start date must be before sale end date");
         }
 
         if (request.SaleEndDate.HasValue && request.SaleEndDate < DateTime.UtcNow)
@@ -159,12 +156,15 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         }
 
         // Validate purchase quantities
-        if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue)
+        if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue &&
+            request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
         {
-            if (request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
-            {
-                throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
-            }
+            throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
+        }
+
+        if (request.MinPurchaseQuantity.HasValue && request.TotalTickets < request.MinPurchaseQuantity)
+        {
+            throw new ValidationException("Minimum purchase quantity cannot exceed total tickets");
         }
 
         if (request.MaxPurchaseQuantity.HasValue && request.MaxPurchaseQuantity > request.TotalTickets)
@@ -184,15 +184,6 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
     protected override async Task BeforeUpdateAsync(EventTicket entity, EventTicketUpdateRequest request, CancellationToken cancellationToken)
     {
-        // Load the entity with its relationships
-        await Context.Entry(entity)
-            .Reference(e => e.Event)
-            .LoadAsync(cancellationToken);
-        
-        await Context.Entry(entity)
-            .Reference(e => e.Organization)
-            .LoadAsync(cancellationToken);
-
         // Check authorization
         var currentUserRole = _jwtHelper.GetUserRole();
         var organizationId = _jwtHelper.GetOrganizationId();
@@ -211,21 +202,32 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
         }
 
         // Validate dates
-        if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue)
+        if (request.SaleStartDate.HasValue && request.SaleEndDate.HasValue &&
+            request.SaleStartDate >= request.SaleEndDate)
         {
-            if (request.SaleStartDate >= request.SaleEndDate)
-            {
-                throw new ValidationException("Sale start date must be before sale end date");
-            }
+            throw new ValidationException("Sale start date must be before sale end date");
+        }
+
+        // Only enforce "not in the past" rule when actually changing the sale end date
+        if (request.SaleEndDate.HasValue && 
+            request.SaleEndDate != entity.SaleEndDate && 
+            request.SaleEndDate < DateTime.UtcNow)
+        {
+            throw new ValidationException("Sale end date cannot be in the past");
         }
 
         // Validate purchase quantities
-        if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue)
+        if (request.MaxPurchaseQuantity.HasValue && request.MinPurchaseQuantity.HasValue &&
+            request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
         {
-            if (request.MaxPurchaseQuantity < request.MinPurchaseQuantity)
-            {
-                throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
-            }
+            throw new ValidationException("Maximum purchase quantity must be greater than or equal to minimum purchase quantity");
+        }
+
+        // Compute effective minimum (use request value if provided, otherwise use existing entity value)
+        var effectiveMin = request.MinPurchaseQuantity ?? entity.MinPurchaseQuantity;
+        if (effectiveMin.HasValue && request.TotalTickets < effectiveMin)
+        {
+            throw new ValidationException("Total tickets cannot be less than minimum purchase quantity");
         }
 
         // Validate total tickets - cannot reduce below tickets already sold
@@ -291,28 +293,38 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
     public async Task<List<EventTicketResponse>> GetByEventIdAsync(int eventId, CancellationToken cancellationToken = default)
     {
+        // First, verify that the event exists
+        var eventEntity = await Context.Set<Event>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+
+        if (eventEntity == null)
+        {
+            throw new KeyNotFoundException($"Event with id {eventId} not found");
+        }
+
         // Authorization check for organization users
         var currentUserRole = _jwtHelper.GetUserRole();
         var organizationId = _jwtHelper.GetOrganizationId();
+
+        // Enforce organization-based authorization for organization users
+        if (currentUserRole == "OrganizationSuperAdmin" || currentUserRole == "OrganizationAdmin")
+        {
+            if (!organizationId.HasValue)
+            {
+                throw new ForbiddenException("Current user is not associated with an organization");
+            }
+
+            if (eventEntity.OrganizationId != organizationId.Value)
+            {
+                throw new ForbiddenException("You are not authorized to access tickets for this event");
+            }
+        }
 
         var query = Context.Set<EventTicket>()
             .Include(x => x.Event)
             .Include(x => x.Organization)
             .Where(x => x.EventId == eventId);
-
-        // Apply authorization filter at query level
-        if (currentUserRole == "OrganizationSuperAdmin" || currentUserRole == "OrganizationAdmin")
-        {
-            if (organizationId.HasValue)
-            {
-                query = query.Where(x => x.OrganizationId == organizationId.Value);
-            }
-            else
-            {
-                // No organization - return empty without querying
-                return new List<EventTicketResponse>();
-            }
-        }
 
         var tickets = await query
             .OrderBy(x => x.Price)
@@ -323,8 +335,6 @@ public class EventTicketService : BaseCRUDService<EventTicket, EventTicketRespon
 
     protected override EventTicketResponse MapToResponse(EventTicket entity)
     {
-        var response = Mapper.Map<EventTicketResponse>(entity);
-        response.TicketsRemaining = entity.TicketsRemaining;
-        return response;
+        return Mapper.Map<EventTicketResponse>(entity);
     }
 }

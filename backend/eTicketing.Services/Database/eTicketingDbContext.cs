@@ -125,7 +125,8 @@ public class eTicketingDbContext : DbContext
         });
 
         // EventTicket Configuration
-        // Note: OrganizationId is denormalized from Event for query performance (analytics)
+        // Note: OrganizationId is denormalized from Event primarily for authorization filtering performance,
+        //       allowing quick filtering of tickets by organization without joining to Events.
         // Consistency is enforced at application level in EventTicketService
         modelBuilder.Entity<EventTicket>(entity =>
         {
@@ -181,6 +182,13 @@ public class eTicketingDbContext : DbContext
             entity.HasIndex(e => e.OrganizationId);
             entity.HasIndex(e => e.CategoryId);
             entity.HasIndex(e => e.EntityType);
+
+            // Ensure exactly one foreign key is set based on EntityType
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_Images_ExactlyOneEntityFk",
+                "([EventId] IS NOT NULL AND [OrganizationId] IS NULL AND [CategoryId] IS NULL AND [EntityType] = 'Event') " +
+                "OR ([EventId] IS NULL AND [OrganizationId] IS NOT NULL AND [CategoryId] IS NULL AND [EntityType] = 'Organization') " +
+                "OR ([EventId] IS NULL AND [OrganizationId] IS NULL AND [CategoryId] IS NOT NULL AND [EntityType] = 'Category')"));
         });
 
         // Seed Data
