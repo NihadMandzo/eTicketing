@@ -50,7 +50,7 @@ class AuthProvider {
       uri,
       headers: _publicHeaders(),
       body: jsonEncode(request.toJson()),
-    );
+    ).timeout(_timeout);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

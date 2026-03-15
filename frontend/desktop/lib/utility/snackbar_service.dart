@@ -97,6 +97,7 @@ class _TopRightSnackbarState extends State<_TopRightSnackbar>
   Future<void> _dismiss() async {
     if (!mounted) return;
     await _controller.reverse();
+    if (!mounted) return;
     widget.onDismiss();
   }
 
