@@ -14,6 +14,7 @@ import 'authorization.dart';
 class AuthProvider {
   static const String _baseUrl = 'http://localhost:5189/api/';
   static const String _endpoint = 'Auth';
+  static const Duration _timeout = Duration(seconds: 10);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 

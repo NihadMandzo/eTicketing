@@ -49,7 +49,7 @@ class UserProfile {
           ? DateTime.tryParse(json['lastLoginAt'] as String)
           : null,
       createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String)
+          ? (DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now())
           : DateTime.now(),
     );
   }
