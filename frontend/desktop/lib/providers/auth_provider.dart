@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/api_error.dart';
 import '../models/requests/change_password_request.dart';
 import '../models/requests/login_request.dart';
+import '../models/requests/update_user_request.dart';
 import '../models/responses/login_response.dart';
 import '../models/responses/user_profile.dart';
 import 'api_exception.dart';
@@ -92,5 +93,23 @@ class AuthProvider {
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return true;
+  }
+
+  // ── updateUser ────────────────────────────────────────────────────────────
+  /// Updates the profile of the currently authenticated user.
+  /// Returns the updated [UserProfile] from the server response.
+  Future<UserProfile> updateUser(UpdateUserRequest request) async {
+    final uri = Uri.parse('$_baseUrl$_endpoint/update-user');
+
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(),
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return UserProfile.fromJson(data);
   }
 }

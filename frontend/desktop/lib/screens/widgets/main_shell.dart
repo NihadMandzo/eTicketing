@@ -21,13 +21,23 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   String _currentPage = 'dashboard';
   final _searchController = TextEditingController();
+  late UserProfile _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _user = widget.user;
+  }
 
   void _navigate(String page) {
     setState(() => _currentPage = page);
   }
 
-  void _openSettings() {
-    showSettingsDialog(context, widget.user);
+  Future<void> _openSettings() async {
+    final updated = await showSettingsDialog(context, _user);
+    if (updated != null && mounted) {
+      setState(() => _user = updated);
+    }
   }
 
   void _logout() {
@@ -52,7 +62,7 @@ class _MainShellState extends State<MainShell> {
         children: [
           // ── Sidebar ──────────────────────────────────────────────────────
           AppSidebar(
-            user: widget.user,
+            user: _user,
             currentPage: _currentPage,
             onPageChange: _navigate,
             onSettings: _openSettings,
@@ -64,7 +74,7 @@ class _MainShellState extends State<MainShell> {
               children: [
                 // Header
                 AppHeader(
-                  user: widget.user,
+                  user: _user,
                   onLogout: _logout,
                   searchController: _searchController,
                 ),

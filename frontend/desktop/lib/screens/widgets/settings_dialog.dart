@@ -1,18 +1,65 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
+import '../../models/requests/change_password_request.dart';
+import '../../models/requests/organization_update_request.dart';
+import '../../models/requests/update_user_request.dart';
+import '../../models/responses/organization_response.dart';
 import '../../models/responses/user_profile.dart';
+import '../../providers/api_exception.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/authorization.dart';
+import '../../providers/organization_provider.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
-const _kAdminRoles = {'SuperAdmin', 'Admin'};
 
 const Color _kPrimary = Color(0xFF0D7C66);
 const Color _kPrimaryDark = Color(0xFF0a6b57);
 
+// ─── JWT helper ───────────────────────────────────────────────────────────────
+
+int? _orgIdFromToken() {
+  final token = Authorization.token;
+  if (token == null || token.isEmpty) return null;
+  try {
+    final parts = token.split('.');
+    if (parts.length != 3) return null;
+    // Base64-decode the payload (part 1)
+    String payload = parts[1];
+    // JWT base64url → standard base64
+    payload = payload.replaceAll('-', '+').replaceAll('_', '/');
+    switch (payload.length % 4) {
+      case 2:
+        payload += '==';
+        break;
+      case 3:
+        payload += '=';
+        break;
+    }
+    final decoded = utf8.decode(base64Decode(payload));
+    final claims = jsonDecode(decoded) as Map<String, dynamic>;
+    // The claim key may be "OrganizationId" or
+    // "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/organizationid" etc.
+    for (final key in claims.keys) {
+      final lower = key.toLowerCase();
+      if (lower == 'organizationid' || lower.endsWith('/organizationid')) {
+        final val = claims[key];
+        if (val is int) return val;
+        if (val is String) return int.tryParse(val);
+      }
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // ─── Entry point: call this to open the dialog ────────────────────────────────
 
-Future<void> showSettingsDialog(BuildContext context, UserProfile user) {
-  return showDialog(
+Future<UserProfile?> showSettingsDialog(BuildContext context, UserProfile user) {
+  return showDialog<UserProfile>(
     context: context,
     barrierColor: Colors.black54,
     builder: (_) => SettingsDialog(user: user),
@@ -31,6 +78,10 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
+  // ── Providers
+  final _authProvider = AuthProvider();
+  final _orgProvider = OrganizationProvider();
+
   // ── Mode: 'profile' | 'organization'
   String _mode = 'profile';
 
@@ -66,10 +117,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
   bool _orgActive = true;
 
   bool _saving = false;
+  bool _loadingOrg = false;
+  int? _orgId;
+  OrganizationResponse? _orgData;
+  UserProfile? _updatedUser;
 
   bool get _hasOrg =>
       widget.user.organizationId != null &&
-      (_kOrgRoles.contains(widget.user.roleName));
+      _kOrgRoles.contains(widget.user.roleName);
 
   // ── Profile tabs
   static const _profileTabs = [
@@ -95,7 +150,35 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _username = TextEditingController(text: u.username);
     _email = TextEditingController(text: u.email);
     _phone = TextEditingController(text: u.phoneNumber ?? '');
-    _orgName.text = u.organizationName ?? '';
+
+    // Resolve org id from token or user profile
+    _orgId = u.organizationId ?? _orgIdFromToken();
+
+    if (_hasOrg && _orgId != null) {
+      _fetchOrganization();
+    }
+  }
+
+  Future<void> _fetchOrganization() async {
+    setState(() => _loadingOrg = true);
+    try {
+      final org = await _orgProvider.getOrganization(_orgId!);
+      if (!mounted) return;
+      _orgData = org;
+      _orgName.text = org.name;
+      _orgDesc.text = org.description;
+      _orgEmail.text = org.email;
+      _orgPhone.text = org.phoneNumber;
+      _orgAddress.text = org.address;
+      _orgWebsite.text = org.website ?? '';
+      _orgActive = org.isActive;
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.apiError.displayMessage);
+    } catch (e) {
+      if (mounted) _showError('Greška pri učitavanju organizacije.');
+    } finally {
+      if (mounted) setState(() => _loadingOrg = false);
+    }
   }
 
   @override
@@ -113,21 +196,100 @@ class _SettingsDialogState extends State<SettingsDialog> {
   // ── Save handler ──────────────────────────────────────────────────────────
 
   Future<void> _handleSave() async {
-    if (_mode == 'security') {
+    setState(() => _saving = true);
+    try {
+      if (_mode == 'profile') {
+        await _saveProfile();
+      } else {
+        await _saveOrganization();
+      }
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.apiError.displayMessage);
+    } catch (e) {
+      if (mounted) _showError('Došlo je do greške.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (_profileTab == 'security') {
+      // ── Change password ──
+      if (_newPwd.text.isEmpty && _currentPwd.text.isEmpty) {
+        _showError('Unesite lozinku za promjenu.');
+        return;
+      }
       if (_newPwd.text != _confirmPwd.text) {
         _showError('Lozinke se ne podudaraju.');
         return;
       }
-      if (_newPwd.text.isNotEmpty && _currentPwd.text.isEmpty) {
+      if (_currentPwd.text.isEmpty) {
         _showError('Unesite trenutnu lozinku.');
         return;
       }
+      await _authProvider.changePassword(ChangePasswordRequest(
+        currentPassword: _currentPwd.text,
+        newPassword: _newPwd.text,
+        confirmPassword: _confirmPwd.text,
+      ));
+      if (mounted) {
+        _currentPwd.clear();
+        _newPwd.clear();
+        _confirmPwd.clear();
+        _showSuccess('Lozinka uspješno promijenjena.');
+      }
+    } else {
+      // ── Update user profile ──
+      final updated = await _authProvider.updateUser(UpdateUserRequest(
+        firstName: _firstName.text.trim(),
+        lastName: _lastName.text.trim(),
+        username: _username.text.trim(),
+        phoneNumber: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+      ));
+      if (mounted) {
+        // Refresh form fields from the response
+        _updatedUser = updated;
+        _firstName.text = updated.firstName;
+        _lastName.text = updated.lastName;
+        _username.text = updated.username;
+        _email.text = updated.email;
+        _phone.text = updated.phoneNumber ?? '';
+        _showSuccess('Profil uspješno ažuriran.');
+      }
     }
-    setState(() => _saving = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _saving = false);
-    _showSuccess('Promjene su sačuvane.');
+  }
+
+  Future<void> _saveOrganization() async {
+    if (_orgId == null) {
+      _showError('Organizacija nije pronađena.');
+      return;
+    }
+    final updated = await _orgProvider.updateOrganization(
+      _orgId!,
+      OrganizationUpdateRequest(
+        name: _orgName.text.trim(),
+        description: _orgDesc.text.trim(),
+        address: _orgAddress.text.trim(),
+        phoneNumber: _orgPhone.text.trim(),
+        email: _orgEmail.text.trim(),
+        website:
+            _orgWebsite.text.trim().isEmpty ? null : _orgWebsite.text.trim(),
+        logoUrl: _orgData?.logoUrl,
+        isActive: _orgActive,
+      ),
+    );
+    if (mounted) {
+      // Refresh form fields from the response
+      _orgData = updated;
+      _orgName.text = updated.name;
+      _orgDesc.text = updated.description;
+      _orgEmail.text = updated.email;
+      _orgPhone.text = updated.phoneNumber;
+      _orgAddress.text = updated.address;
+      _orgWebsite.text = updated.website ?? '';
+      setState(() => _orgActive = updated.isActive);
+      _showSuccess('Organizacija uspješno ažurirana.');
+    }
   }
 
   void _showError(String msg) {
@@ -148,37 +310,43 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   String _roleLabel(String r) {
     switch (r) {
-      case 'SuperAdmin': return 'Super Administrator';
-      case 'Admin': return 'Administrator';
-      case 'OrganizationSuperAdmin': return 'Org. Super Administrator';
-      case 'OrganizationAdmin': return 'Org. Administrator';
-      default: return r;
+      case 'SuperAdmin':
+        return 'Super Administrator';
+      case 'Admin':
+        return 'Administrator';
+      case 'OrganizationSuperAdmin':
+        return 'Org. Super Administrator';
+      case 'OrganizationAdmin':
+        return 'Org. Administrator';
+      default:
+        return r;
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
 
+  void _closeDialog() {
+    Navigator.of(context).pop(_updatedUser);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
+      insetPadding: EdgeInsets.zero,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          width: 960,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.9,
-          ),
+          width: 1100,
+          height: 800,
           color: Colors.white,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               _buildHeader(),
               _buildModeSelector(),
-              Flexible(
+              Expanded(
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildSidebarTabs(),
                     Expanded(child: _buildContent()),
@@ -200,9 +368,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_kPrimary, _kPrimaryDark],
-        ),
+        gradient: LinearGradient(colors: [_kPrimary, _kPrimaryDark]),
       ),
       child: Row(
         children: [
@@ -245,7 +411,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           const Spacer(),
           _IconBtn(
             icon: Icons.close_rounded,
-            onTap: () => Navigator.of(context).pop(),
+            onTap: _closeDialog,
             color: Colors.white.withValues(alpha: 0.8),
             hoverColor: Colors.white,
             hoverBg: Colors.white.withValues(alpha: 0.1),
@@ -338,7 +504,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
               children: [
                 Row(
                   children: [
-                    _Avatar(letter: u.firstName.isNotEmpty ? u.firstName[0] : '?', size: 44, circular: true),
+                    _Avatar(
+                        letter: u.firstName.isNotEmpty ? u.firstName[0] : '?',
+                        size: 44,
+                        circular: true),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -407,7 +576,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(u.organizationName ?? '-',
+                          Text(
+                              _orgData?.name ??
+                                  u.organizationName ??
+                                  '-',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -430,15 +602,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFDCFCE7),
+                    color: _orgActive
+                        ? const Color(0xFFDCFCE7)
+                        : const Color(0xFFFEF2F2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Aktivna',
+                  child: Text(
+                    _orgActive ? 'Aktivna' : 'Neaktivna',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF16A34A),
+                      color: _orgActive
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626),
                     ),
                   ),
                 ),
@@ -450,11 +626,18 @@ class _SettingsDialogState extends State<SettingsDialog> {
   // ── Main content ──────────────────────────────────────────────────────────
 
   Widget _buildContent() {
+    if (_mode == 'organization' && _loadingOrg) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(48),
+          child: CircularProgressIndicator(color: _kPrimary),
+        ),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: _mode == 'profile'
-          ? _buildProfileContent()
-          : _buildOrgContent(),
+      child:
+          _mode == 'profile' ? _buildProfileContent() : _buildOrgContent(),
     );
   }
 
@@ -480,10 +663,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Informacije o Profilu'),
         const SizedBox(height: 16),
-        // Avatar card
         _AvatarCard(letter: u.firstName.isNotEmpty ? u.firstName[0] : '?'),
         const SizedBox(height: 20),
-        // Fields grid
         _Grid(children: [
           _Field(label: 'Ime *', controller: _firstName, hint: 'Unesite ime'),
           _Field(
@@ -499,7 +680,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               controller: _email,
               hint: 'vi@primjer.ba',
               prefixIcon: Icons.mail_outline_rounded,
-              keyboardType: TextInputType.emailAddress),
+              readOnly: true),
           _Field(
               label: 'Broj Telefona',
               controller: _phone,
@@ -513,8 +694,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           if (u.organizationName != null)
             _Field(
               label: 'Organizacija',
-              controller:
-                  TextEditingController(text: u.organizationName),
+              controller: TextEditingController(text: u.organizationName),
               readOnly: true,
               fullWidth: true,
             ),
@@ -529,11 +709,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Sigurnost Naloga'),
         const SizedBox(height: 16),
-        _InfoBanner(
+        const _InfoBanner(
           icon: Icons.shield_outlined,
-          color: const Color(0xFFF59E0B),
-          bg: const Color(0xFFFFFBEB),
-          border: const Color(0xFFFDE68A),
+          color: Color(0xFFF59E0B),
+          bg: Color(0xFFFFFBEB),
+          border: Color(0xFFFDE68A),
           title: 'Promjena Lozinke',
           body:
               'Preporučujemo jaku lozinku sa najmanje 8 karaktera, brojevima i simbolima.',
@@ -725,8 +905,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Informacije o Organizaciji'),
         const SizedBox(height: 16),
-        // Org logo card
-        _OrgLogoCard(),
+        const _OrgLogoCard(),
         const SizedBox(height: 20),
         _Field(
             label: 'Naziv Organizacije *',
@@ -794,11 +973,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
           onChanged: (v) => setState(() => _orgActive = v),
         ),
         const SizedBox(height: 12),
-        _InfoBanner(
+        const _InfoBanner(
           icon: Icons.info_outline_rounded,
-          color: const Color(0xFF2563EB),
-          bg: const Color(0xFFEFF6FF),
-          border: const Color(0xFFBFDBFE),
+          color: Color(0xFF2563EB),
+          bg: Color(0xFFEFF6FF),
+          border: Color(0xFFBFDBFE),
           title: 'Napomena',
           body:
               'Promjene u postavkama organizacije će biti vidljive svim korisnicima koji '
@@ -821,7 +1000,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _closeDialog,
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFFD1D5DB)),
               shape: RoundedRectangleBorder(
@@ -960,7 +1139,8 @@ class _ModeTabBtn extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
-                size: 18, color: active ? Colors.white : const Color(0xFF374151)),
+                size: 18,
+                color: active ? Colors.white : const Color(0xFF374151)),
             const SizedBox(width: 8),
             Text(label,
                 style: TextStyle(
@@ -1017,9 +1197,8 @@ class _SideTabBtn extends StatelessWidget {
                 child: Center(
                   child: Icon(tab.icon,
                       size: 18,
-                      color: active
-                          ? Colors.white
-                          : const Color(0xFF6B7280)),
+                      color:
+                          active ? Colors.white : const Color(0xFF6B7280)),
                 ),
               ),
               Expanded(
@@ -1061,8 +1240,9 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [_kPrimary, _kPrimaryDark]),
-        borderRadius:
-            circular ? BorderRadius.circular(size) : BorderRadius.circular(size * 0.25),
+        borderRadius: circular
+            ? BorderRadius.circular(size)
+            : BorderRadius.circular(size * 0.25),
       ),
       alignment: Alignment.center,
       child: Text(letter.toUpperCase(),
@@ -1129,14 +1309,13 @@ class _AvatarCard extends StatelessWidget {
                       color: Color(0xFF111827))),
               const SizedBox(height: 4),
               const Text('PNG ili JPG (maks. 2MB)',
-                  style: TextStyle(
-                      fontSize: 12, color: Color(0xFF6B7280))),
+                  style:
+                      TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               const SizedBox(height: 10),
               OutlinedButton(
                 onPressed: () {},
                 style: OutlinedButton.styleFrom(
-                  side:
-                      const BorderSide(color: Color(0xFFD1D5DB)),
+                  side: const BorderSide(color: Color(0xFFD1D5DB)),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
                   foregroundColor: const Color(0xFF374151),
@@ -1213,8 +1392,8 @@ class _OrgLogoCard extends StatelessWidget {
                       color: Color(0xFF111827))),
               const SizedBox(height: 4),
               const Text('PNG ili SVG (maks. 2MB)',
-                  style: TextStyle(
-                      fontSize: 12, color: Color(0xFF6B7280))),
+                  style:
+                      TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               const SizedBox(height: 10),
               OutlinedButton(
                 onPressed: () {},
@@ -1400,13 +1579,10 @@ class _Grid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We wrap each field — fullWidth ones span both columns using a trick
-    // by building pairs manually.
     final cols = <Widget>[];
     for (int i = 0; i < children.length;) {
       final a = children[i];
-      final aFull = a is _Field && a.fullWidth ||
-          a is _DropdownField && false;
+      final aFull = a is _Field && a.fullWidth;
       if (aFull) {
         cols.add(a);
         cols.add(const SizedBox(height: 14));
@@ -1431,7 +1607,11 @@ class _Grid extends StatelessWidget {
         }
       } else {
         cols.add(Row(
-          children: [Expanded(child: a), const SizedBox(width: 14), const Expanded(child: SizedBox())],
+          children: [
+            Expanded(child: a),
+            const SizedBox(width: 14),
+            const Expanded(child: SizedBox()),
+          ],
         ));
         cols.add(const SizedBox(height: 14));
         i++;
@@ -1558,8 +1738,7 @@ class _InfoBanner extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: color)),
                 const SizedBox(height: 4),
-                Text(body,
-                    style: TextStyle(fontSize: 12, color: color)),
+                Text(body, style: TextStyle(fontSize: 12, color: color)),
               ],
             ),
           ),

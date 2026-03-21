@@ -30,8 +30,8 @@ public class OrganizationUpdateRequest
     [StringLength(255, ErrorMessage = "Web stranica može imati maksimalno 255 karaktera")]
     public string? Website { get; set; }
 
-    [Url(ErrorMessage = "Neispravan format URL-a logotipa")]
-    [StringLength(500, ErrorMessage = "URL logotipa može imati maksimalno 500 karaktera")]
+    //[Url(ErrorMessage = "Neispravan format URL-a logotipa")]
+    //[StringLength(500, ErrorMessage = "URL logotipa može imati maksimalno 500 karaktera")]
     public string? LogoUrl { get; set; }
 
     public bool IsActive { get; set; }
