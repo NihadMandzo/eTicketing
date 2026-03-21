@@ -4,6 +4,8 @@ import '../main.dart';
 import '../models/requests/login_request.dart';
 import '../providers/api_exception.dart';
 import '../providers/auth_provider.dart';
+import '../providers/authorization.dart';
+import 'widgets/main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback? onLogin;
@@ -55,23 +57,47 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  // Desktop app only allows these roles.
+  static const _allowedRoles = {
+    'SuperAdmin',
+    'Admin',
+    'OrganizationSuperAdmin',
+    'OrganizationAdmin',
+  };
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      final response = await _authProvider.login(
+      await _authProvider.login(
         LoginRequest(
           emailOrUsername: _emailController.text.trim(),
           password: _passwordController.text,
         ),
       );
 
-      handleApiSuccess(response.message.isNotEmpty
-          ? response.message
-          : 'Uspješna prijava!');
+      // Fetch the authenticated user's profile
+      final profile = await _authProvider.me();
 
+      if (!mounted) return;
+
+      // ── Role guard ─────────────────────────────────────────────────────
+      if (!_allowedRoles.contains(profile.roleName)) {
+        // Clear the token so the session is invalidated
+        Authorization.token = null;
+        handleApiError("Pristup odbijen. Ovaj portal je namijenjen samo za administratore i organizatore.");
+        return;
+      }
+      // ──────────────────────────────────────────────────────────────────
+
+      handleApiSuccess('Uspješna prijava!');
       widget.onLogin?.call();
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => MainShell(user: profile)),
+        (_) => false,
+      );
     } on ApiException catch (e) {
       handleApiError(e);
     } catch (e) {

@@ -122,9 +122,10 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Neispravni pristupni podaci");
         }
 
-        // Check if this is first login for organization admins
-        var isFirstLogin = user.IsFirstLogin;
 
+        // Check if this is first login for organization admins
+        var isFirstLogin = user.Role.Name != "User" ? user.IsFirstLogin : false;
+        
         // Update last login (but don't clear IsFirstLogin yet - only after password change)
         user.LastLoginAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
