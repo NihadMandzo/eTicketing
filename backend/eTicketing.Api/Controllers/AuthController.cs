@@ -101,4 +101,19 @@ public class AuthController : ControllerBase
 
         return Ok(user);
     }
+
+    /// <summary>
+    /// Update current authenticated user information
+    /// </summary>
+    [Authorize]
+    [HttpPut("update-user")]
+    public async Task<IActionResult> UpdateUser([FromBody] UpdateUserRequest request)
+    {
+        var userId = await _authService.GetCurrentUserIdAsync();
+        if (!userId.HasValue)
+            return Unauthorized(new { message = ErrorMessagesHr.UserNotAuthenticated });
+
+        var user = await _authService.UpdateUserAsync(userId.Value, request);
+        return Ok(user);
+    }
 }

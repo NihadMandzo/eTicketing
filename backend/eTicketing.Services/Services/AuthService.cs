@@ -251,6 +251,55 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<UserResponse> UpdateUserAsync(int userId, UpdateUserRequest request)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .Include(u => u.Organization)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("Korisnik nije pronađen");
+        }
+
+        // Check if username is taken by another user
+        if (user.Username != request.Username)
+        {
+            var usernameExists = await _context.Users.AnyAsync(u => u.Username == request.Username && u.Id != userId);
+            if (usernameExists)
+            {
+                throw new InvalidOperationException("Korisničko ime je već zauzeto");
+            }
+        }
+
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.Username = request.Username;
+        user.PhoneNumber = request.PhoneNumber;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return new UserResponse
+        {
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Username = user.Username,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            IsActive = user.IsActive,
+            IsEmailVerified = user.IsEmailVerified,
+            IsFirstLogin = user.IsFirstLogin,
+            RoleName = user.Role.Name,
+            OrganizationId = user.OrganizationId,
+            OrganizationName = user.Organization?.Name,
+            LastLoginAt = user.LastLoginAt,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
     public Task<int?> GetCurrentUserIdAsync(CancellationToken cancellationToken = default)
     {
         var userId = _jwtHelper.GetUserId();
