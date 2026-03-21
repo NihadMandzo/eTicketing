@@ -52,7 +52,7 @@ const List<NavItem> kNavItems = [
     id: 'reports',
     label: 'Izvještaji',
     icon: Icons.bar_chart_rounded,
-    allowedRoles: ['Admin', 'SuperAdmin', 'Organizer'],
+    allowedRoles: ['Admin', 'SuperAdmin', 'OrganizationAdmin', 'OrganizationSuperAdmin'],
   ),
 ];
 
