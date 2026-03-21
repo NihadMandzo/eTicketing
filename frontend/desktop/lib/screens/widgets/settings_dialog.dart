@@ -260,8 +260,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _buildModeSelector() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: const Color(0xFFF9FAFB),
       decoration: const BoxDecoration(
+        color: Color(0xFFF9FAFB),
         border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: Row(
@@ -294,8 +294,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
     return Container(
       width: 220,
-      color: const Color(0xFFF9FAFB),
       decoration: const BoxDecoration(
+        color: Color(0xFFF9FAFB),
         border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: SingleChildScrollView(

@@ -32,10 +32,12 @@ class _AppHeaderState extends State<AppHeader> {
         return 'Super Administrator';
       case 'Admin':
         return 'Administrator';
-      case 'Organizer':
-        return 'Organizator';
+      case 'OrganizationSuperAdmin':
+        return 'Org. Super Administrator';
+      case 'OrganizationAdmin':
+        return 'Org. Administrator';
       default:
-        return 'Korisnik';
+        return role;
     }
   }
 
