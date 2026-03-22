@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Model.Requests;
 
@@ -11,9 +12,8 @@ public class CategoryUpdateRequest
     [StringLength(500, ErrorMessage = "Opis može imati maksimalno 500 karaktera")]
     public string Description { get; set; } = string.Empty;
     
-    [Url(ErrorMessage = "Neispravan format URL adrese")]
-    [StringLength(500, ErrorMessage = "URL može imati maksimalno 500 karaktera")]
-    public string IconUrl { get; set; } = string.Empty;
+    // Optional: null means keep the existing icon (icon is always required on the entity)
+    public IFormFile? Icon { get; set; }
     
     public bool IsActive { get; set; } = true;
     
