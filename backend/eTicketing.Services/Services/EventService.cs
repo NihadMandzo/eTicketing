@@ -84,7 +84,8 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
 
         // Include related entities
         query = query.Include(x => x.Organization)
-                     .Include(x => x.Images);
+                     .Include(x => x.Images)
+                         .ThenInclude(ei => ei.Image);
 
         // Order by event date descending
         query = query.OrderByDescending(x => x.EventDateTime);
@@ -97,6 +98,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         var query = Context.Set<Event>()
             .Include(x => x.Organization)
             .Include(x => x.Images)
+                .ThenInclude(ei => ei.Image)
             .Where(x => x.Id == id);
 
         // Apply authorization filtering
@@ -200,7 +202,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                     uploadedImageUrls.Add(imageUrl);
                     imageEntities.Add(new EventImage
                     {
-                        ImageUrl = imageUrl,
+                        Image = new Image { ImageUrl = imageUrl },
                         IsPrimary = isFirst,
                         Event = entity
                     });
@@ -246,9 +248,11 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
             throw new UnauthorizedAccessException("Možete uređivati samo događaje svoje organizacije");
         }
 
-        // Load existing images
+        // Load existing images with their Image entities
         await Context.Entry(entity)
             .Collection(e => e.Images)
+            .Query()
+            .Include(ei => ei.Image)
             .LoadAsync(cancellationToken);
 
         // Collect image URLs to delete (will be deleted after successful DB commit)
@@ -263,7 +267,11 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
 
             foreach (var image in imagesToDelete)
             {
-                imageUrlsToDelete.Add(image.ImageUrl);
+                if (image.Image != null)
+                {
+                    imageUrlsToDelete.Add(image.Image.ImageUrl);
+                    Context.Set<Image>().Remove(image.Image);
+                }
                 entity.Images.Remove(image);
             }
         }
@@ -288,7 +296,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                     uploadedImageUrls.Add(imageUrl);
                     entity.Images.Add(new EventImage
                     {
-                        ImageUrl = imageUrl,
+                        Image = new Image { ImageUrl = imageUrl },
                         IsPrimary = !hasPrimaryImage,
                         EventId = entity.Id
                     });
@@ -355,6 +363,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
     {
         var entity = await Context.Set<Event>()
             .Include(x => x.Images)
+                .ThenInclude(ei => ei.Image)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         
         if (entity == null)
@@ -376,7 +385,10 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
         }
 
         // Collect image URLs to delete after DB commit
-        var imageUrlsToDelete = entity.Images.Select(img => img.ImageUrl).ToList();
+        var imageUrlsToDelete = entity.Images
+            .Where(img => img.Image != null)
+            .Select(img => img.Image!.ImageUrl)
+            .ToList();
 
         // Remove entity from database first
         Context.Set<Event>().Remove(entity);
@@ -416,7 +428,7 @@ public class EventService : BaseCRUDService<Event, EventResponse, EventSearchObj
                 .Select(img => new EventImageResponse
                 {
                     Id = img.Id,
-                    ImageUrl = img.ImageUrl,
+                    ImageUrl = img.Image?.ImageUrl ?? string.Empty,
                     IsPrimary = img.IsPrimary
                 })
                 .ToList();

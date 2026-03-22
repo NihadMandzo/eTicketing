@@ -20,6 +20,7 @@ public class EventMappingProfile : Profile
             .ForMember(dest => dest.Images, opt => opt.Ignore()) // Handled in service
             .ForMember(dest => dest.OrganizationId, opt => opt.Ignore()); // Should not be changed on update
         
-        CreateMap<EventImage, EventImageResponse>();
+        CreateMap<EventImage, EventImageResponse>()
+            .ForMember(dest => dest.ImageUrl, opt => opt.MapFrom(src => src.Image != null ? src.Image.ImageUrl : string.Empty));
     }
 }

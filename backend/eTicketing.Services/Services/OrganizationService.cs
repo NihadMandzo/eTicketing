@@ -9,6 +9,7 @@ using eTicketing.Services.Helpers;
 using eTicketing.Services.Interfaces;
 using eTicketing.Services.Services.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Services.Services;
 
@@ -17,15 +18,22 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 {
     private readonly JwtHelper _jwtHelper;
     private readonly AuthorizationHelper _authorizationHelper;
+    private readonly IBlobStorageService _blobStorageService;
+    private readonly ILogger<OrganizationService> _logger;
+    private const string OrganizationLogosContainer = "organization-logos";
 
     public OrganizationService(
         eTicketingDbContext context, 
         IMapper mapper,
         JwtHelper jwtHelper,
-        AuthorizationHelper authorizationHelper) : base(context, mapper)
+        AuthorizationHelper authorizationHelper,
+        IBlobStorageService blobStorageService,
+        ILogger<OrganizationService> logger) : base(context, mapper)
     {
         _jwtHelper = jwtHelper;
         _authorizationHelper = authorizationHelper;
+        _blobStorageService = blobStorageService;
+        _logger = logger;
     }
 
     protected override IQueryable<Organization> ApplyFilter(IQueryable<Organization> query, OrganizationSearchObject? search)
@@ -59,6 +67,9 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             query = query.Where(x => x.IsActive == search.IsActive.Value);
         }
 
+        // Include Image for logo URL mapping
+        query = query.Include(x => x.Image);
+
         query = query.OrderBy(x => x.Name);
 
         return query;
@@ -70,6 +81,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         _authorizationHelper.ValidateOrganizationAccess(id);
 
         var organizationData = await Context.Set<Organization>()
+            .Include(o => o.Image)
             .Where(o => o.Id == id)
             .Select(o => new
             {
@@ -130,6 +142,13 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.AdminUsername}' već postoji");
         }
 
+        // Upload logo if provided
+        if (request.Logo != null)
+        {
+            var logoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
+            entity.Image = new Image { ImageUrl = logoUrl };
+        }
+
         entity.CreatedAt = DateTime.UtcNow;
         entity.IsActive = true;
     }
@@ -160,6 +179,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         Context.Set<User>().Add(adminUser);
         await Context.SaveChangesAsync(cancellationToken);
     }
+
     protected override async Task BeforeUpdateAsync(Organization entity, OrganizationUpdateRequest request, 
         CancellationToken cancellationToken)
     {
@@ -187,7 +207,70 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             }
         }
 
+        // Load existing image
+        await Context.Entry(entity)
+            .Reference(e => e.Image)
+            .LoadAsync(cancellationToken);
+
+        string? oldLogoUrl = entity.Image?.ImageUrl;
+
+        // Handle logo removal
+        if (request.RemoveLogo && entity.Image != null)
+        {
+            Context.Set<Image>().Remove(entity.Image);
+            entity.Image = null;
+            entity.ImageId = null;
+        }
+
+        // Handle new logo upload (replaces existing if present)
+        if (request.Logo != null)
+        {
+            var newLogoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
+
+            if (entity.Image != null)
+            {
+                // Update existing image record
+                entity.Image.ImageUrl = newLogoUrl;
+            }
+            else
+            {
+                // Create new image record
+                entity.Image = new Image { ImageUrl = newLogoUrl };
+            }
+        }
+
         entity.UpdatedAt = DateTime.UtcNow;
+
+        // Store old URL for cleanup after commit
+        if (oldLogoUrl != null && (request.RemoveLogo || request.Logo != null))
+        {
+            _pendingLogoDeleteUrl = oldLogoUrl;
+        }
+    }
+
+    // Temporary field for tracking logo URL to delete after commit
+    private string? _pendingLogoDeleteUrl;
+
+    protected override async Task AfterUpdateAsync(Organization entity, OrganizationUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Delete old blob after successful DB commit
+        if (_pendingLogoDeleteUrl != null)
+        {
+            try
+            {
+                await _blobStorageService.DeleteAsync(_pendingLogoDeleteUrl, OrganizationLogosContainer);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete old logo blob {BlobUrl} for organization {OrgId}. Blob may be orphaned.",
+                    _pendingLogoDeleteUrl, entity.Id);
+            }
+            finally
+            {
+                _pendingLogoDeleteUrl = null;
+            }
+        }
     }
 
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
@@ -200,12 +283,16 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 
         var organization = await Context.Set<Organization>()
             .Include(o => o.Users)
+            .Include(o => o.Image)
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
 
         if (organization == null)
         {
             return false;
         }
+
+        // Capture logo URL before soft delete
+        string? logoUrl = organization.Image?.ImageUrl;
 
         // Soft delete: deactivate organization and all its users
         organization.IsActive = false;
@@ -217,7 +304,30 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             user.UpdatedAt = DateTime.UtcNow;
         }
 
+        // Remove logo image record and blob
+        if (organization.Image != null)
+        {
+            Context.Set<Image>().Remove(organization.Image);
+            organization.Image = null;
+            organization.ImageId = null;
+        }
+
         await Context.SaveChangesAsync(cancellationToken);
+
+        // Delete logo blob after successful DB commit
+        if (logoUrl != null)
+        {
+            try
+            {
+                await _blobStorageService.DeleteAsync(logoUrl, OrganizationLogosContainer);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete logo blob {BlobUrl} for deleted organization {OrgId}. Blob may be orphaned.",
+                    logoUrl, id);
+            }
+        }
+
         return true;
     }
 
@@ -228,6 +338,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 
         // Optimized: Use a single query with projection to get organization, admins, and user count
         var organizationData = await Context.Set<Organization>()
+            .Include(o => o.Image)
             .Where(o => o.Id == id)
             .Select(o => new
             {
@@ -381,5 +492,11 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             .ToListAsync(cancellationToken);
 
         return Mapper.Map<List<UserResponse>>(users);
+    }
+
+    protected override OrganizationResponse MapToResponse(Organization entity)
+    {
+        var response = Mapper.Map<OrganizationResponse>(entity);
+        return response;
     }
 }

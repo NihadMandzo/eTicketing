@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Model.Requests;
 
@@ -30,9 +31,9 @@ public class OrganizationUpdateRequest
     [StringLength(255, ErrorMessage = "Web stranica može imati maksimalno 255 karaktera")]
     public string? Website { get; set; }
 
-    //[Url(ErrorMessage = "Neispravan format URL-a logotipa")]
-    //[StringLength(500, ErrorMessage = "URL logotipa može imati maksimalno 500 karaktera")]
-    public string? LogoUrl { get; set; }
+    public IFormFile? Logo { get; set; }
+
+    public bool RemoveLogo { get; set; } = false;
 
     public bool IsActive { get; set; }
 }

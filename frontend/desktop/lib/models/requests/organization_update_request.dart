@@ -5,7 +5,6 @@ class OrganizationUpdateRequest {
   final String phoneNumber;
   final String email;
   final String? website;
-  final String? logoUrl;
   final bool isActive;
 
   const OrganizationUpdateRequest({
@@ -15,18 +14,16 @@ class OrganizationUpdateRequest {
     required this.phoneNumber,
     required this.email,
     this.website,
-    this.logoUrl,
     required this.isActive,
   });
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'description': description,
-        'address': address,
-        'phoneNumber': phoneNumber,
-        'email': email,
-        'website': website,
-        'logoUrl': logoUrl,
-        'isActive': isActive,
+  Map<String, String> toFields() => {
+        'Name': name,
+        'Description': description,
+        'Address': address,
+        'PhoneNumber': phoneNumber,
+        'Email': email,
+        if (website != null) 'Website': website!,
+        'IsActive': isActive.toString(),
       };
 }

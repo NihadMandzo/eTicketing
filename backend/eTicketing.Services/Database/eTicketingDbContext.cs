@@ -16,6 +16,7 @@ public class eTicketingDbContext : DbContext
     public DbSet<Category> Categories { get; set; }
     public DbSet<Event> Events { get; set; }
     public DbSet<EventImage> EventImages { get; set; }
+    public DbSet<Image> Images { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +59,13 @@ public class eTicketingDbContext : DbContext
             entity.HasIndex(e => e.Name).IsUnique();
         });
 
+        // Image Configuration
+        modelBuilder.Entity<Image>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ImageUrl).IsRequired().HasMaxLength(1000);
+        });
+
         // Organization Configuration
         modelBuilder.Entity<Organization>(entity =>
         {
@@ -68,7 +76,11 @@ public class eTicketingDbContext : DbContext
             entity.Property(e => e.PhoneNumber).HasMaxLength(20);
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Website).HasMaxLength(255);
-            entity.Property(e => e.LogoUrl).HasMaxLength(500);
+
+            entity.HasOne(e => e.Image)
+                  .WithMany()
+                  .HasForeignKey(e => e.ImageId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Category Configuration
@@ -77,9 +89,13 @@ public class eTicketingDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Description).HasMaxLength(500);
-            entity.Property(e => e.IconUrl).HasMaxLength(500);
 
             entity.HasIndex(e => e.Name).IsUnique();
+
+            entity.HasOne(e => e.Image)
+                  .WithMany()
+                  .HasForeignKey(e => e.ImageId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Event Configuration
@@ -111,8 +127,12 @@ public class eTicketingDbContext : DbContext
         modelBuilder.Entity<EventImage>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ImageUrl).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.IsPrimary).IsRequired();
+
+            entity.HasOne(e => e.Image)
+                  .WithMany(i => i.EventImages)
+                  .HasForeignKey(e => e.ImageId)
+                  .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(e => e.Event)
                   .WithMany(ev => ev.Images)

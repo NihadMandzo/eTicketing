@@ -1,8 +1,11 @@
+using System.ComponentModel.DataAnnotations.Schema;
 namespace eTicketing.Services.Database.Entities;
 
 public class EventImage : BaseEntity
 {
-    public string ImageUrl { get; set; } = string.Empty;
+    public int? ImageId { get; set; }
+    [ForeignKey(nameof(ImageId))]
+    public virtual Image? Image { get; set; }
     public bool IsPrimary { get; set; } = false;
     
     // Foreign Keys

@@ -17,7 +17,6 @@ public static class OrganizationSeed
                 PhoneNumber = "+1234567890",
                 Email = "info@defaultorg.com",
                 Website = "https://defaultorg.com",
-                LogoUrl = "/logos/default.png",
                 IsActive = true,
                 CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -31,7 +30,6 @@ public static class OrganizationSeed
                 PhoneNumber = "+9876543210",
                 Email = "contact@demoevents.com",
                 Website = "https://demoevents.com",
-                LogoUrl = "/logos/demo.png",
                 IsActive = true,
                 CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
