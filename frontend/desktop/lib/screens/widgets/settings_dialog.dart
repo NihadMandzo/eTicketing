@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/requests/change_password_request.dart';
@@ -115,6 +117,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _orgAddress = TextEditingController();
   final _orgWebsite = TextEditingController();
   bool _orgActive = true;
+  File? _logoFile;
+  bool _removeLogo = false;
 
   bool _saving = false;
   bool _loadingOrg = false;
@@ -274,9 +278,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
         email: _orgEmail.text.trim(),
         website:
             _orgWebsite.text.trim().isEmpty ? null : _orgWebsite.text.trim(),
-        logoUrl: _orgData?.logoUrl,
         isActive: _orgActive,
       ),
+      logoFile: _logoFile,
+      removeLogo: _removeLogo,
     );
     if (mounted) {
       // Refresh form fields from the response
@@ -287,7 +292,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
       _orgPhone.text = updated.phoneNumber;
       _orgAddress.text = updated.address;
       _orgWebsite.text = updated.website ?? '';
-      setState(() => _orgActive = updated.isActive);
+      setState(() {
+        _orgActive = updated.isActive;
+        _logoFile = null;
+        _removeLogo = false;
+      });
       _showSuccess('Organizacija uspješno ažurirana.');
     }
   }
@@ -304,6 +313,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
       content: Text(msg),
       backgroundColor: _kPrimary,
     ));
+  }
+
+  // ── Initials helper ──────────────────────────────────────────────────────
+
+  String _userInitials(UserProfile u) {
+    final f = u.firstName.isNotEmpty ? u.firstName[0] : '';
+    final l = u.lastName.isNotEmpty ? u.lastName[0] : '';
+    return f.isEmpty && l.isEmpty ? '?' : '$f$l';
   }
 
   // ── Role display ─────────────────────────────────────────────────────────
@@ -505,9 +522,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 Row(
                   children: [
                     _Avatar(
-                        letter: u.firstName.isNotEmpty ? u.firstName[0] : '?',
-                        size: 44,
-                        circular: true),
+                        initials: _userInitials(u),
+                        size: 44),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -562,11 +578,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     Container(
                       width: 44,
                       height: 44,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
                           colors: [_kPrimary, _kPrimaryDark],
                         ),
-                        borderRadius: BorderRadius.circular(10),
+                        shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.business_rounded,
                           color: Colors.white, size: 24),
@@ -663,7 +679,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Informacije o Profilu'),
         const SizedBox(height: 16),
-        _AvatarCard(letter: u.firstName.isNotEmpty ? u.firstName[0] : '?'),
+        _AvatarCard(initials: _userInitials(u), name: u.fullName),
         const SizedBox(height: 20),
         _Grid(children: [
           _Field(label: 'Ime *', controller: _firstName, hint: 'Unesite ime'),
@@ -905,7 +921,22 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Informacije o Organizaciji'),
         const SizedBox(height: 16),
-        const _OrgLogoCard(),
+        _OrgLogoCard(
+          logoUrl: _orgData?.logoUrl,
+          logoFile: _logoFile,
+          onPickLogo: () async {
+            final result = await FilePicker.platform.pickFiles(
+              type: FileType.custom,
+              allowedExtensions: ['png', 'jpg', 'jpeg'],
+            );
+            if (result != null && result.files.single.path != null) {
+              setState(() {
+                _logoFile = File(result.files.single.path!);
+                _removeLogo = false;
+              });
+            }
+          },
+        ),
         const SizedBox(height: 20),
         _Field(
             label: 'Naziv Organizacije *',
@@ -1223,12 +1254,10 @@ class _SideTabBtn extends StatelessWidget {
 // ── Avatar widget ─────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
-  final String letter;
+  final String initials;
   final double size;
-  final bool circular;
 
-  const _Avatar(
-      {required this.letter, required this.size, this.circular = false});
+  const _Avatar({required this.initials, required this.size});
 
   @override
   Widget build(BuildContext context) {
@@ -1240,26 +1269,25 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [_kPrimary, _kPrimaryDark]),
-        borderRadius: circular
-            ? BorderRadius.circular(size)
-            : BorderRadius.circular(size * 0.25),
+        shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Text(letter.toUpperCase(),
+      child: Text(initials.toUpperCase(),
           style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
-              fontSize: size * 0.4)),
+              fontSize: size * 0.36)),
     );
   }
 }
 
-// ── Avatar card with change button ───────────────────────────────────────────
+// ── Avatar card (display only, no image upload) ──────────────────────────────
 
 class _AvatarCard extends StatelessWidget {
-  final String letter;
+  final String initials;
+  final String name;
 
-  const _AvatarCard({required this.letter});
+  const _AvatarCard({required this.initials, required this.name});
 
   @override
   Widget build(BuildContext context) {
@@ -1272,60 +1300,20 @@ class _AvatarCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Stack(
-            children: [
-              _Avatar(letter: letter, size: 80, circular: true),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: const Color(0xFFE5E7EB), width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 8)
-                    ],
-                  ),
-                  child: const Icon(Icons.camera_alt_rounded,
-                      size: 14, color: Color(0xFF374151)),
-                ),
-              ),
-            ],
-          ),
+          _Avatar(initials: initials, size: 80),
           const SizedBox(width: 20),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Profilna Slika',
-                  style: TextStyle(
-                      fontSize: 14,
+              Text(name,
+                  style: const TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF111827))),
               const SizedBox(height: 4),
-              const Text('PNG ili JPG (maks. 2MB)',
+              const Text('Profilna fotografija',
                   style:
                       TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: () {},
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFD1D5DB)),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  foregroundColor: const Color(0xFF374151),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-                child: const Text('Promijeni Sliku'),
-              ),
             ],
           ),
         ],
@@ -1334,10 +1322,20 @@ class _AvatarCard extends StatelessWidget {
   }
 }
 
-// ── Org logo card ──────────────────────────────────────────────────────────
+// ── Org logo card (with image picker) ────────────────────────────────────────
 
 class _OrgLogoCard extends StatelessWidget {
-  const _OrgLogoCard();
+  final String? logoUrl;
+  final File? logoFile;
+  final VoidCallback onPickLogo;
+
+  const _OrgLogoCard({
+    this.logoUrl,
+    this.logoFile,
+    required this.onPickLogo,
+  });
+
+  bool get _hasLogo => logoFile != null || (logoUrl != null && logoUrl!.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -1350,53 +1348,47 @@ class _OrgLogoCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Stack(
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+          // ── Logo preview ──────────────────────────────────────────────
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: _hasLogo
+                  ? null
+                  : const LinearGradient(
                       colors: [_kPrimary, _kPrimaryDark]),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(Icons.business_rounded,
+              image: logoFile != null
+                  ? DecorationImage(
+                      image: FileImage(logoFile!), fit: BoxFit.cover)
+                  : (logoUrl != null && logoUrl!.isNotEmpty)
+                      ? DecorationImage(
+                          image: NetworkImage(logoUrl!),
+                          fit: BoxFit.cover)
+                      : null,
+            ),
+            child: _hasLogo
+                ? null
+                : const Icon(Icons.business_rounded,
                     color: Colors.white, size: 40),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: const Color(0xFFE5E7EB), width: 2),
-                  ),
-                  child: const Icon(Icons.camera_alt_rounded,
-                      size: 14, color: Color(0xFF374151)),
-                ),
-              ),
-            ],
           ),
           const SizedBox(width: 20),
+          // ── Text + button ─────────────────────────────────────────────
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Logo Organizacije',
                   style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF111827))),
               const SizedBox(height: 4),
-              const Text('PNG ili SVG (maks. 2MB)',
+              const Text('PNG ili JPG (maks. 2MB)',
                   style:
                       TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               const SizedBox(height: 10),
               OutlinedButton(
-                onPressed: () {},
+                onPressed: onPickLogo,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFFD1D5DB)),
                   shape: RoundedRectangleBorder(
@@ -1407,7 +1399,7 @@ class _OrgLogoCard extends StatelessWidget {
                   textStyle: const TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w500),
                 ),
-                child: const Text('Promijeni Logo'),
+                child: Text(_hasLogo ? 'Promjeni sliku' : 'Dodaj sliku'),
               ),
             ],
           ),

@@ -35,6 +35,7 @@ const List<NavItem> kNavItems = [
     id: 'tickets',
     label: 'Karte',
     icon: Icons.confirmation_number_rounded,
+    allowedRoles: ['OrganizationAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(
     id: 'organizations',
@@ -46,7 +47,7 @@ const List<NavItem> kNavItems = [
     id: 'users',
     label: 'Korisnici',
     icon: Icons.people_rounded,
-    allowedRoles: ['Admin', 'SuperAdmin'],
+    allowedRoles: ['Admin', 'SuperAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(
     id: 'reports',

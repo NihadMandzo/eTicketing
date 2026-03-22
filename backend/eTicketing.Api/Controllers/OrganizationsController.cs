@@ -48,14 +48,14 @@ public class OrganizationsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] OrganizationInsertRequest request)
+    public async Task<IActionResult> Create([FromForm] OrganizationInsertRequest request)
     {
         var result = await _organizationService.CreateAsync(request);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] OrganizationUpdateRequest request)
+    public async Task<IActionResult> Update(int id, [FromForm] OrganizationUpdateRequest request)
     {
         var result = await _organizationService.UpdateAsync(id, request);
         

@@ -101,15 +101,19 @@ class _AppHeaderState extends State<AppHeader> {
   // ── Avatar ────────────────────────────────────────────────────────────────
 
   Widget _avatar({double size = 36}) {
-    final letter = widget.user.firstName.isNotEmpty
+    final f = widget.user.firstName.isNotEmpty
         ? widget.user.firstName[0].toUpperCase()
-        : '?';
+        : '';
+    final l = widget.user.lastName.isNotEmpty
+        ? widget.user.lastName[0].toUpperCase()
+        : '';
+    final initials = f.isEmpty && l.isEmpty ? '?' : '$f$l';
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.25),
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [_kPrimary, _kPrimaryDark],
@@ -117,11 +121,11 @@ class _AppHeaderState extends State<AppHeader> {
       ),
       alignment: Alignment.center,
       child: Text(
-        letter,
+        initials,
         style: TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w700,
-          fontSize: size * 0.42,
+          fontSize: size * 0.36,
         ),
       ),
     );

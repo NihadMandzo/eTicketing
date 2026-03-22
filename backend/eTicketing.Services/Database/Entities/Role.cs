@@ -1,3 +1,4 @@
+
 namespace eTicketing.Services.Database.Entities;
 
 public class Role : BaseEntity
