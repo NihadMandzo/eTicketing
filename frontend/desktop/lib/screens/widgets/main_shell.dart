@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
 import '../../providers/authorization.dart';
+import '../categories_screen.dart';
 import '../login_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
@@ -20,7 +21,6 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   String _currentPage = 'dashboard';
-  final _searchController = TextEditingController();
   late UserProfile _user;
 
   @override
@@ -48,11 +48,7 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +72,6 @@ class _MainShellState extends State<MainShell> {
                 AppHeader(
                   user: _user,
                   onLogout: _logout,
-                  searchController: _searchController,
                 ),
 
                 // Page content
@@ -101,6 +96,9 @@ class _PageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (page == 'categories') {
+      return const CategoriesScreen();
+    }
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -148,6 +146,8 @@ class _PageContent extends StatelessWidget {
         return 'Kontrolna tabla';
       case 'events':
         return 'Događaji';
+      case 'categories':
+        return 'Kategorije';
       case 'tickets':
         return 'Karte';
       case 'organizations':

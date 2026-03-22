@@ -32,6 +32,11 @@ const List<NavItem> kNavItems = [
     icon: Icons.event_rounded,
   ),
   NavItem(
+    id: 'categories',
+    label: 'Kategorije',
+    icon: Icons.category_rounded,
+  ),
+  NavItem(
     id: 'tickets',
     label: 'Karte',
     icon: Icons.confirmation_number_rounded,

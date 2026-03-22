@@ -8,13 +8,11 @@ const Color _kPrimaryDark = Color(0xFF0a6b57);
 class AppHeader extends StatefulWidget {
   final UserProfile user;
   final VoidCallback onLogout;
-  final TextEditingController? searchController;
 
   const AppHeader({
     super.key,
     required this.user,
     required this.onLogout,
-    this.searchController,
   });
 
   @override
@@ -149,49 +147,8 @@ class _AppHeaderState extends State<AppHeader> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          // ── Search ──────────────────────────────────────────────────────
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: TextFormField(
-                controller: widget.searchController,
-                style: const TextStyle(fontSize: 14, color: Color(0xFF111827)),
-                decoration: InputDecoration(
-                  hintText:
-                      'Pretražite događaje, organizacije, korisnike...',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF9CA3AF),
-                    fontSize: 14,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    color: Color(0xFF9CA3AF),
-                    size: 20,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF9FAFB),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Color(0xFFD1D5DB)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Color(0xFFD1D5DB)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: _kPrimary, width: 2),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // ── Search spacer ──────────────────────────────────────────────────────
+          const Spacer(),
 
           const SizedBox(width: 16),
 
