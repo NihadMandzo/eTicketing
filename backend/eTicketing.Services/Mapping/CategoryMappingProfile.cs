@@ -10,8 +10,15 @@ public class CategoryMappingProfile : Profile
     public CategoryMappingProfile()
     {
         // Category mappings
-        CreateMap<Category, CategoryResponse>();
-        CreateMap<CategoryInsertRequest, Category>();
-        CreateMap<CategoryUpdateRequest, Category>();
+        CreateMap<Category, CategoryResponse>()
+            .ForMember(dest => dest.IconUrl, opt => opt.MapFrom(src => src.Image != null ? src.Image.ImageUrl : null));
+        
+        CreateMap<CategoryInsertRequest, Category>()
+            .ForMember(dest => dest.Image, opt => opt.Ignore())
+            .ForMember(dest => dest.ImageId, opt => opt.Ignore());
+        
+        CreateMap<CategoryUpdateRequest, Category>()
+            .ForMember(dest => dest.Image, opt => opt.Ignore())
+            .ForMember(dest => dest.ImageId, opt => opt.Ignore());
     }
 }
