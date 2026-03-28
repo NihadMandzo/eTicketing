@@ -301,13 +301,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       )
                     : LayoutBuilder(
                         builder: (context, constraints) {
-                          int crossAxisCount = 2;
+                          int crossAxisCount = 3;
                           if (constraints.maxWidth >= 1400) {
-                            crossAxisCount = 5;
+                            crossAxisCount = 6;
                           } else if (constraints.maxWidth >= 1100) {
-                            crossAxisCount = 4;
+                            crossAxisCount = 5;
                           } else if (constraints.maxWidth >= 800) {
-                            crossAxisCount = 3;
+                            crossAxisCount = 4;
                           }
 
                           return GridView.builder(
@@ -316,7 +316,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               crossAxisCount: crossAxisCount,
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
-                              childAspectRatio: 1.0,
+                              childAspectRatio: 0.85,
                             ),
                             itemCount: _categories.length,
                             itemBuilder: (context, index) {
@@ -368,35 +368,8 @@ class _CategoryCard extends StatefulWidget {
 class _CategoryCardState extends State<_CategoryCard> {
   bool _isHovering = false;
 
-  IconData _getIcon(String iconUrl) {
-    switch (iconUrl.toLowerCase()) {
-      case 'music':
-        return LucideIcons.music;
-      case 'trophy':
-        return LucideIcons.trophy;
-      case 'book_open':
-        return LucideIcons.bookOpen;
-      default:
-        return LucideIcons.layoutGrid;
-    }
-  }
-
-  Color _getColor(String iconUrl) {
-    switch (iconUrl.toLowerCase()) {
-      case 'music':
-        return const Color(0xFF8B5CF6);
-      case 'trophy':
-        return const Color(0xFFF59E0B);
-      case 'book_open':
-        return const Color(0xFF3B82F6);
-      default:
-        return const Color(0xFF0D7C66);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final color = _getColor(widget.category.iconUrl);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
@@ -425,23 +398,38 @@ class _CategoryCardState extends State<_CategoryCard> {
         child: Stack(
           children: [
             // ── Card content ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Big centered icon
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Icon(_getIcon(widget.category.iconUrl),
-                          color: color, size: 30),
-                    ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                  // Centered Image
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: widget.category.iconUrl.isNotEmpty
+                        ? Image.network(
+                            widget.category.iconUrl,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  color: const Color(0xFFF3F4F6),
+                                  child: const Icon(LucideIcons.imageOff,
+                                      color: Color(0xFF9CA3AF), size: 30),
+                                ),
+                          )
+                        : Container(
+                            width: 60,
+                            height: 60,
+                            color: const Color(0xFFF3F4F6),
+                            child: const Icon(LucideIcons.image,
+                                color: Color(0xFF9CA3AF), size: 30),
+                          ),
                   ),
                   const SizedBox(height: 14),
 
@@ -449,7 +437,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                   Text(
                     widget.category.name,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF111827),
                     ),
@@ -460,21 +448,20 @@ class _CategoryCardState extends State<_CategoryCard> {
                   const SizedBox(height: 6),
 
                   // Description
-                  Expanded(
-                    child: Text(
-                      widget.category.description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF6B7280),
-                        height: 1.4,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    widget.category.description,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                      height: 1.4,
                     ),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
+            ),
             ),
 
             // ── Hover action buttons (top-right) ──
@@ -500,7 +487,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                   ],
                 ),
               ),
-            ),
+            )
           ],
         ),
       ),
