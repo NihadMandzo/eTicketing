@@ -30,11 +30,13 @@ const List<NavItem> kNavItems = [
     id: 'events',
     label: 'Događaji',
     icon: Icons.event_rounded,
+    allowedRoles: ['OrganizationAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(
     id: 'categories',
     label: 'Kategorije',
     icon: Icons.category_rounded,
+    allowedRoles: ['Admin', 'SuperAdmin'],
   ),
   NavItem(
     id: 'tickets',
@@ -52,7 +54,7 @@ const List<NavItem> kNavItems = [
     id: 'users',
     label: 'Korisnici',
     icon: Icons.people_rounded,
-    allowedRoles: ['Admin', 'SuperAdmin', 'OrganizationSuperAdmin'],
+    allowedRoles: ['SuperAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(
     id: 'reports',

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/api_error.dart';
+import '../models/requests/organization_insert_request.dart';
 import '../models/requests/organization_update_request.dart';
 import '../models/responses/organization_response.dart';
 import 'api_exception.dart';
@@ -14,6 +15,47 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
   OrganizationProvider() : super('Organizations');
 
   static const String _baseUrl = 'http://localhost:5189/api/';
+
+  Map<String, String> _authHeaders() {
+    if (Authorization.token != null && Authorization.token!.isNotEmpty) {
+      return {'Authorization': 'Bearer ${Authorization.token}'};
+    }
+    return {};
+  }
+
+  /// POST /api/Organizations (multipart – logo is optional)
+  Future<OrganizationResponse> insertOrganization(
+    OrganizationInsertRequest request, {
+    File? logoFile,
+  }) async {
+    final uri = Uri.parse('${_baseUrl}Organizations');
+    final multipart = http.MultipartRequest('POST', uri)
+      ..headers.addAll(_authHeaders())
+      ..fields.addAll(request.toFields());
+
+    if (logoFile != null) {
+      multipart.files.add(
+        await http.MultipartFile.fromPath('Logo', logoFile.path),
+      );
+    }
+
+    final streamed = await multipart.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      ApiError apiError;
+      try {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        apiError = ApiError.fromJson(body);
+      } catch (_) {
+        apiError = ApiError(errorCode: response.body);
+      }
+      throw ApiException(statusCode: response.statusCode, apiError: apiError);
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return OrganizationResponse.fromJson(data);
+  }
 
   Future<OrganizationResponse> getOrganization(int id) {
     return getById(id, fromJson: OrganizationResponse.fromJson);

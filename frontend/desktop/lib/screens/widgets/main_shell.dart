@@ -4,6 +4,7 @@ import '../../models/responses/user_profile.dart';
 import '../../providers/authorization.dart';
 import '../categories_screen.dart';
 import '../login_screen.dart';
+import '../organizations_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
 import 'settings_dialog.dart';
@@ -98,6 +99,9 @@ class _PageContent extends StatelessWidget {
   Widget build(BuildContext context) {
     if (page == 'categories') {
       return const CategoriesScreen();
+    }
+    if (page == 'organizations') {
+      return const OrganizationsScreen();
     }
     return Padding(
       padding: const EdgeInsets.all(24),
