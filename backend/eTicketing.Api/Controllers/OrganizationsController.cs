@@ -73,9 +73,9 @@ public class OrganizationsController : ControllerBase
     }
 
     [HttpGet("{id}/users")]
-    public async Task<IActionResult> GetOrganizationUsers(int id)
+    public async Task<IActionResult> GetOrganizationUsers(int id, [FromQuery] BaseSearchObject search)
     {
-        var result = await _organizationService.GetOrganizationUsersAsync(id);
+        var result = await _organizationService.GetOrganizationUsersAsync(id, search);
         return Ok(result);
     }
 

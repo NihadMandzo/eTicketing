@@ -47,6 +47,7 @@ public static class ErrorMessagesHr
     public const string UserNotAuthenticated = "Korisnik nije autentifikovan";
     public const string UserNoPermissionToRemove = "Nemate dozvolu za uklanjanje ovog korisnika";
     public const string UserUpdateSuccess = "Korisnički podaci su uspješno ažurirani";
+    public const string AdminUserDeleteSuccess = "Korisnik je uspješno obrisan";
     
     // Category errors
     public const string CategoryNameExists = "Kategorija sa ovim imenom već postoji";

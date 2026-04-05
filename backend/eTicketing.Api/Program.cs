@@ -178,7 +178,7 @@ builder.Services.AddScoped<eTicketing.Services.Interfaces.ICategoryService, eTic
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IOrganizationService, eTicketing.Services.Services.OrganizationService>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IBlobStorageService, eTicketing.Services.Services.BlobStorageService>();
 builder.Services.AddScoped<eTicketing.Services.Interfaces.IEventService, eTicketing.Services.Services.EventService>();
-builder.Services.AddScoped<eTicketing.Services.Interfaces.IEventTicketService, eTicketing.Services.Services.EventTicketService>();
+builder.Services.AddScoped<eTicketing.Services.Interfaces.IAdminUserService, eTicketing.Services.Services.AdminUserService>();
 
 builder.Services.AddControllers(options =>
 {

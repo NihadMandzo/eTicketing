@@ -11,5 +11,5 @@ public interface IOrganizationService : ICRUDService<OrganizationResponse, Organ
     Task<OrganizationDetailResponse> GetByIdDetailedAsync(int id, CancellationToken cancellationToken = default);
     Task<UserResponse> AddUserAsync(int organizationId, OrganizationUserRequest request, CancellationToken cancellationToken = default);
     Task<bool> RemoveUserAsync(int organizationId, int userId, CancellationToken cancellationToken = default);
-    Task<List<UserResponse>> GetOrganizationUsersAsync(int organizationId, CancellationToken cancellationToken = default);
+    Task<PagedResponse<UserResponse>> GetOrganizationUsersAsync(int organizationId, BaseSearchObject? search = null, CancellationToken cancellationToken = default);
 }
