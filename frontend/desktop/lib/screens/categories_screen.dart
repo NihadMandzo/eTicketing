@@ -301,22 +301,22 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       )
                     : LayoutBuilder(
                         builder: (context, constraints) {
-                          int crossAxisCount = 3;
+                          int crossAxisCount = 4;
                           if (constraints.maxWidth >= 1400) {
-                            crossAxisCount = 6;
+                            crossAxisCount = 8;
                           } else if (constraints.maxWidth >= 1100) {
-                            crossAxisCount = 5;
+                            crossAxisCount = 6;
                           } else if (constraints.maxWidth >= 800) {
-                            crossAxisCount = 4;
+                            crossAxisCount = 5;
                           }
 
                           return GridView.builder(
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.85,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 0.9,
                             ),
                             itemCount: _categories.length,
                             itemBuilder: (context, index) {
@@ -407,28 +407,28 @@ class _CategoryCardState extends State<_CategoryCard> {
                   children: [
                   // Centered Image
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     child: widget.category.iconUrl.isNotEmpty
                         ? Image.network(
                             widget.category.iconUrl,
-                            width: 60,
-                            height: 60,
+                            width: 80,
+                            height: 80,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) =>
                                 Container(
-                                  width: 60,
-                                  height: 60,
+                                  width: 80,
+                                  height: 80,
                                   color: const Color(0xFFF3F4F6),
                                   child: const Icon(LucideIcons.imageOff,
-                                      color: Color(0xFF9CA3AF), size: 30),
+                                      color: Color(0xFF9CA3AF), size: 36),
                                 ),
                           )
                         : Container(
-                            width: 60,
-                            height: 60,
+                            width: 80,
+                            height: 80,
                             color: const Color(0xFFF3F4F6),
                             child: const Icon(LucideIcons.image,
-                                color: Color(0xFF9CA3AF), size: 30),
+                                color: Color(0xFF9CA3AF), size: 36),
                           ),
                   ),
                   const SizedBox(height: 14),

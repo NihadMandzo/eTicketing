@@ -5,6 +5,7 @@ import '../../providers/authorization.dart';
 import '../categories_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
+import '../users_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
 import 'settings_dialog.dart';
@@ -77,7 +78,7 @@ class _MainShellState extends State<MainShell> {
 
                 // Page content
                 Expanded(
-                  child: _PageContent(page: _currentPage),
+                  child: _PageContent(page: _currentPage, user: _user),
                 ),
               ],
             ),
@@ -92,8 +93,9 @@ class _MainShellState extends State<MainShell> {
 
 class _PageContent extends StatelessWidget {
   final String page;
+  final UserProfile user;
 
-  const _PageContent({required this.page});
+  const _PageContent({required this.page, required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +104,9 @@ class _PageContent extends StatelessWidget {
     }
     if (page == 'organizations') {
       return const OrganizationsScreen();
+    }
+    if (page == 'users') {
+      return UsersScreen(currentUser: user);
     }
     return Padding(
       padding: const EdgeInsets.all(24),

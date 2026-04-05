@@ -301,20 +301,22 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                       )
                     : LayoutBuilder(
                         builder: (context, constraints) {
-                          int crossAxisCount = 2;
-                          if (constraints.maxWidth >= 1200) {
-                            crossAxisCount = 3;
+                          int crossAxisCount = 3;
+                          if (constraints.maxWidth >= 1400) {
+                            crossAxisCount = 5;
+                          } else if (constraints.maxWidth >= 1100) {
+                            crossAxisCount = 4;
                           } else if (constraints.maxWidth >= 800) {
-                            crossAxisCount = 2;
+                            crossAxisCount = 3;
                           }
 
                           return GridView.builder(
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 20,
-                              mainAxisSpacing: 20,
-                              childAspectRatio: 1.15,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: 1.0,
                             ),
                             itemCount: _organizations.length,
                             itemBuilder: (context, index) {
@@ -397,38 +399,40 @@ class _OrganizationCardState extends State<_OrganizationCard> {
               : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Icon ──
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
+              // ── Logo ──
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: (org.logoUrl != null && org.logoUrl!.isNotEmpty)
+                      ? Image.network(
+                          org.logoUrl!,
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _LogoFallback(name: org.name, size: 100),
+                        )
+                      : _LogoFallback(name: org.name, size: 100),
                 ),
-                child: const Icon(LucideIcons.building2,
-                    color: Colors.white, size: 26),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
               // ── Name ──
               Text(
                 org.name,
                 style: const TextStyle(
-                  fontSize: 20,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF111827),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
 
               const SizedBox(height: 12),
@@ -595,6 +599,44 @@ class _ActionButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Logo fallback ─────────────────────────────────────────────────────────────────────────────────
+
+class _LogoFallback extends StatelessWidget {
+  final String name;
+  final double size;
+
+  const _LogoFallback({required this.name, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name.isNotEmpty
+        ? name.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join()
+        : '?';
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.34,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
         ),
       ),
     );
