@@ -99,8 +99,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         return response;
     }
 
-    protected override async Task BeforeCreateAsync(Organization entity, OrganizationInsertRequest request, 
-        CancellationToken cancellationToken)
+    public override async Task<OrganizationResponse> CreateAsync(OrganizationInsertRequest request, CancellationToken cancellationToken = default)
     {
         // Only SuperAdmin can create organizations
         if (!_authorizationHelper.IsSuperAdmin())
@@ -110,20 +109,20 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 
         // Validate unique organization name
         var exists = await Context.Set<Organization>()
-            .AnyAsync(x => x.Name == entity.Name, cancellationToken);
+            .AnyAsync(x => x.Name == request.Name, cancellationToken);
         
         if (exists)
         {
-            throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
+            throw new InvalidOperationException($"Organizacija sa imenom '{request.Name}' već postoji");
         }
 
         // Validate unique email
         var emailExists = await Context.Set<Organization>()
-            .AnyAsync(x => x.Email == entity.Email, cancellationToken);
+            .AnyAsync(x => x.Email == request.Email, cancellationToken);
         
         if (emailExists)
         {
-            throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
+            throw new InvalidOperationException($"Organizacija sa emailom '{request.Email}' već postoji");
         }
 
         // Validate unique admin email
@@ -142,20 +141,34 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             throw new InvalidOperationException($"Korisnik sa korisničkim imenom '{request.AdminUsername}' već postoji");
         }
 
+        var entity = new Organization();
+        Mapper.Map(request, entity);
+
+        string? logoUrl = null;
         // Upload logo if provided
         if (request.Logo != null)
         {
-            var logoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
+            logoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
             entity.Image = new Image { ImageUrl = logoUrl };
         }
 
         entity.CreatedAt = DateTime.UtcNow;
         entity.IsActive = true;
-    }
 
-    protected override async Task AfterCreateAsync(Organization entity, OrganizationInsertRequest request, 
-        CancellationToken cancellationToken)
-    {
+        try
+        {
+            Context.Set<Organization>().Add(entity);
+            await Context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            if (logoUrl != null)
+            {
+                await _blobStorageService.DeleteAsync(logoUrl, OrganizationLogosContainer);
+            }
+            throw;
+        }
+
         // Create Organization SuperAdmin user with provided password
         PasswordHelper.CreatePasswordHash(request.AdminPassword, out string passwordHash, out string passwordSalt);
 
@@ -178,34 +191,42 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
 
         Context.Set<User>().Add(adminUser);
         await Context.SaveChangesAsync(cancellationToken);
+
+        return MapToResponse(entity);
     }
 
-    protected override async Task BeforeUpdateAsync(Organization entity, OrganizationUpdateRequest request, 
-        CancellationToken cancellationToken)
+    public override async Task<OrganizationResponse> UpdateAsync(int id, OrganizationUpdateRequest request, CancellationToken cancellationToken = default)
     {
         // Check permissions
-        _authorizationHelper.ValidateOrganizationAccess(entity.Id);
+        _authorizationHelper.ValidateOrganizationAccess(id);
+
+        var entity = await Context.Set<Organization>().FindAsync(new object[] { id }, cancellationToken);
+        if (entity == null)
+            throw new KeyNotFoundException($"Entitet sa ID-om {id} nije pronađen");
 
         // Validate unique name (exclude current)
         var exists = await Context.Set<Organization>()
-            .AnyAsync(x => x.Name == entity.Name && x.Id != entity.Id, cancellationToken);
+            .AnyAsync(x => x.Name == request.Name && x.Id != id, cancellationToken);
         
         if (exists)
         {
-            throw new InvalidOperationException($"Organizacija sa imenom '{entity.Name}' već postoji");
+            throw new InvalidOperationException($"Organizacija sa imenom '{request.Name}' već postoji");
         }
 
-        // Validate unique email (exclude current) - only check if email is provided
-        if (!string.IsNullOrWhiteSpace(entity.Email))
+        // Validate unique email (exclude current)
+        if (!string.IsNullOrWhiteSpace(request.Email))
         {
             var emailExists = await Context.Set<Organization>()
-                .AnyAsync(x => x.Email == entity.Email && x.Id != entity.Id, cancellationToken);
+                .AnyAsync(x => x.Email == request.Email && x.Id != id, cancellationToken);
             
             if (emailExists)
             {
-                throw new InvalidOperationException($"Organizacija sa emailom '{entity.Email}' već postoji");
+                throw new InvalidOperationException($"Organizacija sa emailom '{request.Email}' već postoji");
             }
         }
+
+        Mapper.Map(request, entity);
+        entity.UpdatedAt = DateTime.UtcNow;
 
         // Load existing image
         await Context.Entry(entity)
@@ -213,6 +234,7 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             .LoadAsync(cancellationToken);
 
         string? oldLogoUrl = entity.Image?.ImageUrl;
+        string? newLogoUrl = null;
 
         // Handle logo removal
         if (request.RemoveLogo && entity.Image != null)
@@ -222,55 +244,50 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
             entity.ImageId = null;
         }
 
-        // Handle new logo upload (replaces existing if present)
+        // Handle new logo upload
         if (request.Logo != null)
         {
-            var newLogoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
+            newLogoUrl = await _blobStorageService.UploadAsync(request.Logo, OrganizationLogosContainer);
 
             if (entity.Image != null)
             {
-                // Update existing image record
                 entity.Image.ImageUrl = newLogoUrl;
             }
             else
             {
-                // Create new image record
                 entity.Image = new Image { ImageUrl = newLogoUrl };
             }
         }
 
-        entity.UpdatedAt = DateTime.UtcNow;
-
-        // Store old URL for cleanup after commit
-        if (oldLogoUrl != null && (request.RemoveLogo || request.Logo != null))
+        try
         {
-            _pendingLogoDeleteUrl = oldLogoUrl;
+            Context.Set<Organization>().Update(entity);
+            await Context.SaveChangesAsync(cancellationToken);
         }
-    }
+        catch
+        {
+            if (newLogoUrl != null)
+            {
+                await _blobStorageService.DeleteAsync(newLogoUrl, OrganizationLogosContainer);
+            }
+            throw;
+        }
 
-    // Temporary field for tracking logo URL to delete after commit
-    private string? _pendingLogoDeleteUrl;
-
-    protected override async Task AfterUpdateAsync(Organization entity, OrganizationUpdateRequest request,
-        CancellationToken cancellationToken)
-    {
         // Delete old blob after successful DB commit
-        if (_pendingLogoDeleteUrl != null)
+        if (oldLogoUrl != null && (request.RemoveLogo || request.Logo != null))
         {
             try
             {
-                await _blobStorageService.DeleteAsync(_pendingLogoDeleteUrl, OrganizationLogosContainer);
+                await _blobStorageService.DeleteAsync(oldLogoUrl, OrganizationLogosContainer);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to delete old logo blob {BlobUrl} for organization {OrgId}. Blob may be orphaned.",
-                    _pendingLogoDeleteUrl, entity.Id);
-            }
-            finally
-            {
-                _pendingLogoDeleteUrl = null;
+                    oldLogoUrl, entity.Id);
             }
         }
+
+        return MapToResponse(entity);
     }
 
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)

@@ -83,7 +83,7 @@ public class AdminUserService : BaseService<User, UserResponse, AdminUserSearchO
         var currentUserId = _jwtHelper.GetUserId();
         if (currentUserId == id)
         {
-            throw new InvalidOperationException("Ne možete obrisati vlastiti račun");
+            throw new InvalidOperationException("CannotDeleteOwnAccount");
         }
 
         // Soft delete: deactivate the user

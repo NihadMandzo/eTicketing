@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
-
+using eTicketing.Model.Validations;
 namespace eTicketing.Model.Requests;
 
 public class CategoryInsertRequest
@@ -13,6 +13,8 @@ public class CategoryInsertRequest
     public string Description { get; set; } = string.Empty;
     
     [Required(ErrorMessage = "Ikona kategorije je obavezna")]
+    [AllowedExtensions(new string[] { ".png", ".jpg", ".jpeg", ".svg", ".ico" })]
+    [MaxFileSize(2 * 1024 * 1024)] // 2 MB
     public IFormFile Icon { get; set; } = null!;
     
     public bool IsActive { get; set; } = true;

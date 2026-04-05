@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
-
+using eTicketing.Model.Validations;
 namespace eTicketing.Model.Requests;
 
 public class OrganizationInsertRequest
@@ -31,6 +31,8 @@ public class OrganizationInsertRequest
     [StringLength(255, ErrorMessage = "Web stranica može imati maksimalno 255 karaktera")]
     public string? Website { get; set; }
 
+    [AllowedExtensions(new string[] { ".png", ".jpg", ".jpeg", ".svg" })]
+    [MaxFileSize(5 * 1024 * 1024)] // 5 MB
     public IFormFile? Logo { get; set; }
     
     // SuperAdmin details for the organization
