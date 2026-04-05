@@ -47,13 +47,17 @@ namespace eTicketing.Services.Migrations
 
             // Migrate data from columns to Images table
             migrationBuilder.Sql(@"
-                INSERT INTO Images (ImageUrl, CreatedAt) SELECT LogoUrl, GETUTCDATE() FROM Organizations WHERE LogoUrl IS NOT NULL AND LogoUrl != '';
+                INSERT INTO Images (ImageUrl, CreatedAt) 
+                SELECT DISTINCT Url, GETUTCDATE() FROM (
+                    SELECT LogoUrl AS Url FROM Organizations WHERE LogoUrl IS NOT NULL AND LogoUrl != ''
+                    UNION
+                    SELECT ImageUrl AS Url FROM EventImages WHERE ImageUrl IS NOT NULL AND ImageUrl != ''
+                    UNION
+                    SELECT IconUrl AS Url FROM Categories WHERE IconUrl IS NOT NULL AND IconUrl != ''
+                ) t;
+
                 UPDATE o SET o.ImageId = i.Id FROM Organizations o INNER JOIN Images i ON o.LogoUrl = i.ImageUrl;
-
-                INSERT INTO Images (ImageUrl, CreatedAt) SELECT ImageUrl, GETUTCDATE() FROM EventImages WHERE ImageUrl IS NOT NULL AND ImageUrl != '';
                 UPDATE e SET e.ImageId = i.Id FROM EventImages e INNER JOIN Images i ON e.ImageUrl = i.ImageUrl;
-
-                INSERT INTO Images (ImageUrl, CreatedAt) SELECT IconUrl, GETUTCDATE() FROM Categories WHERE IconUrl IS NOT NULL AND IconUrl != '';
                 UPDATE c SET c.ImageId = i.Id FROM Categories c INNER JOIN Images i ON c.IconUrl = i.ImageUrl;
             ");
 

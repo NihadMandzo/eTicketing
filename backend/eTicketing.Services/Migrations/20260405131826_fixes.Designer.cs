@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eTicketing.Services.Database;
 
@@ -11,9 +12,11 @@ using eTicketing.Services.Database;
 namespace eTicketing.Services.Migrations
 {
     [DbContext(typeof(eTicketingDbContext))]
-    partial class eTicketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260405131826_fixes")]
+    partial class fixes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -227,129 +230,6 @@ namespace eTicketing.Services.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.ToTable("Images");
-                });
-
-            modelBuilder.Entity("eTicketing.Services.Database.Entities.EventTicket", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("nvarchar(3)");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<int>("EventId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("MaxPurchaseQuantity")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("MinPurchaseQuantity")
-                        .HasColumnType("int");
-
-                    b.Property<int>("OrganizationId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Price")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("PriceType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime?>("SaleEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("SaleStartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("TicketType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("TicketsSold")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TotalTickets")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("OrganizationId");
-
-                    b.ToTable("EventTickets");
-                });
-
-            modelBuilder.Entity("eTicketing.Services.Database.Entities.Image", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("CategoryId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("EventId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("OrganizationId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
-
-                    b.HasIndex("EntityType");
-
-                    b.HasIndex("EventId");
-
-                    b.HasIndex("OrganizationId");
 
                     b.ToTable("Images");
                 });
@@ -694,49 +574,6 @@ namespace eTicketing.Services.Migrations
                     b.Navigation("Image");
                 });
 
-            modelBuilder.Entity("eTicketing.Services.Database.Entities.EventTicket", b =>
-                {
-                    b.HasOne("eTicketing.Services.Database.Entities.Event", "Event")
-                        .WithMany("EventTickets")
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("eTicketing.Services.Database.Entities.Organization", "Organization")
-                        .WithMany("EventTickets")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Event");
-
-                    b.Navigation("Organization");
-                });
-
-            modelBuilder.Entity("eTicketing.Services.Database.Entities.Image", b =>
-                {
-                    b.HasOne("eTicketing.Services.Database.Entities.Category", "Category")
-                        .WithMany("Images")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("eTicketing.Services.Database.Entities.Event", "Event")
-                        .WithMany()
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("eTicketing.Services.Database.Entities.Organization", "Organization")
-                        .WithMany("Images")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Category");
-
-                    b.Navigation("Event");
-
-                    b.Navigation("Organization");
-                });
-
             modelBuilder.Entity("eTicketing.Services.Database.Entities.User", b =>
                 {
                     b.HasOne("eTicketing.Services.Database.Entities.Organization", "Organization")
@@ -755,15 +592,8 @@ namespace eTicketing.Services.Migrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("eTicketing.Services.Database.Entities.Category", b =>
-                {
-                    b.Navigation("Images");
-                });
-
             modelBuilder.Entity("eTicketing.Services.Database.Entities.Event", b =>
                 {
-                    b.Navigation("EventTickets");
-
                     b.Navigation("Images");
                 });
 
@@ -774,11 +604,7 @@ namespace eTicketing.Services.Migrations
 
             modelBuilder.Entity("eTicketing.Services.Database.Entities.Organization", b =>
                 {
-                    b.Navigation("EventTickets");
-
                     b.Navigation("Events");
-
-                    b.Navigation("Images");
 
                     b.Navigation("Users");
                 });
