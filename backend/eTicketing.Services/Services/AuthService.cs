@@ -5,6 +5,7 @@ using eTicketing.Services.Database.Entities;
 using eTicketing.Services.Helpers;
 using eTicketing.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 
 namespace eTicketing.Services.Services;
 
@@ -279,7 +280,18 @@ public class AuthService : IAuthService
         user.PhoneNumber = request.PhoneNumber;
         user.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException sqlEx && sqlEx.Number is 2601 or 2627)
+        {
+            if (ex.InnerException.Message.Contains("IX_Users_Username"))
+            {
+                throw new InvalidOperationException("Korisničko ime je već zauzeto");
+            }
+            throw;
+        }
 
         return new UserResponse
         {

@@ -40,27 +40,43 @@ public class CategoryService : BaseCRUDService<Category, CategoryResponse, BaseS
         return query;
     }
 
-    protected override async Task BeforeCreateAsync(Category entity, CategoryInsertRequest request, CancellationToken cancellationToken)
+    public override async Task<CategoryResponse> CreateAsync(CategoryInsertRequest request, CancellationToken cancellationToken = default)
     {
+        var entity = new Category();
+        Mapper.Map(request, entity);
+
         await ValidateUniqueCategoryName(entity.Name, null, cancellationToken);
 
         // Icon is required — upload to blob storage
         var iconUrl = await _blobStorageService.UploadAsync(request.Icon, CategoryIconsContainer);
         entity.Image = new Image { ImageUrl = iconUrl };
-
         entity.CreatedAt = DateTime.UtcNow;
+
+        try
+        {
+            Context.Set<Category>().Add(entity);
+            await Context.SaveChangesAsync(cancellationToken);
+            return MapToResponse(entity);
+        }
+        catch
+        {
+            if (iconUrl != null)
+            {
+                await _blobStorageService.DeleteAsync(iconUrl, CategoryIconsContainer);
+            }
+            throw;
+        }
     }
 
-    protected override Task AfterCreateAsync(Category entity, CategoryInsertRequest request, CancellationToken cancellationToken)
+    public override async Task<CategoryResponse> UpdateAsync(int id, CategoryUpdateRequest request, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
-    }
+        var entity = await Context.Set<Category>().FindAsync(new object[] { id }, cancellationToken);
+        if (entity == null)
+            throw new KeyNotFoundException($"Entitet sa ID-om {id} nije pronađen");
 
-    // Temporary field for tracking icon URL to delete after commit
-    private string? _pendingIconDeleteUrl;
+        Mapper.Map(request, entity);
+        entity.UpdatedAt = DateTime.UtcNow;
 
-    protected override async Task BeforeUpdateAsync(Category entity, CategoryUpdateRequest request, CancellationToken cancellationToken)
-    {
         await ValidateUniqueCategoryName(entity.Name, entity.Id, cancellationToken);
 
         // Load existing image
@@ -68,52 +84,54 @@ public class CategoryService : BaseCRUDService<Category, CategoryResponse, BaseS
             .Reference(e => e.Image)
             .LoadAsync(cancellationToken);
 
-        // Handle new icon upload (optional — null means keep existing)
+        string? oldIconUrl = null;
+        string? newIconUrl = null;
+
+        // Handle new icon upload
         if (request.Icon != null)
         {
-            string? oldIconUrl = entity.Image?.ImageUrl;
-            var newIconUrl = await _blobStorageService.UploadAsync(request.Icon, CategoryIconsContainer);
+            oldIconUrl = entity.Image?.ImageUrl;
+            newIconUrl = await _blobStorageService.UploadAsync(request.Icon, CategoryIconsContainer);
 
             if (entity.Image != null)
             {
-                // Update existing image record
                 entity.Image.ImageUrl = newIconUrl;
             }
             else
             {
-                // Create new image record (e.g. category had no icon yet due to legacy data)
                 entity.Image = new Image { ImageUrl = newIconUrl };
-            }
-
-            // Track old URL for cleanup after DB commit
-            if (oldIconUrl != null)
-            {
-                _pendingIconDeleteUrl = oldIconUrl;
             }
         }
 
-        entity.UpdatedAt = DateTime.UtcNow;
-    }
+        try
+        {
+            Context.Set<Category>().Update(entity);
+            await Context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            if (newIconUrl != null)
+            {
+                await _blobStorageService.DeleteAsync(newIconUrl, CategoryIconsContainer);
+            }
+            throw;
+        }
 
-    protected override async Task AfterUpdateAsync(Category entity, CategoryUpdateRequest request, CancellationToken cancellationToken)
-    {
         // Delete old blob after successful DB commit
-        if (_pendingIconDeleteUrl != null)
+        if (oldIconUrl != null && newIconUrl != null)
         {
             try
             {
-                await _blobStorageService.DeleteAsync(_pendingIconDeleteUrl, CategoryIconsContainer);
+                await _blobStorageService.DeleteAsync(oldIconUrl, CategoryIconsContainer);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to delete old icon blob {BlobUrl} for category {CategoryId}. Blob may be orphaned.",
-                    _pendingIconDeleteUrl, entity.Id);
-            }
-            finally
-            {
-                _pendingIconDeleteUrl = null;
+                    oldIconUrl, entity.Id);
             }
         }
+
+        return MapToResponse(entity);
     }
 
     public override async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)

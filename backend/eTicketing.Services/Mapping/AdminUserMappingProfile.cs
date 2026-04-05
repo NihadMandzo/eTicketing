@@ -4,9 +4,9 @@ using eTicketing.Services.Database.Entities;
 
 namespace eTicketing.Services.Mapping;
 
-public class UserMappingProfile : Profile
+public class AdminUserMappingProfile : Profile
 {
-    public UserMappingProfile()
+    public AdminUserMappingProfile()
     {
         CreateMap<User, UserResponse>()
             .ForMember(dest => dest.RoleName, opt => opt.MapFrom(src => src.Role != null ? src.Role.Name : string.Empty))

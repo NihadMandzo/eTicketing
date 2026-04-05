@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,17 +11,6 @@ namespace eTicketing.Services.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "LogoUrl",
-                table: "Organizations");
-
-            migrationBuilder.DropColumn(
-                name: "ImageUrl",
-                table: "EventImages");
-
-            migrationBuilder.DropColumn(
-                name: "IconUrl",
-                table: "Categories");
 
             migrationBuilder.AddColumn<int>(
                 name: "ImageId",
@@ -48,7 +37,6 @@ namespace eTicketing.Services.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     ImageUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    IsPrimary = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
@@ -56,6 +44,19 @@ namespace eTicketing.Services.Migrations
                 {
                     table.PrimaryKey("PK_Images", x => x.Id);
                 });
+
+            // Migrate data from columns to Images table
+            migrationBuilder.Sql(@"
+                INSERT INTO Images (ImageUrl, CreatedAt) SELECT LogoUrl, GETUTCDATE() FROM Organizations WHERE LogoUrl IS NOT NULL AND LogoUrl != '';
+                UPDATE o SET o.ImageId = i.Id FROM Organizations o INNER JOIN Images i ON o.LogoUrl = i.ImageUrl;
+
+                INSERT INTO Images (ImageUrl, CreatedAt) SELECT ImageUrl, GETUTCDATE() FROM EventImages WHERE ImageUrl IS NOT NULL AND ImageUrl != '';
+                UPDATE e SET e.ImageId = i.Id FROM EventImages e INNER JOIN Images i ON e.ImageUrl = i.ImageUrl;
+
+                INSERT INTO Images (ImageUrl, CreatedAt) SELECT IconUrl, GETUTCDATE() FROM Categories WHERE IconUrl IS NOT NULL AND IconUrl != '';
+                UPDATE c SET c.ImageId = i.Id FROM Categories c INNER JOIN Images i ON c.IconUrl = i.ImageUrl;
+            ");
+
 
             migrationBuilder.UpdateData(
                 table: "Categories",
@@ -144,6 +145,18 @@ namespace eTicketing.Services.Migrations
                 principalTable: "Images",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.SetNull);
+
+            migrationBuilder.DropColumn(
+                name: "LogoUrl",
+                table: "Organizations");
+
+            migrationBuilder.DropColumn(
+                name: "ImageUrl",
+                table: "EventImages");
+
+            migrationBuilder.DropColumn(
+                name: "IconUrl",
+                table: "Categories");
         }
 
         /// <inheritdoc />
@@ -160,6 +173,13 @@ namespace eTicketing.Services.Migrations
             migrationBuilder.DropForeignKey(
                 name: "FK_Organizations_Images_ImageId",
                 table: "Organizations");
+
+            // Restore data from Images table back to URL columns
+            migrationBuilder.Sql(@"
+                UPDATE o SET o.LogoUrl = i.ImageUrl FROM Organizations o INNER JOIN Images i ON o.ImageId = i.Id;
+                UPDATE e SET e.ImageUrl = i.ImageUrl FROM EventImages e INNER JOIN Images i ON e.ImageId = i.Id;
+                UPDATE c SET c.IconUrl = i.ImageUrl FROM Categories c INNER JOIN Images i ON c.ImageId = i.Id;
+            ");
 
             migrationBuilder.DropTable(
                 name: "Images");
@@ -193,24 +213,21 @@ namespace eTicketing.Services.Migrations
                 table: "Organizations",
                 type: "nvarchar(500)",
                 maxLength: 500,
-                nullable: false,
-                defaultValue: "");
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "ImageUrl",
                 table: "EventImages",
                 type: "nvarchar(1000)",
                 maxLength: 1000,
-                nullable: false,
-                defaultValue: "");
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "IconUrl",
                 table: "Categories",
                 type: "nvarchar(500)",
                 maxLength: 500,
-                nullable: false,
-                defaultValue: "");
+                nullable: true);
 
             migrationBuilder.UpdateData(
                 table: "Categories",

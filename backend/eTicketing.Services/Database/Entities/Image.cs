@@ -4,7 +4,6 @@ namespace eTicketing.Services.Database.Entities;
 public class Image : BaseEntity
 {
     public string ImageUrl { get; set; } = string.Empty;
-    public bool IsPrimary { get; set; } = false;
 
     public virtual ICollection<EventImage> EventImages { get; set; } = new List<EventImage>();
 }

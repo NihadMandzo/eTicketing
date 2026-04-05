@@ -132,7 +132,7 @@ public class eTicketingDbContext : DbContext
             entity.HasOne(e => e.Image)
                   .WithMany(i => i.EventImages)
                   .HasForeignKey(e => e.ImageId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(e => e.Event)
                   .WithMany(ev => ev.Images)
