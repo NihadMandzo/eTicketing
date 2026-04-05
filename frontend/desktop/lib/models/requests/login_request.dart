@@ -11,4 +11,9 @@ class LoginRequest {
         'emailOrUsername': emailOrUsername,
         'password': password,
       };
+
+  @override
+  String toString() {
+    return 'LoginRequest(emailOrUsername: $emailOrUsername, password: ****)';
+  }
 }

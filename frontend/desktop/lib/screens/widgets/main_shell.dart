@@ -140,7 +140,7 @@ class _PageContent extends StatelessWidget {
               childAspectRatio: 2.2,
               children: List.generate(
                 6,
-                (i) => _PlaceholderCard(index: i),
+                (i) => const _PlaceholderCard(),
               ),
             ),
           ),
@@ -174,9 +174,7 @@ class _PageContent extends StatelessWidget {
 }
 
 class _PlaceholderCard extends StatelessWidget {
-  final int index;
-
-  const _PlaceholderCard({required this.index});
+  const _PlaceholderCard();
 
   @override
   Widget build(BuildContext context) {

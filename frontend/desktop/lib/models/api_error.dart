@@ -14,13 +14,14 @@ class ApiError {
   factory ApiError.fromJson(Map<String, dynamic> json) {
     Map<String, List<String>>? errors;
 
-    if (json['errors'] != null) {
-      errors = (json['errors'] as Map<String, dynamic>).map(
-        (key, value) => MapEntry(
-          key,
-          (value as List).map((e) => e.toString()).toList(),
-        ),
-      );
+    if (json['errors'] is Map) {
+      errors = (json['errors'] as Map).map((key, value) {
+        final listValue = value is List ? value : [value];
+        return MapEntry(
+          key.toString(),
+          listValue.map((e) => e.toString()).toList(),
+        );
+      });
     }
 
     return ApiError(

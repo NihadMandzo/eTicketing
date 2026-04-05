@@ -116,6 +116,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _orgPhone = TextEditingController();
   final _orgAddress = TextEditingController();
   final _orgWebsite = TextEditingController();
+  final _roleCtrl = TextEditingController();
+  final _orgNameProfileCtrl = TextEditingController();
   bool _orgActive = true;
   File? _logoFile;
   bool _removeLogo = false;
@@ -154,6 +156,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _username = TextEditingController(text: u.username);
     _email = TextEditingController(text: u.email);
     _phone = TextEditingController(text: u.phoneNumber ?? '');
+    _roleCtrl.text = _roleLabel(u.roleName);
+    _orgNameProfileCtrl.text = u.organizationName ?? '';
 
     // Resolve org id from token or user profile
     _orgId = u.organizationId ?? _orgIdFromToken();
@@ -191,6 +195,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       _firstName, _lastName, _username, _email, _phone,
       _currentPwd, _newPwd, _confirmPwd,
       _orgName, _orgDesc, _orgEmail, _orgPhone, _orgAddress, _orgWebsite,
+      _roleCtrl, _orgNameProfileCtrl,
     ]) {
       c.dispose();
     }
@@ -705,12 +710,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
               keyboardType: TextInputType.phone),
           _Field(
               label: 'Uloga',
-              controller: TextEditingController(text: _roleLabel(u.roleName)),
+              controller: _roleCtrl,
               readOnly: true),
           if (u.organizationName != null)
             _Field(
               label: 'Organizacija',
-              controller: TextEditingController(text: u.organizationName),
+              controller: _orgNameProfileCtrl,
               readOnly: true,
               fullWidth: true,
             ),
@@ -930,8 +935,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
               allowedExtensions: ['png', 'jpg', 'jpeg'],
             );
             if (result != null && result.files.single.path != null) {
+              final file = File(result.files.single.path!);
+              if (file.lengthSync() > 2 * 1024 * 1024) {
+                if (mounted) _showError('Logo može biti maksimalno 2MB.');
+                return;
+              }
               setState(() {
-                _logoFile = File(result.files.single.path!);
+                _logoFile = file;
                 _removeLogo = false;
               });
             }

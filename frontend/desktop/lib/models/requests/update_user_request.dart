@@ -15,6 +15,6 @@ class UpdateUserRequest {
         'firstName': firstName,
         'lastName': lastName,
         'username': username,
-        'phoneNumber': phoneNumber,
+        if (phoneNumber != null) 'phoneNumber': phoneNumber,
       };
 }

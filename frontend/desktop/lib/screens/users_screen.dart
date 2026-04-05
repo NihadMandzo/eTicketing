@@ -201,13 +201,13 @@ class _UsersScreenState extends State<UsersScreen> {
                 ),
                 const SizedBox(width: 16),
                 _StatCard(
-                  label: 'Aktivni Korisnici',
+                  label: 'Aktivni (Prikazano)',
                   value: '$_activeCount',
                   valueColor: const Color(0xFF0D7C66),
                 ),
                 const SizedBox(width: 16),
                 _StatCard(
-                  label: 'Administratori',
+                  label: 'Admini (Prikazano)',
                   value: '$_adminCount',
                   valueColor: const Color(0xFF111827),
                 ),

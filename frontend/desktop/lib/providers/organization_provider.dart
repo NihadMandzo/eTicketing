@@ -14,8 +14,6 @@ import 'base_provider.dart';
 class OrganizationProvider extends BaseProvider<OrganizationResponse> {
   OrganizationProvider() : super('Organizations');
 
-  static const String _baseUrl = 'http://localhost:5189/api/';
-
   Map<String, String> _authHeaders() {
     if (Authorization.token != null && Authorization.token!.isNotEmpty) {
       return {'Authorization': 'Bearer ${Authorization.token}'};
@@ -28,7 +26,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
     OrganizationInsertRequest request, {
     File? logoFile,
   }) async {
-    final uri = Uri.parse('${_baseUrl}Organizations');
+    final uri = Uri.parse('${BaseProvider.baseUrl}Organizations');
     final multipart = http.MultipartRequest('POST', uri)
       ..headers.addAll(_authHeaders())
       ..fields.addAll(request.toFields());
@@ -39,7 +37,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
       );
     }
 
-    final streamed = await multipart.send();
+    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -69,7 +67,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
     File? logoFile,
     bool removeLogo = false,
   }) async {
-    final uri = Uri.parse('${_baseUrl}Organizations/$id');
+    final uri = Uri.parse('${BaseProvider.baseUrl}Organizations/$id');
 
     final multipart = http.MultipartRequest('PUT', uri);
 
@@ -89,7 +87,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
       );
     }
 
-    final streamed = await multipart.send();
+    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -16,10 +16,13 @@ class PagedResult<T> {
     T Function(Map<String, dynamic>) fromJsonT,
   ) {
     return PagedResult<T>(
-      items: json['items'] != null
-          ? (json['items'] as List)
-              .map((item) => fromJsonT(item as Map<String, dynamic>))
-              .toList()
+      items: json['items'] != null && json['items'] is List
+          ? (json['items'] as List).map((item) {
+              if (item is! Map<String, dynamic>) {
+                throw const FormatException('Item in PagedResult is not a Map');
+              }
+              return fromJsonT(item);
+            }).toList()
           : <T>[],
       totalCount: json['totalCount'] ?? 0,
       page: json['page'],

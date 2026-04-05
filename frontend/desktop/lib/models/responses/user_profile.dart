@@ -32,25 +32,31 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id');
+    if (json['firstName'] == null) throw const FormatException('Missing firstName');
+    if (json['lastName'] == null) throw const FormatException('Missing lastName');
+    if (json['username'] == null) throw const FormatException('Missing username');
+    if (json['email'] == null) throw const FormatException('Missing email');
+    if (json['roleName'] == null) throw const FormatException('Missing roleName');
+    if (json['createdAt'] == null) throw const FormatException('Missing createdAt');
+
     return UserProfile(
-      id: json['id'] as int? ?? 0,
-      firstName: json['firstName'] as String? ?? '',
-      lastName: json['lastName'] as String? ?? '',
-      username: json['username'] as String? ?? '',
-      email: json['email'] as String? ?? '',
+      id: json['id'] as int,
+      firstName: json['firstName'] as String,
+      lastName: json['lastName'] as String,
+      username: json['username'] as String,
+      email: json['email'] as String,
       phoneNumber: json['phoneNumber'] as String?,
       isActive: json['isActive'] as bool? ?? false,
       isEmailVerified: json['isEmailVerified'] as bool? ?? false,
       isFirstLogin: json['isFirstLogin'] as bool? ?? false,
-      roleName: json['roleName'] as String? ?? '',
+      roleName: json['roleName'] as String,
       organizationId: json['organizationId'] as int?,
       organizationName: json['organizationName'] as String?,
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.tryParse(json['lastLoginAt'] as String)
           : null,
-      createdAt: json['createdAt'] != null
-          ? (DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now())
-          : DateTime.now(),
+      createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
 

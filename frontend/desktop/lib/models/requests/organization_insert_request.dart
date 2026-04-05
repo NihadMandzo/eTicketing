@@ -38,8 +38,12 @@ class OrganizationInsertRequest {
         'AdminLastName': adminLastName,
         'AdminEmail': adminEmail,
         'AdminUsername': adminUsername,
-        'AdminPassword': adminPassword,
         if (adminPhoneNumber != null && adminPhoneNumber!.isNotEmpty)
           'AdminPhoneNumber': adminPhoneNumber!,
+      };
+
+  Map<String, String> toAuthFields() => {
+        ...toFields(),
+        'AdminPassword': adminPassword,
       };
 }
