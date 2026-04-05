@@ -14,8 +14,6 @@ import 'base_provider.dart';
 class CategoryProvider extends BaseProvider<CategoryResponse> {
   CategoryProvider() : super('Categories');
 
-  static const String _baseUrl = 'http://localhost:5189/api/';
-
   Map<String, String> _authHeaders() {
     if (Authorization.token != null && Authorization.token!.isNotEmpty) {
       return {'Authorization': 'Bearer ${Authorization.token}'};
@@ -41,13 +39,13 @@ class CategoryProvider extends BaseProvider<CategoryResponse> {
     CategoryInsertRequest request, {
     required File iconFile,
   }) async {
-    final uri = Uri.parse('${_baseUrl}Categories');
+    final uri = Uri.parse('${BaseProvider.baseUrl}Categories');
     final multipart = http.MultipartRequest('POST', uri)
       ..headers.addAll(_authHeaders())
       ..fields.addAll(request.toFields())
       ..files.add(await http.MultipartFile.fromPath('Icon', iconFile.path));
 
-    final streamed = await multipart.send();
+    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
     final response = await http.Response.fromStream(streamed);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
@@ -63,7 +61,7 @@ class CategoryProvider extends BaseProvider<CategoryResponse> {
     CategoryUpdateRequest request, {
     File? iconFile,
   }) async {
-    final uri = Uri.parse('${_baseUrl}Categories/$id');
+    final uri = Uri.parse('${BaseProvider.baseUrl}Categories/$id');
     final multipart = http.MultipartRequest('PUT', uri)
       ..headers.addAll(_authHeaders())
       ..fields.addAll(request.toFields());
@@ -74,7 +72,7 @@ class CategoryProvider extends BaseProvider<CategoryResponse> {
       );
     }
 
-    final streamed = await multipart.send();
+    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
     final response = await http.Response.fromStream(streamed);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);

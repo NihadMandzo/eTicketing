@@ -471,20 +471,23 @@ class _CategoryCardState extends State<_CategoryCard> {
               child: AnimatedOpacity(
                 opacity: _isHovering ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _ActionBtn(
-                      icon: LucideIcons.pencil,
-                      onTap: widget.onEdit,
-                    ),
-                    const SizedBox(width: 4),
-                    _ActionBtn(
-                      icon: LucideIcons.trash2,
-                      onTap: widget.onDelete,
-                      isDestructive: true,
-                    ),
-                  ],
+                child: IgnorePointer(
+                  ignoring: !_isHovering,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ActionBtn(
+                        icon: LucideIcons.pencil,
+                        onTap: widget.onEdit,
+                      ),
+                      const SizedBox(width: 4),
+                      _ActionBtn(
+                        icon: LucideIcons.trash2,
+                        onTap: widget.onDelete,
+                        isDestructive: true,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             )

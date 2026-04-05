@@ -20,14 +20,24 @@ class CategoryResponse {
   });
 
   factory CategoryResponse.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id in payload');
+    if (json['name'] == null) throw const FormatException('Missing name in payload');
+    if (json['iconUrl'] == null) throw const FormatException('Missing iconUrl in payload');
+    
+    DateTime? parsedCreatedAt;
+    if (json['createdAt'] != null) {
+      parsedCreatedAt = DateTime.tryParse(json['createdAt'] as String);
+    }
+    if (parsedCreatedAt == null) throw const FormatException('Missing or invalid createdAt in payload');
+
     return CategoryResponse(
       id: json['id'] as int,
-      name: json['name'] as String? ?? '',
+      name: json['name'] as String,
       description: json['description'] as String? ?? '',
-      iconUrl: json['iconUrl'] as String? ?? '',
+      iconUrl: json['iconUrl'] as String,
       isActive: json['isActive'] as bool? ?? false,
       displayOrder: json['displayOrder'] as int? ?? 0,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: parsedCreatedAt,
       updatedAt: json['updatedAt'] != null 
           ? DateTime.parse(json['updatedAt'] as String) 
           : null,

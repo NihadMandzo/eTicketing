@@ -28,12 +28,21 @@ class AdminUserResponse {
   });
 
   factory AdminUserResponse.fromJson(Map<String, dynamic> json) {
+    if (json['createdAt'] == null) {
+      throw const FormatException('Missing required field: createdAt');
+    }
+    if (json['id'] == null) throw const FormatException('Missing required field: id');
+    if (json['firstName'] == null) throw const FormatException('Missing required field: firstName');
+    if (json['lastName'] == null) throw const FormatException('Missing required field: lastName');
+    if (json['username'] == null) throw const FormatException('Missing required field: username');
+    if (json['email'] == null) throw const FormatException('Missing required field: email');
+
     return AdminUserResponse(
-      id: json['id'] as int? ?? 0,
-      firstName: json['firstName'] as String? ?? '',
-      lastName: json['lastName'] as String? ?? '',
-      username: json['username'] as String? ?? '',
-      email: json['email'] as String? ?? '',
+      id: json['id'] as int,
+      firstName: json['firstName'] as String,
+      lastName: json['lastName'] as String,
+      username: json['username'] as String,
+      email: json['email'] as String,
       phoneNumber: json['phoneNumber'] as String?,
       isActive: json['isActive'] as bool? ?? false,
       isEmailVerified: json['isEmailVerified'] as bool? ?? false,
@@ -42,9 +51,7 @@ class AdminUserResponse {
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.tryParse(json['lastLoginAt'] as String)
           : null,
-      createdAt: json['createdAt'] != null
-          ? (DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now())
-          : DateTime.now(),
+      createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/api_error.dart';
+import 'base_provider.dart';
 import '../models/requests/change_password_request.dart';
 import '../models/requests/login_request.dart';
 import '../models/requests/update_user_request.dart';
@@ -13,7 +14,6 @@ import 'authorization.dart';
 
 
 class AuthProvider {
-  static const String _baseUrl = 'http://localhost:5189/api/';
   static const String _endpoint = 'Auth';
   static const Duration _timeout = Duration(seconds: 10);
 
@@ -46,7 +46,7 @@ class AuthProvider {
   /// Authenticates the user. On success, the JWT token is automatically
   /// stored in [Authorization.token] so every subsequent request carries it.
   Future<LoginResponse> login(LoginRequest request) async {
-    final uri = Uri.parse('$_baseUrl$_endpoint/login');
+    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/login');
 
     final response = await http.post(
       uri,
@@ -68,9 +68,9 @@ class AuthProvider {
   // ── me ────────────────────────────────────────────────────────────────────
   /// Returns the profile of the currently authenticated user.
   Future<UserProfile> me() async {
-    final uri = Uri.parse('$_baseUrl$_endpoint/me');
+    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/me');
 
-    final response = await http.get(uri, headers: _authHeaders());
+    final response = await http.get(uri, headers: _authHeaders()).timeout(_timeout);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -82,13 +82,13 @@ class AuthProvider {
   /// Changes the password for the currently authenticated user.
   /// Returns [true] on success, throws [ApiException] on failure.
   Future<bool> changePassword(ChangePasswordRequest request) async {
-    final uri = Uri.parse('$_baseUrl$_endpoint/change-password');
+    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/change-password');
 
     final response = await http.post(
       uri,
       headers: _authHeaders(),
       body: jsonEncode(request.toJson()),
-    );
+    ).timeout(_timeout);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -99,13 +99,13 @@ class AuthProvider {
   /// Updates the profile of the currently authenticated user.
   /// Returns the updated [UserProfile] from the server response.
   Future<UserProfile> updateUser(UpdateUserRequest request) async {
-    final uri = Uri.parse('$_baseUrl$_endpoint/update-user');
+    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/update-user');
 
     final response = await http.put(
       uri,
       headers: _authHeaders(),
       body: jsonEncode(request.toJson()),
-    );
+    ).timeout(_timeout);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

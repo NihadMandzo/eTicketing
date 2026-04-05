@@ -9,7 +9,7 @@ import 'api_exception.dart';
 import 'authorization.dart';
 
 class BaseProvider<T> {
-  static const String _baseUrl = 'http://localhost:5189/api/';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:5189/api/');
 
   final String _extension;
 
@@ -48,47 +48,59 @@ class BaseProvider<T> {
   }) async {
     final queryParams = searchObject?.toQueryString() ?? {};
 
-    final uri = Uri.parse('$_baseUrl$_extension')
+    final uri = Uri.parse('$baseUrl$_extension')
         .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
 
-    final response = await http.get(uri, headers: _getHeaders());
+    final response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return PagedResult.fromJson(data, fromJson);
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return PagedResult.fromJson(data, fromJson);
+    } catch (e) {
+      throw FormatException('Failed to parse response JSON: $e');
+    }
   }
 
   Future<T> getById(
     int id, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$_baseUrl$_extension/$id');
+    final uri = Uri.parse('$baseUrl$_extension/$id');
 
-    final response = await http.get(uri, headers: _getHeaders());
+    final response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return fromJson(data);
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return fromJson(data);
+    } catch (e) {
+      throw FormatException('Failed to parse response JSON: $e');
+    }
   }
 
   Future<T> insert(
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$_baseUrl$_extension');
+    final uri = Uri.parse('$baseUrl$_extension');
 
     final response = await http.post(
       uri,
       headers: _getHeaders(),
       body: jsonEncode(request),
-    );
+    ).timeout(const Duration(seconds: 10));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return fromJson(data);
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return fromJson(data);
+    } catch (e) {
+      throw FormatException('Failed to parse response JSON: $e');
+    }
   }
 
   Future<T> update(
@@ -96,24 +108,28 @@ class BaseProvider<T> {
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$_baseUrl$_extension/$id');
+    final uri = Uri.parse('$baseUrl$_extension/$id');
 
     final response = await http.put(
       uri,
       headers: _getHeaders(),
       body: jsonEncode(request),
-    );
+    ).timeout(const Duration(seconds: 10));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return fromJson(data);
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return fromJson(data);
+    } catch (e) {
+      throw FormatException('Failed to parse response JSON: $e');
+    }
   }
 
   Future<void> delete(int id) async {
-    final uri = Uri.parse('$_baseUrl$_extension/$id');
+    final uri = Uri.parse('$baseUrl$_extension/$id');
 
-    final response = await http.delete(uri, headers: _getHeaders());
+    final response = await http.delete(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }

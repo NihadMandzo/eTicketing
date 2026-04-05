@@ -337,8 +337,8 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                           return 'Web stranica može imati maksimalno 255 karaktera';
                         }
                         final uri = Uri.tryParse(v.trim());
-                        if (uri == null || !uri.hasScheme) {
-                          return 'Neispravan format web stranice';
+                        if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+                          return 'Neispravan format web stranice (mora početi sa http/https)';
                         }
                       }
                       return null;
