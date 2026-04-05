@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -37,8 +38,21 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
       );
     }
 
-    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
-    final response = await http.Response.fromStream(streamed);
+    http.Response response;
+    try {
+      response = await Future.timeout(
+        const Duration(seconds: 15),
+        () async {
+          final streamed = await multipart.send();
+          return await http.Response.fromStream(streamed);
+        }(),
+      );
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       ApiError apiError;
@@ -87,8 +101,21 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse> {
       );
     }
 
-    final streamed = await multipart.send().timeout(const Duration(seconds: 15));
-    final response = await http.Response.fromStream(streamed);
+    http.Response response;
+    try {
+      response = await Future.timeout(
+        const Duration(seconds: 15),
+        () async {
+          final streamed = await multipart.send();
+          return await http.Response.fromStream(streamed);
+        }(),
+      );
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       ApiError apiError;
