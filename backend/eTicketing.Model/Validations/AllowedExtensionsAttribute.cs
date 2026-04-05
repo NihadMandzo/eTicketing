@@ -9,7 +9,7 @@ public class AllowedExtensionsAttribute : ValidationAttribute
 
     public AllowedExtensionsAttribute(string[] extensions)
     {
-        _extensions = extensions;
+        _extensions = extensions?.Select(e => e.ToLowerInvariant()).ToArray() ?? Array.Empty<string>();
     }
 
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
@@ -28,6 +28,10 @@ public class AllowedExtensionsAttribute : ValidationAttribute
 
     public string GetErrorMessage()
     {
+        if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            return ErrorMessage;
+        }
         return $"Dozvoljene su samo sljedeće ekstenzije: {string.Join(", ", _extensions)}";
     }
 }
