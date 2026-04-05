@@ -40,6 +40,12 @@ class UserProfile {
     if (json['roleName'] == null) throw const FormatException('Missing roleName');
     if (json['createdAt'] == null) throw const FormatException('Missing createdAt');
 
+    final createdAtStr = json['createdAt'] as String;
+    final createdAtParsed = DateTime.tryParse(createdAtStr);
+    if (createdAtParsed == null) {
+      throw FormatException('Polje "createdAt" ima neispravan format: $createdAtStr');
+    }
+
     return UserProfile(
       id: json['id'] as int,
       firstName: json['firstName'] as String,
@@ -56,7 +62,7 @@ class UserProfile {
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.tryParse(json['lastLoginAt'] as String)
           : null,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: createdAtParsed,
     );
   }
 

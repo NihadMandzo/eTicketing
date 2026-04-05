@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -51,7 +52,15 @@ class BaseProvider<T> {
     final uri = Uri.parse('$baseUrl$_extension')
         .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
 
-    final response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -69,7 +78,15 @@ class BaseProvider<T> {
   }) async {
     final uri = Uri.parse('$baseUrl$_extension/$id');
 
-    final response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -87,11 +104,19 @@ class BaseProvider<T> {
   }) async {
     final uri = Uri.parse('$baseUrl$_extension');
 
-    final response = await http.post(
-      uri,
-      headers: _getHeaders(),
-      body: jsonEncode(request),
-    ).timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await http.post(
+        uri,
+        headers: _getHeaders(),
+        body: jsonEncode(request),
+      ).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -110,11 +135,19 @@ class BaseProvider<T> {
   }) async {
     final uri = Uri.parse('$baseUrl$_extension/$id');
 
-    final response = await http.put(
-      uri,
-      headers: _getHeaders(),
-      body: jsonEncode(request),
-    ).timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await http.put(
+        uri,
+        headers: _getHeaders(),
+        body: jsonEncode(request),
+      ).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -129,7 +162,15 @@ class BaseProvider<T> {
   Future<void> delete(int id) async {
     final uri = Uri.parse('$baseUrl$_extension/$id');
 
-    final response = await http.delete(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await http.delete(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
+      );
+    }
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }
