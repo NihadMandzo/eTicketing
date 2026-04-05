@@ -478,20 +478,45 @@ public class OrganizationService : BaseCRUDService<Organization, OrganizationRes
         return true;
     }
 
-    public async Task<List<UserResponse>> GetOrganizationUsersAsync(int organizationId, 
-        CancellationToken cancellationToken = default)
+    public async Task<PagedResponse<UserResponse>> GetOrganizationUsersAsync(int organizationId, 
+        BaseSearchObject? search = null, CancellationToken cancellationToken = default)
     {
         _authorizationHelper.ValidateOrganizationAccess(organizationId);
 
-        var users = await Context.Set<User>()
+        var query = Context.Set<User>()
             .Include(u => u.Role)
-            .Where(u => u.OrganizationId == organizationId && u.IsActive)
-            .OrderBy(u => u.Role.Name)
-            .ThenBy(u => u.LastName)
-            .ThenBy(u => u.FirstName)
-            .ToListAsync(cancellationToken);
+            .Where(u => u.OrganizationId == organizationId && u.IsActive);
 
-        return Mapper.Map<List<UserResponse>>(users);
+        if (!string.IsNullOrWhiteSpace(search?.FTS))
+        {
+            query = query.Where(u =>
+                u.FirstName.Contains(search.FTS) ||
+                u.LastName.Contains(search.FTS) ||
+                u.Username.Contains(search.FTS) ||
+                u.Email.Contains(search.FTS));
+        }
+
+        query = query.OrderBy(u => u.Role.Name)
+            .ThenBy(u => u.LastName)
+            .ThenBy(u => u.FirstName);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        if (search?.Page.HasValue == true && search?.PageSize.HasValue == true)
+        {
+            query = query.Skip(search.Page.Value * search.PageSize.Value)
+                         .Take(search.PageSize.Value);
+        }
+
+        var users = await query.ToListAsync(cancellationToken);
+
+        return new PagedResponse<UserResponse>
+        {
+            Items = Mapper.Map<List<UserResponse>>(users),
+            TotalCount = totalCount,
+            Page = search?.Page,
+            PageSize = search?.PageSize
+        };
     }
 
     protected override OrganizationResponse MapToResponse(Organization entity)
