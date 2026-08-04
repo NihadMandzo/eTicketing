@@ -1,0 +1,143 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: eticketing-sqlserver
+    environment:
+      SA_PASSWORD: "Your_password123"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"Your_password123\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: eticketing-rabbitmq
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+
+  redis:
+    image: redis:7-alpine
+    container_name: eticketing-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: services/identity/eTicketing.Identity.Api/Dockerfile
+    container_name: eticketing-identity
+    environment:
+      ConnectionStrings__IdentityDb: "Server=sqlserver,1433;Database=IdentityDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-REPLACE_WITH_ENV_VARIABLE_IN_PRODUCTION_MIN_32_CHARS}"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog/eTicketing.Catalog.Api/Dockerfile
+    container_name: eticketing-catalog
+    environment:
+      ConnectionStrings__CatalogDb: "Server=sqlserver,1433;Database=CatalogDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-REPLACE_WITH_ENV_VARIABLE_IN_PRODUCTION_MIN_32_CHARS}"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+    networks: [eticketing-network]
+
+  ticketing-service:
+    build:
+      context: .
+      dockerfile: services/ticketing/eTicketing.Ticketing.Api/Dockerfile
+    container_name: eticketing-ticketing
+    environment:
+      ConnectionStrings__TicketingDb: "Server=sqlserver,1433;Database=TicketingDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-REPLACE_WITH_ENV_VARIABLE_IN_PRODUCTION_MIN_32_CHARS}"
+      Services__Catalog: "http://catalog-service:8080"
+      Services__Payment: "http://payment-service:8080"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      catalog-service: { condition: service_started }
+    networks: [eticketing-network]
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: services/payment/eTicketing.Payment.Api/Dockerfile
+    container_name: eticketing-payment
+    environment:
+      ConnectionStrings__PaymentDb: "Server=sqlserver,1433;Database=PaymentDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+    networks: [eticketing-network]
+    # Namjerno BEZ "ports:" — dostupan samo interno, poziva ga isključivo ticketing-service.
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: services/notifications/eTicketing.Notifications/Dockerfile
+    container_name: eticketing-notifications
+    environment:
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+
+  pdfgeneration-service:
+    build:
+      context: .
+      dockerfile: services/pdfgeneration/eTicketing.PdfGeneration/Dockerfile
+    container_name: eticketing-pdfgeneration
+    environment:
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/eTicketing.Gateway/Dockerfile
+    container_name: eticketing-gateway
+    environment:
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-REPLACE_WITH_ENV_VARIABLE_IN_PRODUCTION_MIN_32_CHARS}"
+      Cors__AllowedOrigins__0: "http://localhost:4200"
+      ReverseProxy__Clusters__identity-cluster__Destinations__d1__Address: "http://identity-service:8080/"
+      ReverseProxy__Clusters__catalog-cluster__Destinations__d1__Address: "http://catalog-service:8080/"
+      ReverseProxy__Clusters__ticketing-cluster__Destinations__d1__Address: "http://ticketing-service:8080/"
+    ports:
+      - "5000:8080"
+    depends_on:
+      - identity-service
+      - catalog-service
+      - ticketing-service
+    networks: [eticketing-network]
+
+networks:
+  eticketing-network:
+
+volumes:
+  sqlserver-data:
