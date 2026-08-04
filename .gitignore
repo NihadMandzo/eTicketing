@@ -330,9 +330,8 @@ lerna-debug.log*
 *.pem
 *.crt
 *.cer
-backend/API_REQUEST_FLOWS.md
-backend/CODE_REVIEW.md
 
-backend/IMPROVEMENTS_SUMMARY.md
 frontend/web/.claude/CLAUDE.md
-    
+
+SPRINTS
+docs
