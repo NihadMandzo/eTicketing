@@ -1,0 +1,228 @@
+# =============================================================================
+# eTicketing — unified stack
+#
+# One compose file, one .env (see .env.example) for backend + web + the
+# one-shot mobile/desktop app builders.
+#
+#   Backend + web (long-running):
+#     docker compose up -d --build
+#
+#   Mobile APK (one-shot, outputs to ./dist/mobile):
+#     docker compose --profile build run --rm mobile-build
+#
+#   Desktop Linux bundle (one-shot, outputs to ./dist/desktop):
+#     docker compose --profile build run --rm desktop-build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: eticketing-sqlserver
+    environment:
+      SA_PASSWORD: "${SA_PASSWORD:?Set SA_PASSWORD in .env}"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "${SQLSERVER_PORT:-1433}:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: eticketing-rabbitmq
+    ports:
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: eticketing-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Backend services
+  # ---------------------------------------------------------------------------
+  identity-service:
+    build:
+      context: ./backend
+      dockerfile: services/identity/eTicketing.Identity.Api/Dockerfile
+    container_name: eticketing-identity
+    environment:
+      ConnectionStrings__IdentityDb: "Server=sqlserver,1433;Database=IdentityDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
+      Jwt__AccessTokenMinutes: "${JWT_ACCESS_TOKEN_MINUTES:-15}"
+      Jwt__RefreshTokenDays: "${JWT_REFRESH_TOKEN_DAYS:-14}"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  catalog-service:
+    build:
+      context: ./backend
+      dockerfile: services/catalog/eTicketing.Catalog.Api/Dockerfile
+    container_name: eticketing-catalog
+    environment:
+      ConnectionStrings__CatalogDb: "Server=sqlserver,1433;Database=CatalogDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  ticketing-service:
+    build:
+      context: ./backend
+      dockerfile: services/ticketing/eTicketing.Ticketing.Api/Dockerfile
+    container_name: eticketing-ticketing
+    environment:
+      ConnectionStrings__TicketingDb: "Server=sqlserver,1433;Database=TicketingDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
+      Services__Catalog: "http://catalog-service:8080"
+      Services__Payment: "http://payment-service:8080"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      catalog-service: { condition: service_started }
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./backend
+      dockerfile: services/payment/eTicketing.Payment.Api/Dockerfile
+    container_name: eticketing-payment
+    environment:
+      ConnectionStrings__PaymentDb: "Server=sqlserver,1433;Database=PaymentDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+    depends_on:
+      sqlserver: { condition: service_healthy }
+    networks: [eticketing-network]
+    restart: unless-stopped
+    # Intentionally no "ports:" — internal only, called exclusively by ticketing-service.
+
+  notifications-service:
+    build:
+      context: ./backend
+      dockerfile: services/notifications/eTicketing.Notifications/Dockerfile
+    container_name: eticketing-notifications
+    environment:
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  pdfgeneration-service:
+    build:
+      context: ./backend
+      dockerfile: services/pdfgeneration/eTicketing.PdfGeneration/Dockerfile
+    container_name: eticketing-pdfgeneration
+    environment:
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./backend
+      dockerfile: gateway/eTicketing.Gateway/Dockerfile
+    container_name: eticketing-gateway
+    environment:
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
+      Cors__AllowedOrigins__0: "${CORS_ALLOWED_ORIGIN:-http://localhost:4200}"
+      Cors__AllowedOrigins__1: "http://localhost:${WEB_PORT:-4200}"
+      ReverseProxy__Clusters__identity-cluster__Destinations__d1__Address: "http://identity-service:8080/"
+      ReverseProxy__Clusters__catalog-cluster__Destinations__d1__Address: "http://catalog-service:8080/"
+      ReverseProxy__Clusters__ticketing-cluster__Destinations__d1__Address: "http://ticketing-service:8080/"
+    ports:
+      - "${GATEWAY_PORT:-5000}:8080"
+    depends_on:
+      - identity-service
+      - catalog-service
+      - ticketing-service
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Web (Angular SSR — built and served entirely inside Docker)
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ./frontend/web
+      args:
+        WEB_API_BASE_URL: "${WEB_API_BASE_URL:-http://localhost:5000/api}"
+    container_name: eticketing-web
+    environment:
+      PORT: "4000"
+    ports:
+      - "${WEB_PORT:-4200}:4000"
+    depends_on:
+      - gateway
+    networks: [eticketing-network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Mobile (Flutter Android APK) — one-shot builder, not a running service.
+  # Run explicitly: docker compose --profile build run --rm mobile-build
+  # ---------------------------------------------------------------------------
+  mobile-build:
+    build:
+      context: ./frontend/mobile
+      args:
+        MOBILE_API_BASE_URL: "${MOBILE_API_BASE_URL:-http://10.0.2.2:5000/api/}"
+        MOBILE_BUILD_MODE: "${MOBILE_BUILD_MODE:-release}"
+    container_name: eticketing-mobile-build
+    volumes:
+      - ./dist/mobile:/out
+    profiles: ["build"]
+
+  # ---------------------------------------------------------------------------
+  # Desktop (Flutter Linux bundle) — one-shot builder, not a running service.
+  # Run explicitly: docker compose --profile build run --rm desktop-build
+  # ---------------------------------------------------------------------------
+  desktop-build:
+    build:
+      context: ./frontend/desktop
+      args:
+        DESKTOP_API_BASE_URL: "${DESKTOP_API_BASE_URL:-http://localhost:5000/api/}"
+        DESKTOP_BUILD_MODE: "${DESKTOP_BUILD_MODE:-release}"
+    container_name: eticketing-desktop-build
+    volumes:
+      - ./dist/desktop:/out
+    profiles: ["build"]
+
+networks:
+  eticketing-network:
+
+volumes:
+  sqlserver-data:

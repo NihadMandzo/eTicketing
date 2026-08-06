@@ -39,7 +39,7 @@ public class OrganizationService : IOrganizationService
         return Result<PagedResult<OrganizationResponse>>.Success(paged);
     }
 
-    public async Task<Result<OrganizationResponse>> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var org = await _organizationRepository.Query()
             .Where(o => o.Id == id)
@@ -61,7 +61,6 @@ public class OrganizationService : IOrganizationService
                 Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
         }
 
-        var now = DateTime.UtcNow;
         var organization = new Organization
         {
             Name = request.Name,
@@ -70,9 +69,7 @@ public class OrganizationService : IOrganizationService
             PhoneNumber = request.PhoneNumber,
             Email = request.Email,
             Website = request.Website,
-            IsActive = true,
-            CreatedAt = now,
-            UpdatedAt = now
+            IsActive = true
         };
 
         await _organizationRepository.AddAsync(organization, ct);
@@ -86,13 +83,11 @@ public class OrganizationService : IOrganizationService
             Username = request.AdminUsername,
             PasswordHash = hash,
             PasswordSalt = salt,
-            RoleId = request.AdminRoleId,
+            Role = request.AdminRole,
             Organization = organization,
             IsActive = true,
             IsEmailVerified = true,
-            IsFirstLogin = true,
-            CreatedAt = now,
-            UpdatedAt = now
+            IsFirstLogin = true
         };
 
         await _userRepository.AddAsync(adminUser, ct);
@@ -106,7 +101,7 @@ public class OrganizationService : IOrganizationService
             organization.IsActive, 1, organization.CreatedAt));
     }
 
-    public async Task<Result<OrganizationResponse>> UpdateAsync(int id, UpdateOrganizationRequest request, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> UpdateAsync(Guid id, UpdateOrganizationRequest request, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(id, ct);
         if (organization is null)
@@ -119,7 +114,6 @@ public class OrganizationService : IOrganizationService
         organization.Email = request.Email;
         organization.Website = request.Website;
         organization.IsActive = request.IsActive;
-        organization.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -131,7 +125,7 @@ public class OrganizationService : IOrganizationService
             organization.IsActive, userCount, organization.CreatedAt));
     }
 
-    public async Task<Result> DeleteAsync(int id, CancellationToken ct = default)
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(id, ct);
         if (organization is null)
@@ -142,20 +136,20 @@ public class OrganizationService : IOrganizationService
         return Result.Success();
     }
 
-    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(int organizationId, BaseSearchObject query, CancellationToken ct = default)
+    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default)
     {
         var q = _userRepository.Query()
             .Where(u => u.OrganizationId == organizationId)
             .OrderBy(u => u.LastName)
             .Select(u => new UserResponse(
-                u.Id, u.FirstName, u.LastName, u.Email, u.Username, u.PhoneNumber, u.Role.Name,
+                u.Id, u.FirstName, u.LastName, u.Email, u.Username, u.PhoneNumber, u.Role.ToString(),
                 u.OrganizationId, u.IsActive, u.IsEmailVerified, u.IsFirstLogin, u.CreatedAt, u.LastLoginAt));
 
         var paged = await q.ToPagedResultAsync(query.Page, query.PageSize, ct);
         return Result<PagedResult<UserResponse>>.Success(paged);
     }
 
-    public async Task<Result<UserResponse>> AddUserAsync(int organizationId, AddOrganizationUserRequest request, CancellationToken ct = default)
+    public async Task<Result<UserResponse>> AddUserAsync(Guid organizationId, AddOrganizationUserRequest request, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(organizationId, ct);
         if (organization is null)
@@ -168,7 +162,6 @@ public class OrganizationService : IOrganizationService
         }
 
         var (hash, salt) = PasswordHasher.Hash(request.Password);
-        var now = DateTime.UtcNow;
 
         var user = new User
         {
@@ -178,27 +171,23 @@ public class OrganizationService : IOrganizationService
             Username = request.Username,
             PasswordHash = hash,
             PasswordSalt = salt,
-            RoleId = request.RoleId,
+            Role = request.Role,
             OrganizationId = organizationId,
             IsActive = true,
             IsEmailVerified = true,
-            IsFirstLogin = true,
-            CreatedAt = now,
-            UpdatedAt = now
+            IsFirstLogin = true
         };
 
         await _userRepository.AddAsync(user, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var roleName = user.RoleId == (int)RoleType.OrganizationSuperAdmin ? "OrganizationSuperAdmin" : "OrganizationAdmin";
-
         return Result<UserResponse>.Success(new UserResponse(
             user.Id, user.FirstName, user.LastName, user.Email, user.Username, user.PhoneNumber,
-            roleName, user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
+            user.Role.ToString(), user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
             user.CreatedAt, user.LastLoginAt));
     }
 
-    public async Task<Result> RemoveUserAsync(int organizationId, int userId, CancellationToken ct = default)
+    public async Task<Result> RemoveUserAsync(Guid organizationId, Guid userId, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByIdAsync(userId, ct);
         if (user is null || user.OrganizationId != organizationId)

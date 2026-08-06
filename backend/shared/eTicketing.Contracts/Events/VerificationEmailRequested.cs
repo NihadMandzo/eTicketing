@@ -1,7 +1,7 @@
 namespace eTicketing.Contracts.Events;
 
 public record VerificationEmailRequested(
-    int UserId,
+    Guid UserId,
     string Email,
     string FirstName,
     string VerificationCode);

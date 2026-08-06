@@ -14,10 +14,8 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Username).HasMaxLength(50).IsRequired();
         builder.Property(u => u.PhoneNumber).HasMaxLength(20);
 
-        builder.HasOne(u => u.Role)
-            .WithMany(r => r.Users)
-            .HasForeignKey(u => u.RoleId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Role is a plain int-backed enum column (RoleType) — not a relationship, no FK.
+        builder.Property(u => u.Role).HasConversion<int>();
 
         builder.HasOne(u => u.Organization)
             .WithMany(o => o.Users)

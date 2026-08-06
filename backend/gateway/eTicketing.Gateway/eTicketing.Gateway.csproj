@@ -7,8 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <!-- JwtBearer comes transitively via eTicketing.Shared.Auth. -->
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Auth\eTicketing.Shared.Auth.csproj" />
   </ItemGroup>
 
 </Project>

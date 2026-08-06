@@ -1,6 +1,6 @@
 namespace eTicketing.Contracts.Pagination;
 
-public class PagedResult<T>
+public record PagedResult<T>
 {
     public List<T> Items { get; init; } = [];
     public int TotalCount { get; init; }

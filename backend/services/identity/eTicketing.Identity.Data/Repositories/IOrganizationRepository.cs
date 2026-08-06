@@ -3,4 +3,4 @@ using eTicketing.Identity.Data.Entities;
 
 namespace eTicketing.Identity.Data.Repositories;
 
-public interface IOrganizationRepository : IRepository<Organization>;
+public interface IOrganizationRepository : IRepository<Organization, Guid>;

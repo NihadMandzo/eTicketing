@@ -1,7 +1,7 @@
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Results;
+using eTicketing.Contracts.Validation;
 using eTicketing.Identity.Business.Organizations;
-using eTicketing.Identity.Business.Security;
 
 namespace eTicketing.Identity.Api.Endpoints;
 
@@ -11,16 +11,16 @@ public static class OrganizationEndpoints
     {
         var group = app.MapGroup("/organizations").WithTags("Organizations");
 
-        group.MapGet("", GetAll).AllowAnonymous();
-        group.MapGet("/{id:int}", GetById).AllowAnonymous();
+        group.MapGet("", GetAll).AllowAnonymous().WithValidation<OrganizationQuery>();
+        group.MapGet("/{id:guid}", GetById).AllowAnonymous();
 
-        group.MapPost("", Create).RequireAuthorization("SuperAdminOnly");
-        group.MapPut("/{id:int}", Update).RequireAuthorization("PlatformStaff");
-        group.MapDelete("/{id:int}", Delete).RequireAuthorization("SuperAdminOnly");
+        group.MapPost("", Create).RequireAuthorization("SuperAdminOnly").WithValidation<CreateOrganizationRequest>();
+        group.MapPut("/{id:guid}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateOrganizationRequest>();
+        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("SuperAdminOnly");
 
-        group.MapGet("/{id:int}/users", GetUsers).RequireAuthorization();
-        group.MapPost("/{id:int}/users", AddUser).RequireAuthorization("SuperAdminOnly");
-        group.MapDelete("/{id:int}/users/{userId:int}", RemoveUser).RequireAuthorization("SuperAdminOnly");
+        group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization().WithValidation<BaseSearchObject>();
+        group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("SuperAdminOnly").WithValidation<AddOrganizationUserRequest>();
+        group.MapDelete("/{id:guid}/users/{userId:guid}", RemoveUser).RequireAuthorization("SuperAdminOnly");
     }
 
     private static async Task<IResult> GetAll([AsParameters] OrganizationQuery query, IOrganizationService service, CancellationToken ct)
@@ -29,7 +29,7 @@ public static class OrganizationEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> GetById(int id, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> GetById(Guid id, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.GetByIdAsync(id, ct);
         return result.ToHttpResult();
@@ -41,31 +41,31 @@ public static class OrganizationEndpoints
         return result.ToHttpResult(StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> Update(int id, UpdateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> Update(Guid id, UpdateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.UpdateAsync(id, request, ct);
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> Delete(int id, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> Delete(Guid id, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.DeleteAsync(id, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);
     }
 
-    private static async Task<IResult> GetUsers(int id, [AsParameters] BaseSearchObject query, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> GetUsers(Guid id, [AsParameters] BaseSearchObject query, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.GetUsersAsync(id, query, ct);
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> AddUser(int id, AddOrganizationUserRequest request, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> AddUser(Guid id, AddOrganizationUserRequest request, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.AddUserAsync(id, request, ct);
         return result.ToHttpResult(StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> RemoveUser(int id, int userId, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> RemoveUser(Guid id, Guid userId, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.RemoveUserAsync(id, userId, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);

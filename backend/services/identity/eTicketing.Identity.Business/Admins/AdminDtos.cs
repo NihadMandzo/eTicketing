@@ -1,29 +1,15 @@
-using System.ComponentModel.DataAnnotations;
 using eTicketing.Contracts.Pagination;
 
 namespace eTicketing.Identity.Business.Admins;
 
-public class CreateAdminRequest
+public record CreateAdminRequest
 {
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string FirstName { get; set; } = string.Empty;
-
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string LastName { get; set; } = string.Empty;
-
-    [Required, EmailAddress, StringLength(255)]
-    public string Email { get; set; } = string.Empty;
-
-    [Required, StringLength(50, MinimumLength = 3)]
-    public string Username { get; set; } = string.Empty;
-
-    [Required, StringLength(100, MinimumLength = 8)]
-    public string Password { get; set; } = string.Empty;
-
-    [Phone]
-    public string? PhoneNumber { get; set; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
+    public string? PhoneNumber { get; init; }
 }
 
-public class AdminQuery : BaseSearchObject
-{
-}
+public sealed record AdminQuery : BaseSearchObject;

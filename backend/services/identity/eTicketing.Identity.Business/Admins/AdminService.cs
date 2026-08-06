@@ -23,27 +23,27 @@ public class AdminService : IAdminService
     public async Task<Result<PagedResult<UserResponse>>> GetAsync(AdminQuery query, CancellationToken ct = default)
     {
         var q = _userRepository.Query()
-            .Where(u => u.RoleId == (int)RoleType.Admin)
+            .Where(u => u.Role == RoleType.Admin)
             .Where(u => string.IsNullOrEmpty(query.FTS)
                 || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
             .Select(u => new UserResponse(
-                u.Id, u.FirstName, u.LastName, u.Email, u.Username, u.PhoneNumber, u.Role.Name,
+                u.Id, u.FirstName, u.LastName, u.Email, u.Username, u.PhoneNumber, u.Role.ToString(),
                 u.OrganizationId, u.IsActive, u.IsEmailVerified, u.IsFirstLogin, u.CreatedAt, u.LastLoginAt));
 
         var paged = await q.ToPagedResultAsync(query.Page, query.PageSize, ct);
         return Result<PagedResult<UserResponse>>.Success(paged);
     }
 
-    public async Task<Result<UserResponse>> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<Result<UserResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByIdAsync(id, ct);
-        if (user is null || user.RoleId != (int)RoleType.Admin)
+        if (user is null || user.Role != RoleType.Admin)
             return Result<UserResponse>.Failure(Error.NotFound("admin.not_found", "Admin nalog nije pronađen."));
 
         return Result<UserResponse>.Success(new UserResponse(
             user.Id, user.FirstName, user.LastName, user.Email, user.Username, user.PhoneNumber,
-            "Admin", user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
+            user.Role.ToString(), user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
             user.CreatedAt, user.LastLoginAt));
     }
 
@@ -56,7 +56,6 @@ public class AdminService : IAdminService
         }
 
         var (hash, salt) = PasswordHasher.Hash(request.Password);
-        var now = DateTime.UtcNow;
 
         var user = new User
         {
@@ -67,12 +66,10 @@ public class AdminService : IAdminService
             PasswordHash = hash,
             PasswordSalt = salt,
             PhoneNumber = request.PhoneNumber,
-            RoleId = (int)RoleType.Admin,
+            Role = RoleType.Admin,
             IsActive = true,
             IsEmailVerified = true,
-            IsFirstLogin = true,
-            CreatedAt = now,
-            UpdatedAt = now
+            IsFirstLogin = true
         };
 
         await _userRepository.AddAsync(user, ct);
@@ -80,14 +77,14 @@ public class AdminService : IAdminService
 
         return Result<UserResponse>.Success(new UserResponse(
             user.Id, user.FirstName, user.LastName, user.Email, user.Username, user.PhoneNumber,
-            "Admin", user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
+            user.Role.ToString(), user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
             user.CreatedAt, user.LastLoginAt));
     }
 
-    public async Task<Result> DeleteAsync(int id, CancellationToken ct = default)
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByIdAsync(id, ct);
-        if (user is null || user.RoleId != (int)RoleType.Admin)
+        if (user is null || user.Role != RoleType.Admin)
             return Result.Failure(Error.NotFound("admin.not_found", "Admin nalog nije pronađen."));
 
         _userRepository.Remove(user);

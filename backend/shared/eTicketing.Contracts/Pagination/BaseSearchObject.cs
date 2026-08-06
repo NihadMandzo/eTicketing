@@ -1,9 +1,9 @@
 namespace eTicketing.Contracts.Pagination;
 
-public class BaseSearchObject
+public record BaseSearchObject
 {
-    public int? Page { get; set; } = 0;
-    public int? PageSize { get; set; } = 10;
-    public string? FTS { get; set; }
-    public bool? IsActive { get; set; }
+    public int? Page { get; init; } = 0;
+    public int? PageSize { get; init; } = 10;
+    public string? FTS { get; init; }
+    public bool? IsActive { get; init; }
 }
