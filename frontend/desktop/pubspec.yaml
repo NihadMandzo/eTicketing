@@ -42,6 +42,12 @@ dependencies:
   path_provider: ^2.1.4
   #google_fonts: ^8.0.2
 
+dependency_overrides:
+  # path_provider_foundation >=2.4.0 pulls in package:objective_c, whose native
+  # assets build hook fails when building for Windows (macOS/iOS-only code).
+  # Pin to the last version that doesn't use native assets hooks.
+  path_provider_foundation: 2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,5 +1,7 @@
+using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace eTicketing.Identity.Data.Repositories;
@@ -19,4 +21,21 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
 
     public Task<bool> ExistsByUsernameAsync(string username, Guid excludeUserId, CancellationToken ct = default)
         => Query().AnyAsync(u => u.Username == username && u.Id != excludeUserId, ct);
+
+    public Task<PagedResult<User>> SearchByRoleAsync(RoleType role, BaseSearchObject query, CancellationToken ct = default)
+        => Query()
+            .Where(u => u.Role == role)
+            .Where(u => string.IsNullOrEmpty(query.FTS)
+                || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
+            .OrderBy(u => u.LastName)
+            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+
+    public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default)
+        => Query()
+            .Where(u => u.OrganizationId == organizationId)
+            .OrderBy(u => u.LastName)
+            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+
+    public Task<int> CountByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
+        => Query().CountAsync(u => u.OrganizationId == organizationId, ct);
 }

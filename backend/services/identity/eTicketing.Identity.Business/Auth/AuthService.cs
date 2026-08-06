@@ -3,8 +3,8 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
-using eTicketing.Identity.Data.Enums;
 using eTicketing.Identity.Data.Repositories;
+using Mapster;
 using Microsoft.Extensions.Options;
 
 namespace eTicketing.Identity.Business.Auth;
@@ -47,22 +47,8 @@ public class AuthService : IAuthService
                 Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
         }
 
-        var (hash, salt) = PasswordHasher.Hash(request.Password);
-
-        var user = new User
-        {
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            Email = request.Email,
-            Username = request.Username,
-            PasswordHash = hash,
-            PasswordSalt = salt,
-            PhoneNumber = request.PhoneNumber,
-            Role = RoleType.User,
-            IsActive = true,
-            IsEmailVerified = false,
-            IsFirstLogin = true
-        };
+        var user = request.Adapt<User>();
+        (user.PasswordHash, user.PasswordSalt) = PasswordHasher.Hash(request.Password);
 
         await _userRepository.AddAsync(user, ct);
 
@@ -164,7 +150,7 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(ct);
 
         var accessToken = _tokenGenerator.GenerateAccessToken(user);
-        return Result<LoginResult>.Success(new LoginResult(ToResponse(user), accessToken, newRawToken));
+        return Result<LoginResult>.Success(new LoginResult(user.Adapt<UserResponse>(), accessToken, newRawToken));
     }
 
     public async Task LogoutAsync(string rawRefreshToken, CancellationToken ct = default)
@@ -178,7 +164,7 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByIdAsync(userId, ct);
         return user is null
             ? Result<UserResponse>.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."))
-            : Result<UserResponse>.Success(ToResponse(user));
+            : Result<UserResponse>.Success(user.Adapt<UserResponse>());
     }
 
     public async Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default)
@@ -221,13 +207,12 @@ public class AuthService : IAuthService
                 Error.Conflict("user.already_exists", "Korisničko ime je zauzeto."));
         }
 
-        user.FirstName = request.FirstName;
-        user.LastName = request.LastName;
-        user.Username = request.Username;
-        user.PhoneNumber = request.PhoneNumber;
+        // In-place update — Mapster maps matching members (FirstName/LastName/Username/
+        // PhoneNumber) onto the already-tracked entity, leaving everything else untouched.
+        request.Adapt(user);
 
         await _unitOfWork.SaveChangesAsync(ct);
-        return Result<UserResponse>.Success(ToResponse(user));
+        return Result<UserResponse>.Success(user.Adapt<UserResponse>());
     }
 
     private async Task<LoginResult> IssueTokensAsync(User user, CancellationToken ct)
@@ -244,11 +229,6 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(ct);
 
         var accessToken = _tokenGenerator.GenerateAccessToken(user);
-        return new LoginResult(ToResponse(user), accessToken, rawRefreshToken);
+        return new LoginResult(user.Adapt<UserResponse>(), accessToken, rawRefreshToken);
     }
-
-    private static UserResponse ToResponse(User user) => new(
-        user.Id, user.FirstName, user.LastName, user.Email, user.Username, user.PhoneNumber,
-        user.Role.ToString(), user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
-        user.CreatedAt, user.LastLoginAt);
 }

@@ -55,10 +55,15 @@ public static class IdentityServiceCollectionExtensions
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();
         builder.Services.AddScoped<IAdminService, AdminService>();
+        builder.Services.AddScoped<IAuthCookieService, AuthCookieService>();
         builder.Services.AddValidatorsFromAssembly(typeof(IAuthService).Assembly);
         // Registers the shared BaseSearchObjectValidator (for BaseSearchObject) used directly
         // by routes like GetUsers that bind BaseSearchObject without a derived query type.
         builder.Services.AddValidatorsFromAssembly(typeof(BaseSearchObjectValidator).Assembly);
+        // Mapster's IRegister configs (UserMappingConfig, OrganizationMappingConfig, ...) are
+        // scanned into TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in
+        // eTicketing.Identity.Business — see MapsterRegistration.cs — so no explicit call is
+        // needed here.
 
         // --- Messaging ---
         builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
