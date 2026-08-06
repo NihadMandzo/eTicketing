@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -11,7 +10,6 @@ import '../../models/responses/organization_response.dart';
 import '../../models/responses/user_profile.dart';
 import '../../providers/api_exception.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/authorization.dart';
 import '../../providers/organization_provider.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
@@ -19,44 +17,6 @@ const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
 
 const Color _kPrimary = Color(0xFF0D7C66);
 const Color _kPrimaryDark = Color(0xFF0a6b57);
-
-// ─── JWT helper ───────────────────────────────────────────────────────────────
-
-int? _orgIdFromToken() {
-  final token = Authorization.token;
-  if (token == null || token.isEmpty) return null;
-  try {
-    final parts = token.split('.');
-    if (parts.length != 3) return null;
-    // Base64-decode the payload (part 1)
-    String payload = parts[1];
-    // JWT base64url → standard base64
-    payload = payload.replaceAll('-', '+').replaceAll('_', '/');
-    switch (payload.length % 4) {
-      case 2:
-        payload += '==';
-        break;
-      case 3:
-        payload += '=';
-        break;
-    }
-    final decoded = utf8.decode(base64Decode(payload));
-    final claims = jsonDecode(decoded) as Map<String, dynamic>;
-    // The claim key may be "OrganizationId" or
-    // "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/organizationid" etc.
-    for (final key in claims.keys) {
-      final lower = key.toLowerCase();
-      if (lower == 'organizationid' || lower.endsWith('/organizationid')) {
-        final val = claims[key];
-        if (val is int) return val;
-        if (val is String) return int.tryParse(val);
-      }
-    }
-    return null;
-  } catch (_) {
-    return null;
-  }
-}
 
 // ─── Entry point: call this to open the dialog ────────────────────────────────
 
@@ -124,7 +84,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   bool _saving = false;
   bool _loadingOrg = false;
-  int? _orgId;
+  String? _orgId;
   OrganizationResponse? _orgData;
   UserProfile? _updatedUser;
 
@@ -159,8 +119,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _roleCtrl.text = _roleLabel(u.roleName);
     _orgNameProfileCtrl.text = u.organizationName ?? '';
 
-    // Resolve org id from token or user profile
-    _orgId = u.organizationId ?? _orgIdFromToken();
+    _orgId = u.organizationId;
 
     if (_hasOrg && _orgId != null) {
       _fetchOrganization();

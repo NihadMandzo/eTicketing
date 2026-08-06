@@ -1,4 +1,86 @@
-<section class="profile-page">
-  <h1 class="page-title">Profile</h1>
-  <p class="page-description">Manage your account settings</p>
-</section>
+@if (currentUser(); as user) {
+  <div class="profile-page">
+    <section class="page-header">
+      <div class="container">
+        <div class="avatar">{{ initials() }}</div>
+        <h1>{{ user.firstName }} {{ user.lastName }}</h1>
+        <p class="page-subtitle">{{ user.email }}</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <div class="container">
+        <form class="card" [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
+          <h2>Moj profil</h2>
+
+          @if (profileMessage()) {
+            <div class="alert alert-success">{{ profileMessage() }}</div>
+          }
+          @if (profileError()) {
+            <div class="alert alert-error">{{ profileError() }}</div>
+          }
+
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">Ime</span>
+              <input type="text" formControlName="firstName" class="field-input" />
+            </label>
+            <label class="field">
+              <span class="field-label">Prezime</span>
+              <input type="text" formControlName="lastName" class="field-input" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field-label">Korisničko ime</span>
+            <input type="text" formControlName="username" class="field-input" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Broj telefona</span>
+            <input type="tel" formControlName="phoneNumber" class="field-input" />
+          </label>
+
+          <button type="submit" class="btn btn-primary" [disabled]="isSavingProfile()">
+            {{ isSavingProfile() ? 'Čuvanje…' : 'Sačuvaj izmjene' }}
+          </button>
+        </form>
+
+        <form class="card" [formGroup]="passwordForm" (ngSubmit)="savePassword()" novalidate>
+          <h2>Promjena lozinke</h2>
+
+          @if (passwordMessage()) {
+            <div class="alert alert-success">{{ passwordMessage() }}</div>
+          }
+          @if (passwordError()) {
+            <div class="alert alert-error">{{ passwordError() }}</div>
+          }
+
+          <label class="field">
+            <span class="field-label">Trenutna lozinka</span>
+            <input type="password" formControlName="currentPassword" class="field-input" autocomplete="current-password" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Nova lozinka</span>
+            <input type="password" formControlName="newPassword" class="field-input" autocomplete="new-password" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Potvrdite novu lozinku</span>
+            <input type="password" formControlName="confirmPassword" class="field-input" autocomplete="new-password" />
+            @if (passwordForm.errors?.['passwordMismatch'] && passwordForm.controls.confirmPassword.touched) {
+              <span class="field-error">Lozinke se ne podudaraju.</span>
+            }
+          </label>
+
+          <button type="submit" class="btn btn-primary" [disabled]="isSavingPassword()">
+            {{ isSavingPassword() ? 'Čuvanje…' : 'Promijeni lozinku' }}
+          </button>
+        </form>
+
+        <button type="button" class="btn btn-outline logout-btn" (click)="logout()">Odjavi se</button>
+      </div>
+    </section>
+  </div>
+}

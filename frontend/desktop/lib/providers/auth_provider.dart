@@ -1,115 +1,97 @@
-import 'dart:convert';
+import 'package:dio/dio.dart';
 
-import 'package:http/http.dart' as http;
-
+import '../core/api_client.dart';
 import '../models/api_error.dart';
-import 'base_provider.dart';
 import '../models/requests/change_password_request.dart';
 import '../models/requests/login_request.dart';
 import '../models/requests/update_user_request.dart';
 import '../models/responses/login_response.dart';
 import '../models/responses/user_profile.dart';
 import 'api_exception.dart';
-import 'authorization.dart';
 
-
+/// All auth state lives server-side in the httpOnly session cookie — this
+/// class never reads or stores a token itself. [apiClient]'s cookie jar
+/// attaches/receives `eticketing_at`/`eticketing_rt` automatically.
 class AuthProvider {
   static const String _endpoint = 'Auth';
-  static const Duration _timeout = Duration(seconds: 10);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  Map<String, String> _publicHeaders() => {
-        'Content-Type': 'application/json',
-      };
-
-  Map<String, String> _authHeaders() => {
-        'Content-Type': 'application/json',
-        if (Authorization.token != null && Authorization.token!.isNotEmpty)
-          'Authorization': 'Bearer ${Authorization.token}',
-      };
-
-  Never _handleError(http.Response response) {
+  Never _handleError(Response response) {
     ApiError apiError;
     try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      apiError = ApiError.fromJson(body);
+      final body = response.data;
+      apiError = body is Map<String, dynamic>
+          ? ApiError.fromJson(body)
+          : ApiError(message: body?.toString());
     } catch (_) {
-      apiError = ApiError(errorCode: response.body);
+      apiError = ApiError(message: response.data?.toString());
     }
-    throw ApiException(statusCode: response.statusCode, apiError: apiError);
+    throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
   }
 
-  bool _isSuccess(int code) => code >= 200 && code < 300;
+  bool _isSuccess(int? code) => code != null && code >= 200 && code < 300;
 
-  // ── login ─────────────────────────────────────────────────────────────────
-  /// Authenticates the user. On success, the JWT token is automatically
-  /// stored in [Authorization.token] so every subsequent request carries it.
+  /// Authenticates the user. On success, the backend writes the session
+  /// cookies directly on the response — nothing for this app to store.
   Future<LoginResponse> login(LoginRequest request) async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/login');
-
-    final response = await http.post(
-      uri,
-      headers: _publicHeaders(),
-      body: jsonEncode(request.toJson()),
-    ).timeout(_timeout);
+    final response = await apiClient.post('$_endpoint/login', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final loginResponse = LoginResponse.fromJson(data);
-
-    // 🔑 Register the token globally so BaseProvider sends it on every request
-    Authorization.token = loginResponse.token;
-
-    return loginResponse;
+    return LoginResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  // ── me ────────────────────────────────────────────────────────────────────
+  /// Self-registration is intentionally not exposed here — the desktop
+  /// console is admin/organizer-only; accounts are provisioned by a
+  /// SuperAdmin via the Admins/Organizations screens instead.
+
+  /// Silently renews the session using the refresh cookie. Returns the
+  /// refreshed [LoginResponse], or throws [ApiException] if the refresh
+  /// token is missing/expired/revoked (caller should route to the login screen).
+  Future<LoginResponse> refresh() async {
+    final response = await apiClient.post('$_endpoint/refresh');
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return LoginResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Revokes the current session server-side and clears the cookies.
+  Future<void> logout() async {
+    try {
+      await apiClient.post('$_endpoint/logout');
+    } catch (_) {
+      // Logging out is best-effort from the UI's perspective — even if this
+      // call fails (e.g. already-expired session), the caller still
+      // navigates back to the login screen.
+    }
+  }
+
   /// Returns the profile of the currently authenticated user.
   Future<UserProfile> me() async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/me');
-
-    final response = await http.get(uri, headers: _authHeaders()).timeout(_timeout);
+    final response = await apiClient.get('$_endpoint/me');
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return UserProfile.fromJson(data);
+    return UserProfile.fromJson(response.data as Map<String, dynamic>);
   }
 
-  // ── changePassword ────────────────────────────────────────────────────────
   /// Changes the password for the currently authenticated user.
   /// Returns [true] on success, throws [ApiException] on failure.
   Future<bool> changePassword(ChangePasswordRequest request) async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/change-password');
-
-    final response = await http.post(
-      uri,
-      headers: _authHeaders(),
-      body: jsonEncode(request.toJson()),
-    ).timeout(_timeout);
+    final response = await apiClient.post('$_endpoint/change-password', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return true;
   }
 
-  // ── updateUser ────────────────────────────────────────────────────────────
   /// Updates the profile of the currently authenticated user.
   /// Returns the updated [UserProfile] from the server response.
   Future<UserProfile> updateUser(UpdateUserRequest request) async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}$_endpoint/update-user');
-
-    final response = await http.put(
-      uri,
-      headers: _authHeaders(),
-      body: jsonEncode(request.toJson()),
-    ).timeout(_timeout);
+    final response = await apiClient.put('$_endpoint/update-user', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return UserProfile.fromJson(data);
+    return UserProfile.fromJson(response.data as Map<String, dynamic>);
   }
 }

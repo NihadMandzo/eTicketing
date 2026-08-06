@@ -1,5 +1,5 @@
 class OrganizationResponse {
-  final int id;
+  final String id;
   final String name;
   final String description;
   final String address;
@@ -36,7 +36,7 @@ class OrganizationResponse {
     if (json['createdAt'] == null) throw const FormatException('Missing createdAt');
 
     return OrganizationResponse(
-      id: json['id'] as int,
+      id: json['id'] as String,
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
       address: json['address'] as String,

@@ -58,15 +58,18 @@ class _UsersScreenState extends State<UsersScreen> {
             : _searchController.text.trim(),
       );
 
-      // SuperAdmin  → GET /api/Admin
-      // OrgSuperAdmin → GET /api/Organizations/users
-      final provider =
-          _isSuperAdmin ? AdminProvider() : OrganizationUsersProvider();
-
-      final result = await provider.getAll(
-        searchObject: searchObject,
-        fromJson: AdminUserResponse.fromJson,
-      );
+      // SuperAdmin    → GET /api/admins
+      // OrgSuperAdmin → GET /api/organizations/{organizationId}/users
+      final result = _isSuperAdmin
+          ? await AdminProvider().getAll(
+              searchObject: searchObject,
+              fromJson: AdminUserResponse.fromJson,
+            )
+          : await OrganizationUsersProvider().getAll(
+              organizationId: widget.currentUser.organizationId!,
+              searchObject: searchObject,
+              fromJson: AdminUserResponse.fromJson,
+            );
 
       if (mounted) {
         setState(() {

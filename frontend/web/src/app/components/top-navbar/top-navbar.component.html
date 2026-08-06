@@ -11,8 +11,13 @@
     </a>
     
     <div class="auth-buttons">
-      <button class="btn btn-ghost">Prijava</button>
-      <button class="btn btn-primary">Registracija</button>
+      @if (isAuthenticated()) {
+        <a routerLink="/profil" class="btn btn-ghost user-link">{{ currentUser()?.firstName }}</a>
+        <button type="button" class="btn btn-primary" (click)="logout()">Odjava</button>
+      } @else {
+        <a routerLink="/prijava" class="btn btn-ghost">Prijava</a>
+        <a routerLink="/registracija" class="btn btn-primary">Registracija</a>
+      }
     </div>
   </div>
 </header>

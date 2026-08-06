@@ -1,5 +1,5 @@
 class AdminUserResponse {
-  final int id;
+  final String id;
   final String firstName;
   final String lastName;
   final String username;
@@ -38,7 +38,7 @@ class AdminUserResponse {
     if (json['email'] == null) throw const FormatException('Missing required field: email');
 
     return AdminUserResponse(
-      id: json['id'] as int,
+      id: json['id'] as String,
       firstName: json['firstName'] as String,
       lastName: json['lastName'] as String,
       username: json['username'] as String,

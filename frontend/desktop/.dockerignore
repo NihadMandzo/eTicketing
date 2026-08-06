@@ -1,0 +1,9 @@
+build
+.dart_tool
+.idea
+.git
+*.iml
+android
+ios
+macos
+web

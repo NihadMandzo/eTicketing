@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
-import '../../providers/authorization.dart';
+import '../../providers/auth_provider.dart';
 import '../categories_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
@@ -42,8 +42,9 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  void _logout() {
-    Authorization.token = null;
+  Future<void> _logout() async {
+    await AuthProvider().logout();
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (_) => false,
