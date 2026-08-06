@@ -1,5 +1,5 @@
 class UserProfile {
-  final int id;
+  final String id;
   final String firstName;
   final String lastName;
   final String username;
@@ -9,7 +9,7 @@ class UserProfile {
   final bool isEmailVerified;
   final bool isFirstLogin;
   final String roleName;
-  final int? organizationId;
+  final String? organizationId;
   final String? organizationName;
   final DateTime? lastLoginAt;
   final DateTime createdAt;
@@ -47,7 +47,7 @@ class UserProfile {
     }
 
     return UserProfile(
-      id: json['id'] as int,
+      id: json['id'] as String,
       firstName: json['firstName'] as String,
       lastName: json['lastName'] as String,
       username: json['username'] as String,
@@ -57,7 +57,7 @@ class UserProfile {
       isEmailVerified: json['isEmailVerified'] as bool? ?? false,
       isFirstLogin: json['isFirstLogin'] as bool? ?? false,
       roleName: json['roleName'] as String,
-      organizationId: json['organizationId'] as int?,
+      organizationId: json['organizationId'] as String?,
       organizationName: json['organizationName'] as String?,
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.tryParse(json['lastLoginAt'] as String)

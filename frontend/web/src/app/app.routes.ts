@@ -30,6 +30,18 @@ export const routes: Routes = [
         path: 'kontakt',
         loadChildren: () => import('./pages/contact/contact.routes').then(m => m.CONTACT_ROUTES)
       },
+      {
+        path: 'prijava',
+        loadChildren: () => import('./pages/login/login.routes').then(m => m.LOGIN_ROUTES)
+      },
+      {
+        path: 'registracija',
+        loadChildren: () => import('./pages/register/register.routes').then(m => m.REGISTER_ROUTES)
+      },
+      {
+        path: 'profil',
+        loadChildren: () => import('./pages/profile/profile.routes').then(m => m.PROFILE_ROUTES)
+      },
       // Redirects for old English paths
       { path: 'events', redirectTo: 'dogadjaji', pathMatch: 'full' },
       { path: 'help', redirectTo: 'pomoc', pathMatch: 'full' },

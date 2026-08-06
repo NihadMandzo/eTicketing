@@ -1,134 +1,71 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../core/api_client.dart';
 import '../models/api_error.dart';
 import '../models/requests/organization_insert_request.dart';
 import '../models/requests/organization_update_request.dart';
 import '../models/responses/organization_response.dart';
 import 'api_exception.dart';
-import 'authorization.dart';
 import 'base_provider.dart';
 
-class OrganizationProvider extends BaseProvider<OrganizationResponse> {
-  OrganizationProvider() : super('Organizations');
+class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
+  OrganizationProvider() : super('organizations');
 
-  Map<String, String> _authHeaders() {
-    if (Authorization.token != null && Authorization.token!.isNotEmpty) {
-      return {'Authorization': 'Bearer ${Authorization.token}'};
+  Never _handleError(Response response) {
+    ApiError apiError;
+    try {
+      final body = response.data;
+      apiError = body is Map<String, dynamic> ? ApiError.fromJson(body) : ApiError(message: body?.toString());
+    } catch (_) {
+      apiError = ApiError(message: response.data?.toString());
     }
-    return {};
+    throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
   }
 
-  /// POST /api/Organizations (multipart – logo is optional)
+  bool _isSuccess(int? code) => code != null && code >= 200 && code < 300;
+
+  /// POST /api/organizations (multipart – logo is optional)
   Future<OrganizationResponse> insertOrganization(
     OrganizationInsertRequest request, {
     File? logoFile,
   }) async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}Organizations');
-    final multipart = http.MultipartRequest('POST', uri)
-      ..headers.addAll(_authHeaders())
-      ..fields.addAll(request.toFields());
+    final formData = FormData.fromMap({
+      ...request.toFields(),
+      'AdminPassword': request.adminPassword,
+      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
+    });
 
-    if (logoFile != null) {
-      multipart.files.add(
-        await http.MultipartFile.fromPath('Logo', logoFile.path),
-      );
-    }
+    final response = await apiClient.post('organizations', data: formData);
 
-    http.Response response;
-    try {
-      response = await Future.timeout(
-        const Duration(seconds: 15),
-        () async {
-          final streamed = await multipart.send();
-          return await http.Response.fromStream(streamed);
-        }(),
-      );
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+    if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      ApiError apiError;
-      try {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        apiError = ApiError.fromJson(body);
-      } catch (_) {
-        apiError = ApiError(errorCode: response.body);
-      }
-      throw ApiException(statusCode: response.statusCode, apiError: apiError);
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return OrganizationResponse.fromJson(data);
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<OrganizationResponse> getOrganization(int id) {
+  Future<OrganizationResponse> getOrganization(String id) {
     return getById(id, fromJson: OrganizationResponse.fromJson);
   }
 
-  /// Updates organization using multipart/form-data so a logo file can be
-  /// attached alongside the regular text fields.
+  /// Updates the organization using multipart/form-data so a logo file can
+  /// be attached alongside the regular text fields.
   Future<OrganizationResponse> updateOrganization(
-    int id,
+    String id,
     OrganizationUpdateRequest request, {
     File? logoFile,
     bool removeLogo = false,
   }) async {
-    final uri = Uri.parse('${BaseProvider.baseUrl}Organizations/$id');
+    final formData = FormData.fromMap({
+      ...request.toFields(),
+      'RemoveLogo': removeLogo.toString(),
+      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
+    });
 
-    final multipart = http.MultipartRequest('PUT', uri);
+    final response = await apiClient.put('organizations/$id', data: formData);
 
-    // Auth header
-    if (Authorization.token != null && Authorization.token!.isNotEmpty) {
-      multipart.headers['Authorization'] = 'Bearer ${Authorization.token}';
-    }
+    if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    // Text fields
-    multipart.fields.addAll(request.toFields());
-    multipart.fields['RemoveLogo'] = removeLogo.toString();
-
-    // Logo file (if provided)
-    if (logoFile != null) {
-      multipart.files.add(
-        await http.MultipartFile.fromPath('Logo', logoFile.path),
-      );
-    }
-
-    http.Response response;
-    try {
-      response = await Future.timeout(
-        const Duration(seconds: 15),
-        () async {
-          final streamed = await multipart.send();
-          return await http.Response.fromStream(streamed);
-        }(),
-      );
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      ApiError apiError;
-      try {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        apiError = ApiError.fromJson(body);
-      } catch (_) {
-        apiError = ApiError(errorCode: response.body);
-      }
-      throw ApiException(statusCode: response.statusCode, apiError: apiError);
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return OrganizationResponse.fromJson(data);
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
   }
 }

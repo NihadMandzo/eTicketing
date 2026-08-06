@@ -9,8 +9,8 @@ public class IdentityDbContext : DbContext, IUnitOfWork
     public IdentityDbContext(DbContextOptions<IdentityDbContext> options) : base(options) { }
 
     public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +24,6 @@ public class IdentityDbContext : DbContext, IUnitOfWork
             .HasIndex(u => u.Username)
             .IsUnique();
 
-        Seeds.RoleSeed.Seed(modelBuilder);
+        // Role is no longer a seeded/DB-backed entity — it's the compile-time RoleType enum.
     }
 }

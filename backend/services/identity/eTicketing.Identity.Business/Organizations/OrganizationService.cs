@@ -4,9 +4,8 @@ using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
-using eTicketing.Identity.Data.Enums;
 using eTicketing.Identity.Data.Repositories;
-using Microsoft.EntityFrameworkCore;
+using Mapster;
 
 namespace eTicketing.Identity.Business.Organizations;
 
@@ -28,29 +27,17 @@ public class OrganizationService : IOrganizationService
 
     public async Task<Result<PagedResult<OrganizationResponse>>> GetAsync(OrganizationQuery query, CancellationToken ct = default)
     {
-        var q = _organizationRepository.Query()
-            .Where(o => string.IsNullOrEmpty(query.FTS) || o.Name.Contains(query.FTS))
-            .OrderBy(o => o.Name)
-            .Select(o => new OrganizationResponse(
-                o.Id, o.Name, o.Description, o.Address, o.PhoneNumber, o.Email, o.Website,
-                o.LogoUrl, o.IsActive, o.Users.Count, o.CreatedAt));
-
-        var paged = await q.ToPagedResultAsync(query.Page, query.PageSize, ct);
-        return Result<PagedResult<OrganizationResponse>>.Success(paged);
+        var paged = await _organizationRepository.SearchAsync(query, ct);
+        return Result<PagedResult<OrganizationResponse>>.Success(paged.Adapt<PagedResult<OrganizationResponse>>());
     }
 
-    public async Task<Result<OrganizationResponse>> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var org = await _organizationRepository.Query()
-            .Where(o => o.Id == id)
-            .Select(o => new OrganizationResponse(
-                o.Id, o.Name, o.Description, o.Address, o.PhoneNumber, o.Email, o.Website,
-                o.LogoUrl, o.IsActive, o.Users.Count, o.CreatedAt))
-            .FirstOrDefaultAsync(ct);
+        var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
 
-        return org is null
+        return organization is null
             ? Result<OrganizationResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."))
-            : Result<OrganizationResponse>.Success(org);
+            : Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>());
     }
 
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
@@ -61,77 +48,46 @@ public class OrganizationService : IOrganizationService
                 Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
         }
 
-        var now = DateTime.UtcNow;
-        var organization = new Organization
-        {
-            Name = request.Name,
-            Description = request.Description,
-            Address = request.Address,
-            PhoneNumber = request.PhoneNumber,
-            Email = request.Email,
-            Website = request.Website,
-            IsActive = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-
+        var organization = request.Adapt<Organization>();
         await _organizationRepository.AddAsync(organization, ct);
 
-        var (hash, salt) = PasswordHasher.Hash(request.AdminPassword);
-        var adminUser = new User
-        {
-            FirstName = request.AdminFirstName,
-            LastName = request.AdminLastName,
-            Email = request.AdminEmail,
-            Username = request.AdminUsername,
-            PasswordHash = hash,
-            PasswordSalt = salt,
-            RoleId = request.AdminRoleId,
-            Organization = organization,
-            IsActive = true,
-            IsEmailVerified = true,
-            IsFirstLogin = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
+        var adminUser = request.Adapt<User>();
+        adminUser.Organization = organization;
+        (adminUser.PasswordHash, adminUser.PasswordSalt) = PasswordHasher.Hash(request.AdminPassword);
 
         await _userRepository.AddAsync(adminUser, ct);
 
         // Jedan SaveChangesAsync poziv — organizacija i prvi organizator se upisuju u istoj transakciji.
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return Result<OrganizationResponse>.Success(new OrganizationResponse(
-            organization.Id, organization.Name, organization.Description, organization.Address,
-            organization.PhoneNumber, organization.Email, organization.Website, organization.LogoUrl,
-            organization.IsActive, 1, organization.CreatedAt));
+        // EF's change-tracker fixup already put adminUser into organization.Users once both
+        // entities were tracked (set via the Organization nav property above), so the mapped
+        // UserCount comes out as 1 without a separate query.
+        return Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>());
     }
 
-    public async Task<Result<OrganizationResponse>> UpdateAsync(int id, UpdateOrganizationRequest request, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> UpdateAsync(Guid id, UpdateOrganizationRequest request, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(id, ct);
         if (organization is null)
             return Result<OrganizationResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
 
-        organization.Name = request.Name;
-        organization.Description = request.Description;
-        organization.Address = request.Address;
-        organization.PhoneNumber = request.PhoneNumber;
-        organization.Email = request.Email;
-        organization.Website = request.Website;
-        organization.IsActive = request.IsActive;
-        organization.UpdatedAt = DateTime.UtcNow;
+        // In-place update — Mapster maps matching members (Name/Description/Address/
+        // PhoneNumber/Email/Website/IsActive) onto the already-tracked entity, leaving Id/
+        // CreatedAt/Users untouched.
+        request.Adapt(organization);
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var userCount = await _userRepository.Query().CountAsync(u => u.OrganizationId == id, ct);
+        var userCount = await _userRepository.CountByOrganizationAsync(id, ct);
 
-        return Result<OrganizationResponse>.Success(new OrganizationResponse(
-            organization.Id, organization.Name, organization.Description, organization.Address,
-            organization.PhoneNumber, organization.Email, organization.Website, organization.LogoUrl,
-            organization.IsActive, userCount, organization.CreatedAt));
+        // organization.Users isn't loaded here (GetByIdAsync, unlike GetByIdWithUsersAsync,
+        // doesn't Include it), so the mapped UserCount would come out as 0 — override it with
+        // the freshly counted value instead of paying for an Include just for this one field.
+        return Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>() with { UserCount = userCount });
     }
 
-    public async Task<Result> DeleteAsync(int id, CancellationToken ct = default)
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(id, ct);
         if (organization is null)
@@ -142,20 +98,13 @@ public class OrganizationService : IOrganizationService
         return Result.Success();
     }
 
-    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(int organizationId, BaseSearchObject query, CancellationToken ct = default)
+    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default)
     {
-        var q = _userRepository.Query()
-            .Where(u => u.OrganizationId == organizationId)
-            .OrderBy(u => u.LastName)
-            .Select(u => new UserResponse(
-                u.Id, u.FirstName, u.LastName, u.Email, u.Username, u.PhoneNumber, u.Role.Name,
-                u.OrganizationId, u.IsActive, u.IsEmailVerified, u.IsFirstLogin, u.CreatedAt, u.LastLoginAt));
-
-        var paged = await q.ToPagedResultAsync(query.Page, query.PageSize, ct);
-        return Result<PagedResult<UserResponse>>.Success(paged);
+        var paged = await _userRepository.SearchByOrganizationAsync(organizationId, query, ct);
+        return Result<PagedResult<UserResponse>>.Success(paged.Adapt<PagedResult<UserResponse>>());
     }
 
-    public async Task<Result<UserResponse>> AddUserAsync(int organizationId, AddOrganizationUserRequest request, CancellationToken ct = default)
+    public async Task<Result<UserResponse>> AddUserAsync(Guid organizationId, AddOrganizationUserRequest request, CancellationToken ct = default)
     {
         var organization = await _organizationRepository.GetByIdAsync(organizationId, ct);
         if (organization is null)
@@ -167,38 +116,17 @@ public class OrganizationService : IOrganizationService
                 Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
         }
 
-        var (hash, salt) = PasswordHasher.Hash(request.Password);
-        var now = DateTime.UtcNow;
-
-        var user = new User
-        {
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            Email = request.Email,
-            Username = request.Username,
-            PasswordHash = hash,
-            PasswordSalt = salt,
-            RoleId = request.RoleId,
-            OrganizationId = organizationId,
-            IsActive = true,
-            IsEmailVerified = true,
-            IsFirstLogin = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
+        var user = request.Adapt<User>();
+        user.OrganizationId = organizationId;
+        (user.PasswordHash, user.PasswordSalt) = PasswordHasher.Hash(request.Password);
 
         await _userRepository.AddAsync(user, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var roleName = user.RoleId == (int)RoleType.OrganizationSuperAdmin ? "OrganizationSuperAdmin" : "OrganizationAdmin";
-
-        return Result<UserResponse>.Success(new UserResponse(
-            user.Id, user.FirstName, user.LastName, user.Email, user.Username, user.PhoneNumber,
-            roleName, user.OrganizationId, user.IsActive, user.IsEmailVerified, user.IsFirstLogin,
-            user.CreatedAt, user.LastLoginAt));
+        return Result<UserResponse>.Success(user.Adapt<UserResponse>());
     }
 
-    public async Task<Result> RemoveUserAsync(int organizationId, int userId, CancellationToken ct = default)
+    public async Task<Result> RemoveUserAsync(Guid organizationId, Guid userId, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByIdAsync(userId, ct);
         if (user is null || user.OrganizationId != organizationId)

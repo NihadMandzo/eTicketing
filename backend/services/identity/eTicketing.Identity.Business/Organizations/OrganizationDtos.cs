@@ -1,96 +1,53 @@
-using System.ComponentModel.DataAnnotations;
 using eTicketing.Contracts.Pagination;
+using eTicketing.Identity.Data.Enums;
 
 namespace eTicketing.Identity.Business.Organizations;
 
-public class CreateOrganizationRequest
+public record CreateOrganizationRequest
 {
-    [Required, StringLength(200, MinimumLength = 2)]
-    public string Name { get; set; } = string.Empty;
-
-    [StringLength(1000)]
-    public string Description { get; set; } = string.Empty;
-
-    [StringLength(500)]
-    public string Address { get; set; } = string.Empty;
-
-    [Phone]
-    public string PhoneNumber { get; set; } = string.Empty;
-
-    [EmailAddress, StringLength(255)]
-    public string Email { get; set; } = string.Empty;
-
-    [Url]
-    public string? Website { get; set; }
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Address { get; init; } = string.Empty;
+    public string PhoneNumber { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string? Website { get; init; }
 
     // Podaci prvog organizatora — kreira se u istoj transakciji kao i organizacija
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string AdminFirstName { get; set; } = string.Empty;
+    public string AdminFirstName { get; init; } = string.Empty;
+    public string AdminLastName { get; init; } = string.Empty;
+    public string AdminEmail { get; init; } = string.Empty;
+    public string AdminUsername { get; init; } = string.Empty;
+    public string AdminPassword { get; init; } = string.Empty;
 
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string AdminLastName { get; set; } = string.Empty;
-
-    [Required, EmailAddress, StringLength(255)]
-    public string AdminEmail { get; set; } = string.Empty;
-
-    [Required, StringLength(50, MinimumLength = 3)]
-    public string AdminUsername { get; set; } = string.Empty;
-
-    [Required, StringLength(100, MinimumLength = 8)]
-    public string AdminPassword { get; set; } = string.Empty;
-
-    /// <summary>3 = OrganizationSuperAdmin, 4 = OrganizationAdmin</summary>
-    [Range(3, 4)]
-    public int AdminRoleId { get; set; } = 3;
+    /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in AdminRoleValidator.</summary>
+    public RoleType AdminRole { get; init; } = RoleType.OrganizationSuperAdmin;
 }
 
-public class UpdateOrganizationRequest
+public record UpdateOrganizationRequest
 {
-    [Required, StringLength(200, MinimumLength = 2)]
-    public string Name { get; set; } = string.Empty;
-
-    [StringLength(1000)]
-    public string Description { get; set; } = string.Empty;
-
-    [StringLength(500)]
-    public string Address { get; set; } = string.Empty;
-
-    [Phone]
-    public string PhoneNumber { get; set; } = string.Empty;
-
-    [EmailAddress, StringLength(255)]
-    public string Email { get; set; } = string.Empty;
-
-    [Url]
-    public string? Website { get; set; }
-
-    public bool IsActive { get; set; } = true;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Address { get; init; } = string.Empty;
+    public string PhoneNumber { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string? Website { get; init; }
+    public bool IsActive { get; init; } = true;
 }
 
-public class AddOrganizationUserRequest
+public record AddOrganizationUserRequest
 {
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string FirstName { get; set; } = string.Empty;
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
 
-    [Required, StringLength(100, MinimumLength = 2)]
-    public string LastName { get; set; } = string.Empty;
-
-    [Required, EmailAddress, StringLength(255)]
-    public string Email { get; set; } = string.Empty;
-
-    [Required, StringLength(50, MinimumLength = 3)]
-    public string Username { get; set; } = string.Empty;
-
-    [Required, StringLength(100, MinimumLength = 8)]
-    public string Password { get; set; } = string.Empty;
-
-    /// <summary>3 = OrganizationSuperAdmin, 4 = OrganizationAdmin</summary>
-    [Range(3, 4)]
-    public int RoleId { get; set; } = 4;
+    /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in RoleValidator.</summary>
+    public RoleType Role { get; init; } = RoleType.OrganizationAdmin;
 }
 
 public record OrganizationResponse(
-    int Id,
+    Guid Id,
     string Name,
     string Description,
     string Address,
@@ -102,6 +59,4 @@ public record OrganizationResponse(
     int UserCount,
     DateTime CreatedAt);
 
-public class OrganizationQuery : BaseSearchObject
-{
-}
+public sealed record OrganizationQuery : BaseSearchObject;

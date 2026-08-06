@@ -1,47 +1,58 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../core/api_client.dart';
+import '../core/api_config.dart';
 import '../models/api_error.dart';
 import '../models/responses/paged_result.dart';
 import '../models/search_objects/base_search_object.dart';
 import 'api_exception.dart';
-import 'authorization.dart';
 
-class BaseProvider<T> {
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:5189/api/');
+/// Generic CRUD provider for a resource whose id is of type [TId] — `String`
+/// (a GUID) for Identity-owned resources (users, organizations), `int` for
+/// resources that are still SQL-identity-keyed (e.g. categories).
+///
+/// Auth is handled transparently: the shared [apiClient] attaches the
+/// httpOnly session cookie to every request via its cookie jar, so no
+/// provider ever needs to read or set a token itself.
+class BaseProvider<T, TId> {
+  static String get baseUrl => ApiConfig.baseUrl;
 
   final String _extension;
 
   BaseProvider(this._extension);
 
-  Map<String, String> _getHeaders() {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-
-    if (Authorization.token != null && Authorization.token!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer ${Authorization.token}';
-    }
-
-    return headers;
-  }
-
-  // Parses a non-2xx response into a typed ApiException.
-  Never _handleError(http.Response response) {
+  Never _handleError(Response response) {
     ApiError apiError;
     try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      apiError = ApiError.fromJson(body);
+      final body = response.data;
+      apiError = body is Map<String, dynamic>
+          ? ApiError.fromJson(body)
+          : ApiError(message: body?.toString());
     } catch (_) {
-      apiError = ApiError(errorCode: response.body);
+      apiError = ApiError(message: response.data?.toString());
     }
-    throw ApiException(statusCode: response.statusCode, apiError: apiError);
+    throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
   }
 
-  bool _isSuccess(int statusCode) =>
-      statusCode >= 200 && statusCode < 300;
+  bool _isSuccess(int? statusCode) => statusCode != null && statusCode >= 200 && statusCode < 300;
+
+  Future<Response> _send(Future<Response> Function() request) async {
+    try {
+      return await request();
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw ApiException(
+          statusCode: 408,
+          apiError: ApiError(message: 'Zahtjev je istekao (timeout).'),
+        );
+      }
+      rethrow;
+    }
+  }
 
   Future<PagedResult<T>> getAll({
     BaseSearchObject? searchObject,
@@ -49,128 +60,52 @@ class BaseProvider<T> {
   }) async {
     final queryParams = searchObject?.toQueryString() ?? {};
 
-    final uri = Uri.parse('$baseUrl$_extension')
-        .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
-
-    http.Response response;
-    try {
-      response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+    final response = await _send(() => apiClient.get(
+          _extension,
+          queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        ));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return PagedResult.fromJson(data, fromJson);
-    } catch (e) {
-      throw FormatException('Failed to parse response JSON: $e');
-    }
+    return PagedResult.fromJson(response.data as Map<String, dynamic>, fromJson);
   }
 
   Future<T> getById(
-    int id, {
+    TId id, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$baseUrl$_extension/$id');
-
-    http.Response response;
-    try {
-      response = await http.get(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+    final response = await _send(() => apiClient.get('$_extension/$id'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return fromJson(data);
-    } catch (e) {
-      throw FormatException('Failed to parse response JSON: $e');
-    }
+    return fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<T> insert(
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$baseUrl$_extension');
-
-    http.Response response;
-    try {
-      response = await http.post(
-        uri,
-        headers: _getHeaders(),
-        body: jsonEncode(request),
-      ).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+    final response = await _send(() => apiClient.post(_extension, data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return fromJson(data);
-    } catch (e) {
-      throw FormatException('Failed to parse response JSON: $e');
-    }
+    return fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<T> update(
-    int id,
+    TId id,
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final uri = Uri.parse('$baseUrl$_extension/$id');
-
-    http.Response response;
-    try {
-      response = await http.put(
-        uri,
-        headers: _getHeaders(),
-        body: jsonEncode(request),
-      ).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+    final response = await _send(() => apiClient.put('$_extension/$id', data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
-    try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return fromJson(data);
-    } catch (e) {
-      throw FormatException('Failed to parse response JSON: $e');
-    }
+    return fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<void> delete(int id) async {
-    final uri = Uri.parse('$baseUrl$_extension/$id');
-
-    http.Response response;
-    try {
-      response = await http.delete(uri, headers: _getHeaders()).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      throw ApiException(
-        statusCode: 408,
-        apiError: ApiError(displayMessage: 'Zahtjev je istekao (timeout).'),
-      );
-    }
+  Future<void> delete(TId id) async {
+    final response = await _send(() => apiClient.delete('$_extension/$id'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }

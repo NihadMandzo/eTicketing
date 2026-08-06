@@ -4,7 +4,6 @@ import '../main.dart';
 import '../models/requests/login_request.dart';
 import '../providers/api_exception.dart';
 import '../providers/auth_provider.dart';
-import '../providers/authorization.dart';
 import 'widgets/main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -70,22 +69,22 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      await _authProvider.login(
+      final loginResponse = await _authProvider.login(
         LoginRequest(
           emailOrUsername: _emailController.text.trim(),
           password: _passwordController.text,
         ),
       );
-
-      // Fetch the authenticated user's profile
-      final profile = await _authProvider.me();
+      final profile = loginResponse.user;
 
       if (!mounted) return;
 
       // ── Role guard ─────────────────────────────────────────────────────
       if (!_allowedRoles.contains(profile.roleName)) {
-        // Clear the token so the session is invalidated
-        Authorization.token = null;
+        // A session was established backend-side by the successful login
+        // above — revoke it properly rather than just ignoring it locally.
+        await _authProvider.logout();
+        if (!mounted) return;
         handleApiError("Pristup odbijen. Ovaj portal je namijenjen samo za administratore i organizatore.");
         return;
       }

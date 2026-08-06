@@ -1,11 +1,20 @@
 class ApiError {
-  final String? errorCode;
+  /// Matches the backend's `Result`/`Error` business-failure shape: `{ code, message }`.
+  final String? code;
+
+  /// Present on both the `{ code, message }` shape and ASP.NET Core's standard
+  /// `ValidationProblem` shape (`{ title, status, errors }`) — used as the
+  /// "title" there.
   final String? message;
+
+  /// Field-level validation errors, present on FluentValidation's
+  /// `ValidationProblem` responses: `{ "FieldName": ["message", ...] }`.
   final Map<String, List<String>>? errors;
+
   final String? traceId;
 
   const ApiError({
-    this.errorCode,
+    this.code,
     this.message,
     this.errors,
     this.traceId,
@@ -25,8 +34,8 @@ class ApiError {
     }
 
     return ApiError(
-      errorCode: json['errorCode'] as String?,
-      message: json['message'] as String?,
+      code: json['code'] as String?,
+      message: (json['message'] ?? json['title']) as String?,
       errors: errors,
       traceId: json['traceId'] as String?,
     );
@@ -38,15 +47,15 @@ class ApiError {
       final messages = errors!.values.expand((e) => e).toList();
       return messages.join('\n');
     }
-    
+
     if (message != null && message!.isNotEmpty) {
       return message!;
     }
-    
-    if (errorCode != null && errorCode!.isNotEmpty) {
-      return errorCode!;
+
+    if (code != null && code!.isNotEmpty) {
+      return code!;
     }
-    
-    return 'An unexpected error occurred.';
+
+    return 'Došlo je do neočekivane greške.';
   }
 }

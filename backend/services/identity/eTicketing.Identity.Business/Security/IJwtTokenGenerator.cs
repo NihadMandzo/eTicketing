@@ -4,5 +4,5 @@ namespace eTicketing.Identity.Business.Security;
 
 public interface IJwtTokenGenerator
 {
-    string GenerateToken(User user);
+    string GenerateAccessToken(User user);
 }

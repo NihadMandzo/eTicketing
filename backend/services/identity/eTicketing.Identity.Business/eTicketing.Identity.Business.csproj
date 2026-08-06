@@ -3,12 +3,22 @@
   <ItemGroup>
     <ProjectReference Include="..\eTicketing.Identity.Data\eTicketing.Identity.Data.csproj" />
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <!-- Needed for AuthCookieService: AuthCookieNames/AuthCookiePolicy plus the
+         Microsoft.AspNetCore.Http (HttpContext/CookieOptions) types the FrameworkReference below
+         brings in — cookie-writing is business logic (see AuthCookieService), not endpoint logic. -->
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Auth\eTicketing.Shared.Auth.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.10" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+    <PackageReference Include="FluentValidation" Version="12.0.0" />
   </ItemGroup>
 
   <PropertyGroup>

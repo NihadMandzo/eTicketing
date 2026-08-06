@@ -4,6 +4,6 @@ public record TicketPurchased(
     int TicketId,
     int EventId,
     int SectorId,
-    int UserId,
+    Guid UserId,
     string UserEmail,
     DateTime PurchasedAt);

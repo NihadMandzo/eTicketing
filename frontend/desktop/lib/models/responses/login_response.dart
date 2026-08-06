@@ -1,22 +1,19 @@
-class LoginResponse {
-  final String token;
-  final bool? isFirstLogin;
-  final String message;
+import 'user_profile.dart';
 
-  const LoginResponse({
-    required this.token,
-    this.isFirstLogin,
-    required this.message,
-  });
+/// The access/refresh tokens never appear here — the backend writes them
+/// straight to httpOnly cookies. This mirrors the backend's actual
+/// `LoginResponse { user }` shape.
+class LoginResponse {
+  final UserProfile user;
+
+  const LoginResponse({required this.user});
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
-    if (json['token'] == null) {
-      throw const FormatException('Missing token inside LoginResponse JSON');
+    if (json['user'] == null) {
+      throw const FormatException('Missing user inside LoginResponse JSON');
     }
     return LoginResponse(
-      token: json['token'] as String,
-      isFirstLogin: json['isFirstLogin'] as bool?,
-      message: json['message'] as String? ?? '',
+      user: UserProfile.fromJson(json['user'] as Map<String, dynamic>),
     );
   }
 }

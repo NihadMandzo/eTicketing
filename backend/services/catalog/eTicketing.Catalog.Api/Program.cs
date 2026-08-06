@@ -1,47 +1,16 @@
-using System.Text;
-using eTicketing.Catalog.Api.Middleware;
+using eTicketing.Catalog.Api.Infrastructure;
 using eTicketing.Catalog.Data;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using eTicketing.Contracts.Hosting;
+using eTicketing.Shared.Auth;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Data sloj ---
-builder.Services.AddDbContext<CatalogDbContext>(opt =>
-    opt.UseSqlServer(builder.Configuration.GetConnectionString("CatalogDb")));
-
-// TODO (Sprint 2, US-2.1/2.2/2.3): registrovati ICategoryRepository/IEventRepository i
-// ICategoryService/IEventService iz .Business projekta ovdje, kad entiteti budu dodani.
-
-// --- Auth (isti signing key kao Identity/Gateway) ---
-var jwtKey = builder.Configuration["Jwt:SigningKey"]
-    ?? throw new InvalidOperationException("Jwt:SigningKey nije konfigurisan.");
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateLifetime = true
-        };
-    });
-
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("SuperAdminOnly", p => p.RequireRole("SuperAdmin"))
-    .AddPolicy("PlatformStaff", p => p.RequireRole("Admin", "SuperAdmin"))
-    .AddPolicy("Organizer", p => p.RequireRole("OrganizationSuperAdmin", "OrganizationAdmin", "Admin", "SuperAdmin"));
-
-// --- Middleware, health, docs ---
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks().AddDbContextCheck<CatalogDbContext>("database");
-builder.Services.AddOpenApi();
+builder.AddCatalogInfrastructure();
+builder.Services.AddSharedJwtBearerAuthentication(builder.Configuration);
+builder.Services.AddPlatformAuthorizationPolicies();
+builder.AddPlatformApiEssentials<CatalogDbContext>();
 
 var app = builder.Build();
 

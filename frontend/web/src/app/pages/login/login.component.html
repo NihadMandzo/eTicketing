@@ -1,0 +1,64 @@
+<div class="auth-page">
+  <section class="page-header">
+    <div class="container">
+      <h1>Prijava</h1>
+      <p class="page-subtitle">Prijavite se na svoj eKarta nalog</p>
+    </div>
+  </section>
+
+  <section class="content-section">
+    <div class="container">
+      <form class="auth-card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        @if (errorMessage()) {
+          <div class="alert alert-error" role="alert">{{ errorMessage() }}</div>
+        }
+
+        <label class="field">
+          <span class="field-label">Email ili korisničko ime</span>
+          <input
+            type="text"
+            formControlName="emailOrUsername"
+            autocomplete="username"
+            class="field-input"
+            [class.field-input-invalid]="form.controls.emailOrUsername.invalid && form.controls.emailOrUsername.touched"
+          />
+          @if (form.controls.emailOrUsername.invalid && form.controls.emailOrUsername.touched) {
+            <span class="field-error">Unesite email ili korisničko ime.</span>
+          }
+        </label>
+
+        <label class="field">
+          <span class="field-label">Lozinka</span>
+          <div class="password-input">
+            <input
+              [type]="hidePassword() ? 'password' : 'text'"
+              formControlName="password"
+              autocomplete="current-password"
+              class="field-input"
+              [class.field-input-invalid]="form.controls.password.invalid && form.controls.password.touched"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              (click)="togglePasswordVisibility()"
+              [attr.aria-label]="hidePassword() ? 'Prikaži lozinku' : 'Sakrij lozinku'"
+            >
+              {{ hidePassword() ? 'Prikaži' : 'Sakrij' }}
+            </button>
+          </div>
+          @if (form.controls.password.invalid && form.controls.password.touched) {
+            <span class="field-error">Unesite lozinku.</span>
+          }
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-lg submit-btn" [disabled]="isLoading()">
+          {{ isLoading() ? 'Prijava u toku…' : 'Prijavite se' }}
+        </button>
+
+        <p class="auth-switch">
+          Nemate nalog? <a routerLink="/registracija">Registrujte se</a>
+        </p>
+      </form>
+    </div>
+  </section>
+</div>
