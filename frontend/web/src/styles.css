@@ -5,13 +5,13 @@
   
   /* Deep Teal & Coral Color Scheme */
   --background: #FAFAFA;
-  --foreground: #1A1A1A;
-  
+  --foreground: #111827;
+
   --card: #FFFFFF;
-  --card-foreground: #1A1A1A;
-  
+  --card-foreground: #111827;
+
   --popover: #FFFFFF;
-  --popover-foreground: #1A1A1A;
+  --popover-foreground: #111827;
   
   --primary: #0D7C66;  /* Deep Teal */
   --primary-foreground: #FFFFFF;
@@ -25,16 +25,25 @@
   --muted: #F5F5F5;
   --muted-foreground: #6B7280;
   
-  --destructive: #EF4444;
+  --destructive: #DC2626;  /* Darkened from #EF4444 — white text on it needs ≥4.5:1 (WCAG AA) */
   --destructive-foreground: #FFFFFF;
   
   --border: #E5E7EB;
   --input: transparent;
   --input-background: #F9FAFB;
   --switch-background: #D1D5DB;
-  
+
   --ring: #0D7C66;
-  
+
+  --success: #16A34A;
+  --success-foreground: #FFFFFF;
+  --warning: #F59E0B;
+  --warning-foreground: #FFFFFF;
+  --info: #2563EB;
+  --info-foreground: #FFFFFF;
+
+  --navbar-background: rgba(255, 255, 255, 0.8);
+
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --font-weight-semibold: 600;
@@ -69,12 +78,23 @@
   --accent: #FF8C61;
   --accent-foreground: #0A0F0D;
   
-  --muted: #1F2937;
-  --muted-foreground: #9CA3AF;
-  
-  --border: #374151;
-  --input: #1F2937;
+  /* Teal-tinted neutrals — matches the --background/--card hue instead of a
+     plain blue-slate gray, so surfaces don't read as mismatched/muddy. */
+  --muted: #17221E;
+  --muted-foreground: #93A29D;
+
+  --border: #2A3B36;
+  --input: #17221E;
   --ring: #41C9B4;
+
+  --success: #22C55E;
+  --success-foreground: #0A0F0D;
+  --warning: #FBBF24;
+  --warning-foreground: #0A0F0D;
+  --info: #60A5FA;
+  --info-foreground: #0A0F0D;
+
+  --navbar-background: rgba(17, 24, 22, 0.8);
 }
 
 *,

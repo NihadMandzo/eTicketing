@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/responses/category_response.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../providers/category_provider.dart';
+import '../theme/app_colors.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/category_upsert_dialog.dart';
 import '../main.dart';
@@ -29,6 +30,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   static const int _pageSize = 8;
 
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
+
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
 
   @override
   void initState() {
@@ -74,23 +77,36 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Future<void> _deleteCategory(CategoryResponse category) async {
+    final isDark = _isDark;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Obriši kategoriju',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+        title: Text('Obriši kategoriju',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark
+                    ? AppColors.darkTextPrimary
+                    : AppColors.lightTextPrimary)),
         content: Text(
-            'Da li ste sigurni da želite obrisati kategoriju "${category.name}"?'),
+            'Da li ste sigurni da želite obrisati kategoriju "${category.name}"?',
+            style: TextStyle(
+                color: isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.lightTextSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Odustani',
-                style: TextStyle(color: Color(0xFF6B7280))),
+            child: Text('Odustani',
+                style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkTextTertiary
+                        : AppColors.lightTextTertiary)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
+              backgroundColor: AppColors.errorDark,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
@@ -124,7 +140,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 Text('Kategorija "${category.name}" je uspješno obrisana'),
               ],
             ),
-            backgroundColor: const Color(0xFF0D7C66),
+            backgroundColor: AppColors.primary,
             behavior: SnackBarBehavior.floating,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -164,6 +180,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _isDark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -176,21 +195,26 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
                       'Kategorije',
                       style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.lightTextPrimary,
                         height: 1.2,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'Upravljajte kategorijama i klasifikacijama događaja',
-                      style:
-                          TextStyle(fontSize: 16, color: Color(0xFF4B5563)),
+                      style: TextStyle(
+                          fontSize: 16,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary),
                     ),
                   ],
                 ),
@@ -198,13 +222,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               const SizedBox(width: 16),
               Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+                  gradient: LinearGradient(
+                    colors: [primary, primaryDark],
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0D7C66).withValues(alpha: 0.2),
+                      color: primary.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -244,22 +268,34 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           Container(
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFD1D5DB)),
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              border: Border.all(
+                  color: isDark
+                      ? AppColors.darkBorderInput
+                      : AppColors.lightBorderInput),
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Pretražite kategorije...',
-                hintStyle: TextStyle(color: Color(0xFF6B7280)),
+                hintStyle: TextStyle(
+                    color: isDark
+                        ? AppColors.darkTextTertiary
+                        : AppColors.lightTextTertiary),
                 prefixIcon: Icon(LucideIcons.search,
-                    color: Color(0xFF9CA3AF), size: 18),
+                    color: isDark
+                        ? AppColors.darkTextDisabled
+                        : AppColors.lightTextDisabled,
+                    size: 18),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              style: const TextStyle(color: Color(0xFF111827)),
+              style: TextStyle(
+                  color: isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.lightTextPrimary),
             ),
           ),
 
@@ -271,30 +307,38 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 '$_totalCount kategorija',
-                style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF6B7280)),
+                style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppColors.darkTextTertiary
+                        : AppColors.lightTextTertiary),
               ),
             ),
 
           // ── Grid ──────────────────────────────────────────────────
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF0D7C66)),
+                ? Center(
+                    child: CircularProgressIndicator(color: primary),
                   )
                 : _categories.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Icon(LucideIcons.layoutGrid,
-                                size: 48, color: Color(0xFFD1D5DB)),
-                            SizedBox(height: 12),
+                                size: 48,
+                                color: isDark
+                                    ? AppColors.darkBorderInput
+                                    : AppColors.lightBorderInput),
+                            const SizedBox(height: 12),
                             Text(
                               'Nema kategorija',
                               style: TextStyle(
-                                  color: Color(0xFF6B7280), fontSize: 16),
+                                  color: isDark
+                                      ? AppColors.darkTextTertiary
+                                      : AppColors.lightTextTertiary,
+                                  fontSize: 16),
                             ),
                           ],
                         ),
@@ -370,6 +414,8 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
@@ -378,17 +424,17 @@ class _CategoryCardState extends State<_CategoryCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovering
-                ? const Color(0xFF0D7C66)
-                : const Color(0xFFE5E7EB),
+                ? primary
+                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
           boxShadow: _isHovering
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -418,17 +464,27 @@ class _CategoryCardState extends State<_CategoryCard> {
                                 Container(
                                   width: 80,
                                   height: 80,
-                                  color: const Color(0xFFF3F4F6),
-                                  child: const Icon(LucideIcons.imageOff,
-                                      color: Color(0xFF9CA3AF), size: 36),
+                                  color: isDark
+                                      ? AppColors.darkSurfaceMuted
+                                      : AppColors.lightSurfaceMuted,
+                                  child: Icon(LucideIcons.imageOff,
+                                      color: isDark
+                                          ? AppColors.darkTextDisabled
+                                          : AppColors.lightTextDisabled,
+                                      size: 36),
                                 ),
                           )
                         : Container(
                             width: 80,
                             height: 80,
-                            color: const Color(0xFFF3F4F6),
-                            child: const Icon(LucideIcons.image,
-                                color: Color(0xFF9CA3AF), size: 36),
+                            color: isDark
+                                ? AppColors.darkSurfaceMuted
+                                : AppColors.lightSurfaceMuted,
+                            child: Icon(LucideIcons.image,
+                                color: isDark
+                                    ? AppColors.darkTextDisabled
+                                    : AppColors.lightTextDisabled,
+                                size: 36),
                           ),
                   ),
                   const SizedBox(height: 14),
@@ -436,10 +492,12 @@ class _CategoryCardState extends State<_CategoryCard> {
                   // Name
                   Text(
                     widget.category.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF111827),
+                      color: isDark
+                          ? AppColors.darkTextPrimary
+                          : AppColors.lightTextPrimary,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -450,9 +508,11 @@ class _CategoryCardState extends State<_CategoryCard> {
                   // Description
                   Text(
                     widget.category.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: Color(0xFF6B7280),
+                      color: isDark
+                          ? AppColors.darkTextTertiary
+                          : AppColors.lightTextTertiary,
                       height: 1.4,
                     ),
                     textAlign: TextAlign.center,
@@ -511,23 +571,26 @@ class _ActionBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: Colors.white,
+      color: isDark ? AppColors.darkSurface : Colors.white,
       borderRadius: BorderRadius.circular(7),
       child: InkWell(
         borderRadius: BorderRadius.circular(7),
         onTap: onTap,
         hoverColor: isDestructive
-            ? const Color(0xFFFEE2E2)
-            : const Color(0xFFF3F4F6),
+            ? (isDark ? AppColors.errorBgDarkMode : AppColors.errorBg)
+            : (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
         child: Padding(
           padding: const EdgeInsets.all(5),
           child: Icon(
             icon,
             size: 14,
             color: isDestructive
-                ? const Color(0xFFEF4444)
-                : const Color(0xFF6B7280),
+                ? AppColors.error
+                : (isDark
+                    ? AppColors.darkTextTertiary
+                    : AppColors.lightTextTertiary),
           ),
         ),
       ),

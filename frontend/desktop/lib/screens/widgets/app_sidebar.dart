@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
+import '../../theme/app_colors.dart';
 
 // ─── Nav item model ───────────────────────────────────────────────────────────
 
@@ -69,8 +70,6 @@ const List<NavItem> kNavItems = [
 const double _kExpanded = 240.0;
 const double _kCollapsed = 72.0;
 const Duration _kDur = Duration(milliseconds: 250);
-const Color _kPrimary = Color(0xFF0D7C66);
-const Color _kPrimaryDark = Color(0xFF0a6b57);
 
 // ─── AppSidebar ───────────────────────────────────────────────────────────────
 
@@ -168,21 +167,27 @@ class _SidebarShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRect(
       child: SizedBox(
         width: width,
         child: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border:
-                Border(right: BorderSide(color: Color(0xFFE5E7EB))),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x0C000000),
-                blurRadius: 16,
-                offset: Offset(4, 0),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : Colors.white,
+            border: Border(
+              right: BorderSide(
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
               ),
-            ],
+            ),
+            boxShadow: isDark
+                ? null
+                : const [
+                    BoxShadow(
+                      color: Color(0x0C000000),
+                      blurRadius: 16,
+                      offset: Offset(4, 0),
+                    ),
+                  ],
           ),
           child: child,
         ),
@@ -200,11 +205,16 @@ class _Logo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -224,8 +234,8 @@ class _Logo extends StatelessWidget {
           Expanded(
             child: FadeTransition(
               opacity: labelFade,
-              child: const Padding(
-                padding: EdgeInsets.only(left: 10),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 10),
                 child: Text(
                   'eKarta Manager',
                   maxLines: 1,
@@ -233,7 +243,7 @@ class _Logo extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -292,10 +302,13 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
       ),
       child: _NavButton(
         item: const NavItem(
@@ -328,6 +341,12 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeStart = scheme.primary;
+    final activeEnd = isDark ? AppColors.primary : AppColors.primaryDark;
+    final onActiveColor = isDark ? AppColors.darkBackground : Colors.white;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Tooltip(
@@ -345,14 +364,12 @@ class _NavButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               gradient: isActive
-                  ? const LinearGradient(
-                      colors: [_kPrimary, _kPrimaryDark],
-                    )
+                  ? LinearGradient(colors: [activeStart, activeEnd])
                   : null,
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: _kPrimary.withValues(alpha: 0.22),
+                        color: activeStart.withValues(alpha: 0.22),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -369,8 +386,8 @@ class _NavButton extends StatelessWidget {
                       item.icon,
                       size: 20,
                       color: isActive
-                          ? Colors.white
-                          : const Color(0xFF6B7280),
+                          ? onActiveColor
+                          : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
                     ),
                   ),
                 ),
@@ -388,8 +405,8 @@ class _NavButton extends StatelessWidget {
                             ? FontWeight.w600
                             : FontWeight.w500,
                         color: isActive
-                            ? Colors.white
-                            : const Color(0xFF374151),
+                            ? onActiveColor
+                            : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
                       ),
                     ),
                   ),

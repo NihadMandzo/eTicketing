@@ -9,6 +9,7 @@ import '../../models/requests/organization_insert_request.dart';
 import '../../models/requests/organization_update_request.dart';
 import '../../models/responses/organization_response.dart';
 import '../../providers/organization_provider.dart';
+import '../../theme/app_colors.dart';
 
 class OrganizationUpsertDialog extends StatefulWidget {
   final OrganizationResponse? organization;
@@ -51,6 +52,10 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
   bool _obscurePassword = true;
 
   bool get _isEditing => widget.organization != null;
+
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _primary => _isDark ? AppColors.secondary : AppColors.primary;
+  Color get _primaryDark => _isDark ? AppColors.primary : AppColors.primaryDark;
 
   @override
   void initState() {
@@ -157,38 +162,38 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
   // ── Shared decoration ──────────────────────────────────────────────
 
-  static const _primary = Color(0xFF0D7C66);
-
   InputDecoration _inputDecoration(String hint, {IconData? prefixIcon}) {
+    final placeholderColor = _isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
+    final borderColor = _isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+      hintStyle: TextStyle(color: placeholderColor, fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       prefixIcon: prefixIcon != null
-          ? Icon(prefixIcon, color: const Color(0xFF9CA3AF), size: 18)
+          ? Icon(prefixIcon, color: placeholderColor, size: 18)
           : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _primary, width: 2),
+        borderSide: BorderSide(color: _primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFEF4444)),
+        borderSide: const BorderSide(color: AppColors.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+        borderSide: const BorderSide(color: AppColors.error, width: 2),
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: _isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
     );
   }
 
@@ -196,6 +201,8 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _isDark;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -204,7 +211,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: Material(
-            color: Colors.white,
+            color: isDark ? AppColors.darkSurface : Colors.white,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -220,14 +227,14 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildOrgDetailsSection(),
+                          _buildOrgDetailsSection(textPrimary),
                           const SizedBox(height: 28),
-                          _buildContactSection(),
+                          _buildContactSection(textPrimary),
                           const SizedBox(height: 28),
                           _buildLogoSection(),
                           if (!_isEditing) ...[
                             const SizedBox(height: 28),
-                            _buildAdminSection(),
+                            _buildAdminSection(textPrimary),
                           ],
                         ],
                       ),
@@ -248,11 +255,12 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
   // ── Header ──────────────────────────────────────────────────────────
 
   Widget _buildHeader() {
+    final onPrimaryColor = _isDark ? AppColors.darkBackground : Colors.white;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+          colors: [_primary, _primaryDark],
         ),
       ),
       child: Row(
@@ -260,10 +268,10 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           Expanded(
             child: Text(
               _isEditing ? 'Uredi Organizaciju' : 'Dodaj Novu Organizaciju',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: onPrimaryColor,
               ),
             ),
           ),
@@ -271,9 +279,9 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
             borderRadius: BorderRadius.circular(8),
             onTap: () => Navigator.of(context).pop(),
             hoverColor: Colors.white12,
-            child: const Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(LucideIcons.x, color: Colors.white, size: 20),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(LucideIcons.x, color: onPrimaryColor, size: 20),
             ),
           ),
         ],
@@ -283,7 +291,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
   // ── Organization Details ────────────────────────────────────────────
 
-  Widget _buildOrgDetailsSection() {
+  Widget _buildOrgDetailsSection(Color textPrimary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -299,7 +307,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
         TextFormField(
           controller: _nameCtrl,
           decoration: _inputDecoration('npr. Event Management Pro'),
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: 14, color: textPrimary),
           validator: (v) {
             if (v == null || v.trim().isEmpty) {
               return 'Naziv organizacije je obavezan';
@@ -330,7 +338,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _websiteCtrl,
                     decoration: _inputDecoration('https://example.com',
                         prefixIcon: LucideIcons.globe),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v != null && v.trim().isNotEmpty) {
                         if (v.trim().length > 255) {
@@ -359,7 +367,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           controller: _descCtrl,
           maxLines: 3,
           decoration: _inputDecoration('Kratak opis organizacije...'),
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: 14, color: textPrimary),
           validator: (v) {
             if (v == null || v.trim().isEmpty) {
               return 'Opis je obavezan';
@@ -379,7 +387,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
   // ── Contact Information ─────────────────────────────────────────────
 
-  Widget _buildContactSection() {
+  Widget _buildContactSection(Color textPrimary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -403,7 +411,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _emailCtrl,
                     decoration: _inputDecoration('info@example.com',
                         prefixIcon: LucideIcons.mail),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Email je obavezan';
@@ -433,7 +441,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _phoneCtrl,
                     decoration: _inputDecoration('+387 61 123 4567',
                         prefixIcon: LucideIcons.phone),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Broj telefona je obavezan';
@@ -460,7 +468,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           decoration: _inputDecoration(
               'Ulica Bulevar Meše Selimovića 12, Sarajevo',
               prefixIcon: LucideIcons.mapPin),
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: 14, color: textPrimary),
           validator: (v) {
             if (v == null || v.trim().isEmpty) {
               return 'Adresa je obavezna';
@@ -499,7 +507,8 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
   // ── Admin Details ───────────────────────────────────────────────────
 
-  Widget _buildAdminSection() {
+  Widget _buildAdminSection(Color textPrimary) {
+    final placeholderColor = _isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -523,7 +532,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _adminFirstNameCtrl,
                     decoration: _inputDecoration('Ime',
                         prefixIcon: LucideIcons.user),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Ime administratora je obavezno';
@@ -548,7 +557,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _adminLastNameCtrl,
                     decoration: _inputDecoration('Prezime',
                         prefixIcon: LucideIcons.user),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Prezime administratora je obavezno';
@@ -581,7 +590,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _adminEmailCtrl,
                     decoration: _inputDecoration('admin@example.com',
                         prefixIcon: LucideIcons.mail),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Email administratora je obavezan';
@@ -611,7 +620,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _adminUsernameCtrl,
                     decoration: _inputDecoration('korisnicko_ime',
                         prefixIcon: LucideIcons.atSign),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Korisničko ime je obavezno';
@@ -656,13 +665,13 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                               ? LucideIcons.eyeOff
                               : LucideIcons.eye,
                           size: 18,
-                          color: const Color(0xFF9CA3AF),
+                          color: placeholderColor,
                         ),
                         onPressed: () => setState(
                             () => _obscurePassword = !_obscurePassword),
                       ),
                     ),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v == null || v.isEmpty) {
                         return 'Lozinka administratora je obavezna';
@@ -692,7 +701,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                     controller: _adminPhoneCtrl,
                     decoration: _inputDecoration('+387 61 123 4567',
                         prefixIcon: LucideIcons.phone),
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: textPrimary),
                     validator: (v) {
                       if (v != null && v.trim().isNotEmpty) {
                         if (v.trim().length > 20) {
@@ -714,11 +723,15 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
   // ── Footer ──────────────────────────────────────────────────────────
 
   Widget _buildFooter() {
+    final isDark = _isDark;
+    final onPrimaryColor = isDark ? AppColors.darkBackground : Colors.white;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFB),
-        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
+        border: Border(
+          top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -726,8 +739,8 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           OutlinedButton(
             onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF374151),
-              side: const BorderSide(color: Color(0xFFD1D5DB)),
+              foregroundColor: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+              side: BorderSide(color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               padding:
@@ -739,13 +752,13 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+              gradient: LinearGradient(
+                colors: [_primary, _primaryDark],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF0D7C66).withValues(alpha: 0.2),
+                  color: _primary.withValues(alpha: 0.2),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -760,18 +773,18 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   child: _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: onPrimaryColor),
                         )
                       : Text(
                           _isEditing
                               ? 'Spremi Izmjene'
                               : 'Dodaj Organizaciju',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: onPrimaryColor,
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
                           ),
@@ -796,16 +809,19 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.secondary : AppColors.primary;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     return Row(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF0D7C66)),
+        Icon(icon, size: 20, color: primaryColor),
         const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF111827),
+            color: textPrimary,
           ),
         ),
       ],
@@ -818,14 +834,17 @@ class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+      ),
+    );
+  }
 }
 
 class _LogoPickerTile extends StatelessWidget {
@@ -841,15 +860,23 @@ class _LogoPickerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.secondary : AppColors.primary;
+    final placeholderColor = isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
+    final borderColor = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final mutedBg = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+
     final picked = logoFile != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
+          color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
           border: Border.all(
-            color: picked ? const Color(0xFF0D7C66) : const Color(0xFFD1D5DB),
+            color: picked ? primaryColor : borderColor,
             width: picked ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -861,8 +888,8 @@ class _LogoPickerTile extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 color: picked
-                    ? const Color(0xFF0D7C66).withValues(alpha: 0.1)
-                    : const Color(0xFFE5E7EB),
+                    ? primaryColor.withValues(alpha: isDark ? 0.18 : 0.1)
+                    : mutedBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: picked
@@ -870,8 +897,7 @@ class _LogoPickerTile extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       child: Image.file(logoFile!, fit: BoxFit.cover),
                     )
-                  : const Icon(LucideIcons.upload,
-                      color: Color(0xFF9CA3AF), size: 20),
+                  : Icon(LucideIcons.upload, color: placeholderColor, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -885,24 +911,19 @@ class _LogoPickerTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: picked
-                          ? const Color(0xFF111827)
-                          : const Color(0xFF6B7280),
+                      color: picked ? textPrimary : textTertiary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const Text(
+                  Text(
                     'PNG, JPG, JPEG',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    style: TextStyle(fontSize: 11, color: placeholderColor),
                   ),
                 ],
               ),
             ),
             Icon(LucideIcons.folderOpen,
-                size: 16,
-                color: picked
-                    ? const Color(0xFF0D7C66)
-                    : const Color(0xFF9CA3AF)),
+                size: 16, color: picked ? primaryColor : placeholderColor),
           ],
         ),
       ),

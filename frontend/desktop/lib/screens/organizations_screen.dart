@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/responses/organization_response.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../providers/organization_provider.dart';
+import '../theme/app_colors.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import '../main.dart';
@@ -87,30 +88,47 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   Future<void> _deleteOrganization(OrganizationResponse org) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Obriši organizaciju',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text(
-            'Da li ste sigurni da želite obrisati organizaciju "${org.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Odustani',
-                style: TextStyle(color: Color(0xFF6B7280))),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Obriši organizaciju',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
             ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Obriši'),
           ),
-        ],
-      ),
+          content: Text(
+            'Da li ste sigurni da želite obrisati organizaciju "${org.name}"?',
+            style: TextStyle(
+              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(
+                'Odustani',
+                style: TextStyle(
+                  color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.errorDark,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Obriši'),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed != true || !mounted) return;
@@ -125,16 +143,19 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
       await _loadData();
 
       if (mounted) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final onColor = isDark ? AppColors.darkBackground : Colors.white;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle_outline, color: Colors.white),
+                Icon(Icons.check_circle_outline, color: onColor),
                 const SizedBox(width: 10),
-                Text('Organizacija "${org.name}" je uspješno obrisana'),
+                Text('Organizacija "${org.name}" je uspješno obrisana',
+                    style: TextStyle(color: onColor)),
               ],
             ),
-            backgroundColor: const Color(0xFF0D7C66),
+            backgroundColor: isDark ? AppColors.secondary : AppColors.primary,
             behavior: SnackBarBehavior.floating,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -163,6 +184,14 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDarkColor = isDark ? AppColors.primary : AppColors.primaryDark;
+    final onPrimaryColor = isDark ? AppColors.darkBackground : Colors.white;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final placeholderColor = isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -175,21 +204,20 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
                       'Organizacije',
                       style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+                        color: textPrimary,
                         height: 1.2,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'Upravljajte svim organizacijama na platformi',
-                      style:
-                          TextStyle(fontSize: 16, color: Color(0xFF4B5563)),
+                      style: TextStyle(fontSize: 16, color: textTertiary),
                     ),
                   ],
                 ),
@@ -197,13 +225,13 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               const SizedBox(width: 16),
               Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+                  gradient: LinearGradient(
+                    colors: [primaryColor, primaryDarkColor],
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0D7C66).withValues(alpha: 0.3),
+                      color: primaryColor.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -218,14 +246,13 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       child: Row(
-                        children: const [
-                          Icon(LucideIcons.plus,
-                              color: Colors.white, size: 20),
-                          SizedBox(width: 8),
+                        children: [
+                          Icon(LucideIcons.plus, color: onPrimaryColor, size: 20),
+                          const SizedBox(width: 8),
                           Text(
                             'Dodaj Organizaciju',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: onPrimaryColor,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -244,22 +271,23 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
           Container(
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFD1D5DB)),
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              border: Border.all(
+                  color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Pretražite organizacije...',
-                hintStyle: TextStyle(color: Color(0xFF6B7280)),
+                hintStyle: TextStyle(color: textTertiary),
                 prefixIcon: Icon(LucideIcons.search,
-                    color: Color(0xFF9CA3AF), size: 18),
+                    color: placeholderColor, size: 18),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              style: const TextStyle(color: Color(0xFF111827)),
+              style: TextStyle(color: textPrimary),
             ),
           ),
 
@@ -271,30 +299,30 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 '$_totalCount organizacija',
-                style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF6B7280)),
+                style: TextStyle(fontSize: 13, color: textTertiary),
               ),
             ),
 
           // ── Grid ──────────────────────────────────────────────────
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF0D7C66)),
+                ? Center(
+                    child: CircularProgressIndicator(color: primaryColor),
                   )
                 : _organizations.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Icon(LucideIcons.building2,
-                                size: 48, color: Color(0xFFD1D5DB)),
-                            SizedBox(height: 12),
+                                size: 48,
+                                color: isDark
+                                    ? AppColors.darkBorderInput
+                                    : AppColors.lightBorderInput),
+                            const SizedBox(height: 12),
                             Text(
                               'Nema organizacija',
-                              style: TextStyle(
-                                  color: Color(0xFF6B7280), fontSize: 16),
+                              style: TextStyle(color: textTertiary, fontSize: 16),
                             ),
                           ],
                         ),
@@ -373,6 +401,9 @@ class _OrganizationCardState extends State<_OrganizationCard> {
   @override
   Widget build(BuildContext context) {
     final org = widget.organization;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.secondary : AppColors.primary;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
@@ -381,14 +412,14 @@ class _OrganizationCardState extends State<_OrganizationCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovering
-                ? const Color(0xFF0D7C66)
-                : const Color(0xFFE5E7EB),
+                ? primaryColor
+                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
-          boxShadow: _isHovering
+          boxShadow: _isHovering && !isDark
               ? [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.08),
@@ -425,10 +456,10 @@ class _OrganizationCardState extends State<_OrganizationCard> {
               // ── Name ──
               Text(
                 org.name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF111827),
+                  color: textPrimary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -455,21 +486,20 @@ class _OrganizationCardState extends State<_OrganizationCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0D7C66).withValues(alpha: 0.08),
+                        color: primaryColor.withValues(alpha: isDark ? 0.16 : 0.08),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.users,
-                              size: 14, color: Color(0xFF0D7C66)),
+                          Icon(LucideIcons.users, size: 14, color: primaryColor),
                           const SizedBox(width: 6),
                           Text(
                             '${org.userCount} korisnika',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF0D7C66),
+                              color: primaryColor,
                             ),
                           ),
                         ],
@@ -520,6 +550,8 @@ class _ContactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     return Row(
       children: [
         Text(emoji, style: const TextStyle(fontSize: 13)),
@@ -527,8 +559,7 @@ class _ContactRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style:
-                const TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
+            style: TextStyle(fontSize: 13, color: textTertiary),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -557,17 +588,20 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.secondary : AppColors.primary;
+
     final Color fg;
     final Color bg;
     if (isDestructive) {
-      fg = const Color(0xFFEF4444);
-      bg = const Color(0xFFEF4444).withValues(alpha: 0.08);
+      fg = AppColors.error;
+      bg = AppColors.error.withValues(alpha: isDark ? 0.16 : 0.08);
     } else if (isPrimary) {
-      fg = const Color(0xFF0D7C66);
-      bg = const Color(0xFF0D7C66).withValues(alpha: 0.1);
+      fg = primaryColor;
+      bg = primaryColor.withValues(alpha: isDark ? 0.18 : 0.1);
     } else {
-      fg = const Color(0xFF374151);
-      bg = const Color(0xFFF3F4F6);
+      fg = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+      bg = isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted;
     }
 
     return Material(
@@ -615,6 +649,7 @@ class _LogoFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final initials = name.isNotEmpty
         ? name.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join()
         : '?';
@@ -622,10 +657,12 @@ class _LogoFallback extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+          colors: isDark
+              ? [AppColors.secondary, AppColors.primary]
+              : [AppColors.primary, AppColors.primaryDark],
         ),
         borderRadius: BorderRadius.circular(14),
       ),
@@ -633,7 +670,7 @@ class _LogoFallback extends StatelessWidget {
       child: Text(
         initials,
         style: TextStyle(
-          color: Colors.white,
+          color: isDark ? AppColors.darkBackground : Colors.white,
           fontSize: size * 0.34,
           fontWeight: FontWeight.w700,
           letterSpacing: 1,

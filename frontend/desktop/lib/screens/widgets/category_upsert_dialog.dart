@@ -9,6 +9,7 @@ import '../../models/requests/category_insert_request.dart';
 import '../../models/requests/category_update_request.dart';
 import '../../models/responses/category_response.dart';
 import '../../providers/category_provider.dart';
+import '../../theme/app_colors.dart';
 
 class CategoryUpsertDialog extends StatefulWidget {
   final CategoryResponse? category;
@@ -35,6 +36,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   bool _isSaving = false;
 
   bool get _isEditing => widget.category != null;
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
 
   @override
   void initState() {
@@ -78,7 +80,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
               Text('Ikona kategorije je obavezna'),
             ],
           ),
-          backgroundColor: const Color(0xFFEF4444),
+          backgroundColor: AppColors.errorDark,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
@@ -122,37 +124,46 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   }
 
   InputDecoration _inputDecoration(String hint) {
+    final isDark = _isDark;
+    final placeholderColor =
+        isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
+    final borderColor =
+        isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+      hintStyle: TextStyle(color: placeholderColor, fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF0D7C66), width: 2),
+        borderSide: BorderSide(color: primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFEF4444)),
+        borderSide: const BorderSide(color: AppColors.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+        borderSide: const BorderSide(color: AppColors.error, width: 2),
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: isDark ? AppColors.darkInputFill : Colors.white,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _isDark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
@@ -161,16 +172,16 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: Material(
-            color: Colors.white,
+            color: isDark ? AppColors.darkSurface : Colors.white,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // ── Header ──────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+                      colors: [primary, primaryDark],
                     ),
                   ),
                   child: Row(
@@ -274,8 +285,13 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                       OutlinedButton(
                         onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF374151),
-                          side: const BorderSide(color: Color(0xFFD1D5DB)),
+                          foregroundColor: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary,
+                          side: BorderSide(
+                              color: isDark
+                                  ? AppColors.darkBorderInput
+                                  : AppColors.lightBorderInput),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                           padding: const EdgeInsets.symmetric(
@@ -289,7 +305,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                       FilledButton(
                         onPressed: _isSaving ? null : _submit,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0D7C66),
+                          backgroundColor: primary,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                           padding: const EdgeInsets.symmetric(
@@ -297,18 +313,23 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                           elevation: 0,
                         ),
                         child: _isSaving
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
+                                    strokeWidth: 2,
+                                    color: isDark
+                                        ? AppColors.darkBackground
+                                        : Colors.white),
                               )
                             : Text(
                                 _isEditing ? 'Spremi Izmjene' : 'Kreiraj Kategoriju',
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13,
-                                    color: Colors.white),
+                                    color: isDark
+                                        ? AppColors.darkBackground
+                                        : Colors.white),
                               ),
                       ),
                     ],
@@ -330,14 +351,17 @@ class _Label extends StatelessWidget {
   const _Label(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+      ),
+    );
+  }
 }
 
 class _IconPickerTile extends StatelessWidget {
@@ -353,15 +377,19 @@ class _IconPickerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
     final picked = iconFile != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
+          color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
           border: Border.all(
-            color: picked ? const Color(0xFF0D7C66) : const Color(0xFFD1D5DB),
+            color: picked
+                ? primary
+                : (isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
             width: picked ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(10),
@@ -373,8 +401,8 @@ class _IconPickerTile extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 color: picked
-                    ? const Color(0xFF0D7C66).withValues(alpha: 0.1)
-                    : const Color(0xFFE5E7EB),
+                    ? primary.withValues(alpha: 0.1)
+                    : (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: picked
@@ -382,8 +410,11 @@ class _IconPickerTile extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       child: Image.file(iconFile!, fit: BoxFit.cover),
                     )
-                  : const Icon(LucideIcons.upload,
-                      color: Color(0xFF9CA3AF), size: 18),
+                  : Icon(LucideIcons.upload,
+                      color: isDark
+                          ? AppColors.darkTextDisabled
+                          : AppColors.lightTextDisabled,
+                      size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -396,14 +427,18 @@ class _IconPickerTile extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: picked
-                          ? const Color(0xFF111827)
-                          : const Color(0xFF6B7280),
+                          ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)
+                          : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const Text(
+                  Text(
                     'PNG, JPG, JPEG',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppColors.darkTextDisabled
+                            : AppColors.lightTextDisabled),
                   ),
                 ],
               ),
@@ -411,8 +446,8 @@ class _IconPickerTile extends StatelessWidget {
             Icon(LucideIcons.folderOpen,
                 size: 16,
                 color: picked
-                    ? const Color(0xFF0D7C66)
-                    : const Color(0xFF9CA3AF)),
+                    ? primary
+                    : (isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled)),
           ],
         ),
       ),

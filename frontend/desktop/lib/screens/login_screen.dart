@@ -4,6 +4,7 @@ import '../main.dart';
 import '../models/requests/login_request.dart';
 import '../providers/api_exception.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_colors.dart';
 import 'widgets/main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -29,8 +30,9 @@ class _LoginScreenState extends State<LoginScreen>
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
 
-  static const _primary = Color(0xFF0D7C66);
-  static const _primaryDark = Color(0xFF0a6b57);
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _primary => _isDark ? AppColors.secondary : AppColors.primary;
+  Color get _primaryDark => _isDark ? AppColors.primary : AppColors.primaryDark;
 
   @override
   void initState() {
@@ -202,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen>
           Expanded(
             flex: 45,
             child: Container(
-              color: const Color(0xFFF8FAFB),
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(
@@ -251,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen>
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w700,
-            color: const Color(0xFF111827),
+            color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
             letterSpacing: -0.4,
           ),
         ),
@@ -260,7 +262,7 @@ class _LoginScreenState extends State<LoginScreen>
           'Prijavite se na vašu kontrolnu tablu',
           style: TextStyle(
             fontSize: 15,
-            color: const Color(0xFF6B7280),
+            color: _isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
           ),
         ),
       ],
@@ -270,16 +272,18 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _buildCard() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: _isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       padding: const EdgeInsets.all(32),
       child: Form(
@@ -310,7 +314,7 @@ class _LoginScreenState extends State<LoginScreen>
       style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w500,
-        color: const Color(0xFF374151),
+        color: _isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
       ),
     );
   }
@@ -319,7 +323,10 @@ class _LoginScreenState extends State<LoginScreen>
     return TextFormField(
       controller: _emailController,
       keyboardType: TextInputType.emailAddress,
-      style: TextStyle(fontSize: 15, color: const Color(0xFF111827)),
+      style: TextStyle(
+        fontSize: 15,
+        color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+      ),
       decoration: _inputDecoration(
         hint: 'vi@primjer.ba ili korisničko_ime',
         prefixIcon: Icons.person_outline_rounded,
@@ -334,10 +341,14 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildPasswordField() {
+    final placeholderColor = _isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
     return TextFormField(
       controller: _passwordController,
       obscureText: _obscurePassword,
-      style: TextStyle(fontSize: 15, color: const Color(0xFF111827)),
+      style: TextStyle(
+        fontSize: 15,
+        color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+      ),
       decoration: _inputDecoration(
         hint: '••••••••',
         prefixIcon: Icons.lock_outline_rounded,
@@ -346,7 +357,7 @@ class _LoginScreenState extends State<LoginScreen>
             _obscurePassword
                 ? Icons.visibility_off_outlined
                 : Icons.visibility_outlined,
-            color: const Color(0xFF9CA3AF),
+            color: placeholderColor,
             size: 20,
           ),
           onPressed: () =>
@@ -365,35 +376,37 @@ class _LoginScreenState extends State<LoginScreen>
     required IconData prefixIcon,
     Widget? suffix,
   }) {
+    final placeholderColor = _isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
+    final borderColor = _isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final errorColor = AppColors.error;
     return InputDecoration(
       hintText: hint,
-      hintStyle:
-          TextStyle(color: const Color(0xFF9CA3AF), fontSize: 15),
+      hintStyle: TextStyle(color: placeholderColor, fontSize: 15),
       filled: true,
-      fillColor: const Color(0xFFF9FAFB),
-      prefixIcon: Icon(prefixIcon, color: const Color(0xFF9CA3AF), size: 20),
+      fillColor: _isDark ? AppColors.darkInputFill : AppColors.lightSurfaceSubtle,
+      prefixIcon: Icon(prefixIcon, color: placeholderColor, size: 20),
       suffixIcon: suffix,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+        borderSide: BorderSide(color: borderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _primary, width: 2),
+        borderSide: BorderSide(color: _primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFEF4444)),
+        borderSide: BorderSide(color: errorColor),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+        borderSide: BorderSide(color: errorColor, width: 2),
       ),
     );
   }
@@ -403,7 +416,7 @@ class _LoginScreenState extends State<LoginScreen>
       height: 50,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [_primary, _primaryDark]),
+          gradient: LinearGradient(colors: [_primary, _primaryDark]),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
@@ -421,11 +434,11 @@ class _LoginScreenState extends State<LoginScreen>
             onTap: _isLoading ? null : _handleSubmit,
             child: Center(
               child: _isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                        color: Colors.white,
+                        color: _isDark ? AppColors.darkBackground : Colors.white,
                         strokeWidth: 2.5,
                       ),
                     )
@@ -434,7 +447,7 @@ class _LoginScreenState extends State<LoginScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: _isDark ? AppColors.darkBackground : Colors.white,
                       ),
                     ),
             ),

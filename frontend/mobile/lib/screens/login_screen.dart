@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/requests/login_request.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/responsive_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,8 +14,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const _primary = Color(0xFF0D7C66);
-
   final _formKey = GlobalKey<FormState>();
   final _emailOrUsernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -50,20 +50,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: const Color(0xFFEF4444)),
+      SnackBar(content: Text(message), backgroundColor: AppColors.errorDark),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Prijava'), backgroundColor: _primary, foregroundColor: Colors.white),
+      appBar: AppBar(title: const Text('Prijava')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
+          child: ResponsivePage(
+            child: Form(
+              key: _formKey,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 16),
@@ -94,14 +94,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: _primary, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _isLoading ? null : _submit,
                   child: _isLoading
-                      ? const SizedBox(
-                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
                       : const Text('Prijavite se'),
                 ),
               ],
+            ),
             ),
           ),
         ),

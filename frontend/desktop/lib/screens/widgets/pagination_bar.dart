@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../theme/app_colors.dart';
+
 /// A reusable pagination bar.
 ///
 /// [currentPage] is 0-indexed. [totalPages] is the total number of pages.
@@ -35,6 +37,7 @@ class PaginationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final pages = _buildPageNumbers();
 
     return Row(
@@ -47,9 +50,13 @@ class PaginationBar extends StatelessWidget {
         const SizedBox(width: 6),
         for (final page in pages)
           page == null
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('…', style: TextStyle(color: Color(0xFF6B7280))),
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('…',
+                      style: TextStyle(
+                          color: isDark
+                              ? AppColors.darkTextTertiary
+                              : AppColors.lightTextTertiary)),
                 )
               : Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -79,11 +86,12 @@ class _NavBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: Colors.white,
+      color: isDark ? AppColors.darkSurface : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFE5E7EB)),
+        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -95,8 +103,8 @@ class _NavBtn extends StatelessWidget {
             icon,
             size: 16,
             color: onTap != null
-                ? const Color(0xFF374151)
-                : const Color(0xFFD1D5DB),
+                ? (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)
+                : (isDark ? AppColors.darkTextDisabled : AppColors.lightBorderInput),
           ),
         ),
       ),
@@ -117,12 +125,16 @@ class _PageBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark ? AppColors.secondary : AppColors.primary;
     return Material(
-      color: isActive ? const Color(0xFF0D7C66) : Colors.white,
+      color: isActive ? activeColor : (isDark ? AppColors.darkSurface : Colors.white),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: isActive ? const Color(0xFF0D7C66) : const Color(0xFFE5E7EB),
+          color: isActive
+              ? activeColor
+              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
         ),
       ),
       child: InkWell(
@@ -137,7 +149,9 @@ class _PageBtn extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : const Color(0xFF374151),
+                color: isActive
+                    ? (isDark ? AppColors.darkBackground : Colors.white)
+                    : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
               ),
             ),
           ),
