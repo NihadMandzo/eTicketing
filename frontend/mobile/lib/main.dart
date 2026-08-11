@@ -4,7 +4,10 @@ import 'core/api_client.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/settings_screen.dart';
 import 'services/auth_service.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +15,9 @@ Future<void> main() async {
   // The cookie jar backing every HTTP request must be ready before any
   // screen makes a call.
   await initApiClient();
+
+  // Restore the persisted light/dark preference before first paint.
+  await ThemeController.init();
 
   // Attempt to silently restore a persisted session (guest browsing works
   // either way — this only pre-fills Session.currentUser if one exists).
@@ -29,17 +35,22 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'eKarta',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0D7C66)),
-        useMaterial3: true,
-      ),
-      initialRoute: '/',
-      routes: {
-        '/': (_) => const HomeScreen(),
-        '/login': (_) => const LoginScreen(),
-        '/register': (_) => const RegisterScreen(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.mode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'eKarta',
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: mode,
+          initialRoute: '/',
+          routes: {
+            '/': (_) => const HomeScreen(),
+            '/login': (_) => const LoginScreen(),
+            '/register': (_) => const RegisterScreen(),
+            '/settings': (_) => const SettingsScreen(),
+          },
+        );
       },
     );
   }

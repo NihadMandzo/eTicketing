@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
-
-const Color _kPrimary = Color(0xFF0D7C66);
-const Color _kPrimaryDark = Color(0xFF0a6b57);
+import '../../theme/app_colors.dart';
 
 class AppHeader extends StatefulWidget {
   final UserProfile user;
@@ -106,22 +104,25 @@ class _AppHeaderState extends State<AppHeader> {
         ? widget.user.lastName[0].toUpperCase()
         : '';
     final initials = f.isEmpty && l.isEmpty ? '?' : '$f$l';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_kPrimary, _kPrimaryDark],
+          colors: isDark
+              ? [AppColors.secondary, AppColors.primary]
+              : [AppColors.primary, AppColors.primaryDark],
         ),
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
         style: TextStyle(
-          color: Colors.white,
+          color: isDark ? AppColors.darkBackground : Colors.white,
           fontWeight: FontWeight.w700,
           fontSize: size * 0.36,
         ),
@@ -131,18 +132,23 @@ class _AppHeaderState extends State<AppHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 64,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
+        boxShadow: isDark
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x08000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
@@ -200,6 +206,7 @@ class _UserButtonState extends State<_UserButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -212,7 +219,7 @@ class _UserButtonState extends State<_UserButton> {
               const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: _hovered || widget.isOpen
-                ? const Color(0xFFF3F4F6)
+                ? (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -227,17 +234,17 @@ class _UserButtonState extends State<_UserButton> {
                 children: [
                   Text(
                     widget.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827),
+                      color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                     ),
                   ),
                   Text(
                     widget.role,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF6B7280),
+                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
                     ),
                   ),
                 ],
@@ -246,10 +253,10 @@ class _UserButtonState extends State<_UserButton> {
               AnimatedRotation(
                 turns: widget.isOpen ? 0.5 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: const Icon(
+                child: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 18,
-                  color: Color(0xFF6B7280),
+                  color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
                 ),
               ),
             ],
@@ -275,15 +282,17 @@ class _DropdownCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
     return Container(
       width: 264,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
             blurRadius: 28,
             offset: const Offset(0, 8),
           ),
@@ -301,28 +310,28 @@ class _DropdownCard extends StatelessWidget {
               children: [
                 Text(
                   user.fullName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF111827),
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   user.email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF6B7280),
+                    color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
                   ),
                 ),
                 if (user.organizationName != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     user.organizationName!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: _kPrimary,
+                      color: isDark ? AppColors.secondary : AppColors.primary,
                     ),
                   ),
                 ],
@@ -330,14 +339,14 @@ class _DropdownCard extends StatelessWidget {
             ),
           ),
 
-          const Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          Divider(height: 1, thickness: 1, color: borderColor),
 
           // Logout
           _DropdownAction(
             icon: Icons.logout_rounded,
             label: 'Odjavi se',
-            color: const Color(0xFFEF4444),
-            hoverBg: const Color(0xFFFEF2F2),
+            color: isDark ? AppColors.error : AppColors.error,
+            hoverBg: isDark ? AppColors.errorBgDarkMode : AppColors.errorBg,
             onTap: onLogout,
           ),
 
@@ -425,6 +434,7 @@ class _BellButtonState extends State<_BellButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -436,8 +446,9 @@ class _BellButtonState extends State<_BellButton> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color:
-                _hovered ? const Color(0xFFF3F4F6) : Colors.transparent,
+            color: _hovered
+                ? (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Stack(
@@ -447,8 +458,8 @@ class _BellButtonState extends State<_BellButton> {
                   Icons.notifications_outlined,
                   size: 22,
                   color: _hovered
-                      ? const Color(0xFF111827)
-                      : const Color(0xFF6B7280),
+                      ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)
+                      : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
                 ),
               ),
               Positioned(
@@ -458,7 +469,7 @@ class _BellButtonState extends State<_BellButton> {
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: Color(0xFFFF6F3C),
+                    color: AppColors.accent,
                     shape: BoxShape.circle,
                   ),
                 ),

@@ -6,6 +6,8 @@ import 'providers/api_exception.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/widgets/main_shell.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_controller.dart';
 import 'utility/snackbar_service.dart';
 
 Future<void> main() async {
@@ -21,6 +23,9 @@ Future<void> main() async {
   // screen (including the session-restore check below) makes a call.
   await initApiClient();
 
+  // Restore the persisted light/dark preference before first paint.
+  await ThemeController.init();
+
   runApp(const MyApp());
 }
 
@@ -29,14 +34,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'eKarta Manager',
-      navigatorKey: SnackbarService.navigatorKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0D7C66)),
-        useMaterial3: true,
-      ),
-      home: const _SessionGate(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.mode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'eKarta Manager',
+          navigatorKey: SnackbarService.navigatorKey,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: mode,
+          home: const _SessionGate(),
+        );
+      },
     );
   }
 }
@@ -78,8 +87,10 @@ class _SessionGateState extends State<_SessionGate> {
       future: _restore,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Color(0xFF0D7C66))),
+          return Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
+            ),
           );
         }
         final profile = snapshot.data;

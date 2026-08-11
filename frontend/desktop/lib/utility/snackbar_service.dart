@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 class SnackbarService {
   SnackbarService._();
 
@@ -109,9 +111,7 @@ class _TopRightSnackbarState extends State<_TopRightSnackbar>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isError
-        ? const Color(0xFFC62828)
-        : const Color(0xFF2E7D32);
+    final color = widget.isError ? AppColors.errorDark : AppColors.successDark;
 
     final icon = widget.isError
         ? Icons.error_outline_rounded

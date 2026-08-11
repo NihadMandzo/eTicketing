@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/requests/register_request.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/responsive_page.dart';
 
 /// Self-registration — always creates a "User"/buyer account on the backend
 /// (the desktop admin console has no equivalent screen by design; admins and
@@ -15,8 +17,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  static const _primary = Color(0xFF0D7C66);
-
   final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
@@ -67,17 +67,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: const Color(0xFFEF4444)),
+      SnackBar(content: Text(message), backgroundColor: AppColors.errorDark),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Registracija'), backgroundColor: _primary, foregroundColor: Colors.white),
+      appBar: AppBar(title: const Text('Registracija')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          child: ResponsivePage(
           child: Form(
             key: _formKey,
             child: Column(
@@ -150,15 +150,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: _primary, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _isLoading ? null : _submit,
                   child: _isLoading
-                      ? const SizedBox(
-                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
                       : const Text('Registrujte se'),
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_colors.dart';
 import '../categories_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
@@ -56,7 +57,6 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFB),
       body: Row(
         children: [
           // ── Sidebar ──────────────────────────────────────────────────────
@@ -109,6 +109,7 @@ class _PageContent extends StatelessWidget {
     if (page == 'users') {
       return UsersScreen(currentUser: user);
     }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -116,19 +117,19 @@ class _PageContent extends StatelessWidget {
         children: [
           Text(
             _pageTitle(page),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF111827),
+              color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
               letterSpacing: -0.4,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Sadržaj za ovu stranicu još nije implementiran.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: Color(0xFF6B7280),
+              color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
             ),
           ),
           const SizedBox(height: 32),
@@ -179,18 +180,23 @@ class _PlaceholderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: borderColor),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -199,12 +205,12 @@ class _PlaceholderCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFF0D7C66).withValues(alpha: 0.1),
+              color: primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.bar_chart_rounded,
-              color: Color(0xFF0D7C66),
+              color: primary,
               size: 24,
             ),
           ),
@@ -217,7 +223,7 @@ class _PlaceholderCard extends StatelessWidget {
                 width: 80,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE5E7EB),
+                  color: borderColor,
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
@@ -226,7 +232,7 @@ class _PlaceholderCard extends StatelessWidget {
                 width: 50,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
+                  color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),

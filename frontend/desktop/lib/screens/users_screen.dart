@@ -6,6 +6,7 @@ import '../models/responses/admin_user_response.dart';
 import '../models/responses/user_profile.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../providers/user_provider.dart';
+import '../theme/app_colors.dart';
 import 'widgets/pagination_bar.dart';
 import '../main.dart';
 
@@ -138,20 +139,20 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
-  Color _roleBadgeColor(String role) {
+  Color _roleBadgeColor(String role, bool isDark) {
     switch (role) {
       case 'SuperAdmin':
-        return const Color(0xFF7C3AED);
+        return AppColors.rolePurple;
       case 'Admin':
-        return const Color(0xFF2563EB);
+        return AppColors.info;
       case 'OrganizationSuperAdmin':
-        return const Color(0xFF0D7C66);
+        return isDark ? AppColors.secondary : AppColors.primary;
       case 'OrganizationAdmin':
-        return const Color(0xFF0891B2);
+        return AppColors.roleCyan;
       case 'User':
-        return const Color(0xFF6B7280);
+        return isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
       default:
-        return const Color(0xFF6B7280);
+        return isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     }
   }
 
@@ -162,6 +163,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -171,12 +173,12 @@ class _UsersScreenState extends State<UsersScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Korisnici Organizacije',
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF111827),
+                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                   height: 1.2,
                 ),
               ),
@@ -185,8 +187,9 @@ class _UsersScreenState extends State<UsersScreen> {
                 _isSuperAdmin
                     ? 'Upravljajte korisnicima kroz sve organizacije'
                     : 'Upravljajte korisnicima u ${widget.currentUser.organizationName ?? 'vašoj organizaciji'}',
-                style:
-                    const TextStyle(fontSize: 16, color: Color(0xFF4B5563)),
+                style: TextStyle(
+                    fontSize: 16,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
               ),
             ],
           ),
@@ -200,19 +203,19 @@ class _UsersScreenState extends State<UsersScreen> {
                 _StatCard(
                   label: 'Ukupno Korisnika',
                   value: '$_totalCount',
-                  valueColor: const Color(0xFF111827),
+                  valueColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                 ),
                 const SizedBox(width: 16),
                 _StatCard(
                   label: 'Aktivni (Prikazano)',
                   value: '$_activeCount',
-                  valueColor: const Color(0xFF0D7C66),
+                  valueColor: isDark ? AppColors.secondary : AppColors.primary,
                 ),
                 const SizedBox(width: 16),
                 _StatCard(
                   label: 'Admini (Prikazano)',
                   value: '$_adminCount',
-                  valueColor: const Color(0xFF111827),
+                  valueColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                 ),
               ],
             ),
@@ -223,22 +226,27 @@ class _UsersScreenState extends State<UsersScreen> {
           Container(
             height: 46,
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFD1D5DB)),
+              color: isDark ? AppColors.darkInputFill : Colors.white,
+              border: Border.all(
+                  color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Pretražite korisnike po imenu, emailu ili ulozi...',
-                hintStyle: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+                hintStyle: TextStyle(
+                    color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+                    fontSize: 14),
                 prefixIcon: Icon(LucideIcons.search,
-                    color: Color(0xFF9CA3AF), size: 18),
+                    color: isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled,
+                    size: 18),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 13),
+                contentPadding: const EdgeInsets.symmetric(vertical: 13),
               ),
-              style: const TextStyle(color: Color(0xFF111827)),
+              style: TextStyle(
+                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
             ),
           ),
 
@@ -247,22 +255,28 @@ class _UsersScreenState extends State<UsersScreen> {
           // ── User Cards ─────────────────────────────────────────────
           Expanded(
             child: _isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
-                        color: Color(0xFF0D7C66)),
+                        color: isDark ? AppColors.secondary : AppColors.primary),
                   )
                 : _users.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Icon(LucideIcons.userX,
-                                size: 48, color: Color(0xFFD1D5DB)),
-                            SizedBox(height: 12),
+                                size: 48,
+                                color: isDark
+                                    ? AppColors.darkBorderInput
+                                    : AppColors.lightBorderInput),
+                            const SizedBox(height: 12),
                             Text(
                               'Nema korisnika',
                               style: TextStyle(
-                                  color: Color(0xFF6B7280), fontSize: 16),
+                                  color: isDark
+                                      ? AppColors.darkTextTertiary
+                                      : AppColors.lightTextTertiary,
+                                  fontSize: 16),
                             ),
                           ],
                         ),
@@ -275,7 +289,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           return _UserCard(
                             user: _users[index],
                             roleBadgeText: _roleBadgeText,
-                            roleBadgeColor: _roleBadgeColor,
+                            roleBadgeColor: (role) => _roleBadgeColor(role, isDark),
                             formatDate: _formatDate,
                             formatDateShort: _formatDateShort,
                           );
@@ -315,29 +329,32 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: Color(0xFF6B7280),
+                color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
               ),
             ),
             const SizedBox(height: 8),
@@ -384,6 +401,7 @@ class _UserCardState extends State<_UserCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final u = widget.user;
     final roleColor = widget.roleBadgeColor(u.roleName);
 
@@ -394,28 +412,30 @@ class _UserCardState extends State<_UserCard> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovering
-                ? const Color(0xFF0D7C66)
-                : const Color(0xFFE5E7EB),
+                ? (isDark ? AppColors.secondary : AppColors.primary)
+                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
-          boxShadow: _isHovering
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+          boxShadow: isDark
+              ? null
+              : (_isHovering
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,18 +445,20 @@ class _UserCardState extends State<_UserCard> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF0D7C66), Color(0xFF0a6b57)],
+                  colors: isDark
+                      ? [AppColors.secondary, AppColors.primary]
+                      : [AppColors.primary, AppColors.primaryDark],
                 ),
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
               child: Text(
                 _initials(u.fullName),
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: isDark ? AppColors.darkBackground : Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
@@ -459,10 +481,12 @@ class _UserCardState extends State<_UserCard> {
                           children: [
                             Text(
                               u.fullName,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF111827),
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.lightTextPrimary,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -475,12 +499,12 @@ class _UserCardState extends State<_UserCard> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color:
-                                        roleColor.withValues(alpha: 0.1),
+                                    color: roleColor.withValues(
+                                        alpha: isDark ? 0.18 : 0.1),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
                                         color: roleColor
-                                            .withValues(alpha: 0.25)),
+                                            .withValues(alpha: 0.35)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -504,11 +528,10 @@ class _UserCardState extends State<_UserCard> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: u.isActive
-                                        ? const Color(0xFF22C55E)
-                                            .withValues(alpha: 0.1)
-                                        : const Color(0xFFEF4444)
-                                            .withValues(alpha: 0.1),
+                                    color: (u.isActive
+                                            ? AppColors.success
+                                            : AppColors.error)
+                                        .withValues(alpha: isDark ? 0.18 : 0.1),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -517,8 +540,8 @@ class _UserCardState extends State<_UserCard> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: u.isActive
-                                          ? const Color(0xFF15803D)
-                                          : const Color(0xFFDC2626),
+                                          ? AppColors.successDark
+                                          : AppColors.errorDark,
                                     ),
                                   ),
                                 ),
@@ -540,15 +563,20 @@ class _UserCardState extends State<_UserCard> {
                         flex: 3,
                         child: Row(
                           children: [
-                            const Icon(LucideIcons.mail,
-                                size: 15, color: Color(0xFF9CA3AF)),
+                            Icon(LucideIcons.mail,
+                                size: 15,
+                                color: isDark
+                                    ? AppColors.darkTextDisabled
+                                    : AppColors.lightTextDisabled),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 u.email,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: Color(0xFF6B7280),
+                                  color: isDark
+                                      ? AppColors.darkTextTertiary
+                                      : AppColors.lightTextTertiary,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -564,15 +592,20 @@ class _UserCardState extends State<_UserCard> {
                           flex: 2,
                           child: Row(
                             children: [
-                              const Icon(LucideIcons.phone,
-                                  size: 15, color: Color(0xFF9CA3AF)),
+                              Icon(LucideIcons.phone,
+                                  size: 15,
+                                  color: isDark
+                                      ? AppColors.darkTextDisabled
+                                      : AppColors.lightTextDisabled),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   u.phoneNumber!,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF6B7280),
+                                    color: isDark
+                                        ? AppColors.darkTextTertiary
+                                        : AppColors.lightTextTertiary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -588,14 +621,19 @@ class _UserCardState extends State<_UserCard> {
                           text: TextSpan(
                             style: const TextStyle(fontSize: 13),
                             children: [
-                              const TextSpan(
+                              TextSpan(
                                 text: 'Pridružen: ',
-                                style: TextStyle(color: Color(0xFF9CA3AF)),
+                                style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.darkTextDisabled
+                                        : AppColors.lightTextDisabled),
                               ),
                               TextSpan(
                                 text: widget.formatDate(u.createdAt),
-                                style: const TextStyle(
-                                    color: Color(0xFF6B7280)),
+                                style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.darkTextTertiary
+                                        : AppColors.lightTextTertiary),
                               ),
                             ],
                           ),
@@ -608,14 +646,19 @@ class _UserCardState extends State<_UserCard> {
                           text: TextSpan(
                             style: const TextStyle(fontSize: 13),
                             children: [
-                              const TextSpan(
+                              TextSpan(
                                 text: 'Posljednja Aktivnost: ',
-                                style: TextStyle(color: Color(0xFF9CA3AF)),
+                                style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.darkTextDisabled
+                                        : AppColors.lightTextDisabled),
                               ),
                               TextSpan(
                                 text: widget.formatDateShort(u.lastLoginAt),
-                                style: const TextStyle(
-                                    color: Color(0xFF6B7280)),
+                                style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.darkTextTertiary
+                                        : AppColors.lightTextTertiary),
                               ),
                             ],
                           ),
@@ -629,9 +672,12 @@ class _UserCardState extends State<_UserCard> {
                   // ── Bottom separator + email verified ──
                   Container(
                     padding: const EdgeInsets.only(top: 16),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       border: Border(
-                        top: BorderSide(color: Color(0xFFF3F4F6)),
+                        top: BorderSide(
+                            color: isDark
+                                ? AppColors.darkBorder
+                                : AppColors.lightSurfaceMuted),
                       ),
                     ),
                     child: Row(
@@ -645,8 +691,8 @@ class _UserCardState extends State<_UserCard> {
                                   : LucideIcons.badgeX,
                               size: 16,
                               color: u.isEmailVerified
-                                  ? const Color(0xFF0D7C66)
-                                  : const Color(0xFFEF4444),
+                                  ? (isDark ? AppColors.secondary : AppColors.primary)
+                                  : AppColors.error,
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -657,8 +703,8 @@ class _UserCardState extends State<_UserCard> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: u.isEmailVerified
-                                    ? const Color(0xFF0D7C66)
-                                    : const Color(0xFFEF4444),
+                                    ? (isDark ? AppColors.secondary : AppColors.primary)
+                                    : AppColors.error,
                               ),
                             ),
                           ],
@@ -669,14 +715,14 @@ class _UserCardState extends State<_UserCard> {
                           Row(
                             children: [
                               const Icon(LucideIcons.logIn,
-                                  size: 16, color: Color(0xFFF59E0B)),
+                                  size: 16, color: AppColors.warning),
                               const SizedBox(width: 6),
                               const Text(
                                 'Prva prijava',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFFF59E0B),
+                                  color: AppColors.warning,
                                 ),
                               ),
                             ],
@@ -690,21 +736,28 @@ class _UserCardState extends State<_UserCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
+                            color: isDark
+                                ? AppColors.darkSurfaceMuted
+                                : AppColors.lightSurfaceMuted,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(LucideIcons.atSign,
-                                  size: 12, color: Color(0xFF6B7280)),
+                              Icon(LucideIcons.atSign,
+                                  size: 12,
+                                  color: isDark
+                                      ? AppColors.darkTextTertiary
+                                      : AppColors.lightTextTertiary),
                               const SizedBox(width: 4),
                               Text(
                                 u.username,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF374151),
+                                  color: isDark
+                                      ? AppColors.darkTextSecondary
+                                      : AppColors.lightTextSecondary,
                                 ),
                               ),
                             ],

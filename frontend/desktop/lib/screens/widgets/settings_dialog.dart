@@ -11,6 +11,8 @@ import '../../models/responses/user_profile.dart';
 import '../../providers/api_exception.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/organization_provider.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/theme_controller.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
@@ -91,6 +93,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
   bool get _hasOrg =>
       widget.user.organizationId != null &&
       _kOrgRoles.contains(widget.user.roleName);
+
+  // ── Dark-mode-aware color helpers (mirrors the pattern in login_screen.dart) ──
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _primary => _isDark ? AppColors.secondary : AppColors.primary;
+  Color get _primaryDark => _isDark ? AppColors.primary : AppColors.primaryDark;
+  Color get _onPrimary => _isDark ? AppColors.darkBackground : Colors.white;
 
   // ── Profile tabs
   static const _profileTabs = [
@@ -268,14 +276,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: const Color(0xFFEF4444),
+      backgroundColor: AppColors.errorDark,
     ));
   }
 
   void _showSuccess(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: _kPrimary,
+      backgroundColor: AppColors.successDark,
     ));
   }
 
@@ -320,7 +328,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         child: Container(
           width: 1100,
           height: 800,
-          color: Colors.white,
+          color: _isDark ? AppColors.darkSurface : Colors.white,
           child: Column(
             children: [
               _buildHeader(),
@@ -346,10 +354,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _buildHeader() {
     final isProfile = _mode == 'profile';
+    final onHeader = _onPrimary;
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [_kPrimary, _kPrimaryDark]),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [_primary, _primaryDark]),
       ),
       child: Row(
         children: [
@@ -357,12 +366,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: onHeader.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               isProfile ? Icons.person_rounded : Icons.business_rounded,
-              color: Colors.white,
+              color: onHeader,
               size: 22,
             ),
           ),
@@ -372,10 +381,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
             children: [
               Text(
                 isProfile ? 'Postavke Profila' : 'Postavke Organizacije',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: onHeader,
                 ),
               ),
               Text(
@@ -384,7 +393,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     : 'Upravljajte informacijama o organizaciji',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: onHeader.withValues(alpha: 0.8),
                 ),
               ),
             ],
@@ -393,9 +402,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
           _IconBtn(
             icon: Icons.close_rounded,
             onTap: _closeDialog,
-            color: Colors.white.withValues(alpha: 0.8),
-            hoverColor: Colors.white,
-            hoverBg: Colors.white.withValues(alpha: 0.1),
+            color: onHeader.withValues(alpha: 0.8),
+            hoverColor: onHeader,
+            hoverBg: onHeader.withValues(alpha: 0.1),
           ),
         ],
       ),
@@ -407,9 +416,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _buildModeSelector() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFB),
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: _isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
+        border: Border(
+          bottom: BorderSide(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
       ),
       child: Row(
         children: [
@@ -441,9 +452,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
     return Container(
       width: 220,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFB),
-        border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: _isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
+        border: Border(
+          right: BorderSide(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
@@ -471,13 +484,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _buildInfoCard() {
     final u = widget.user;
     final isProfile = _mode == 'profile';
+    final isDark = _isDark;
+    final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: borderColor),
       ),
       child: isProfile
           ? Column(
@@ -496,17 +513,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           Text(u.fullName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF111827),
+                                color: textPrimary,
                               )),
                           Text(u.email,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF6B7280),
+                                color: textTertiary,
                               )),
                         ],
                       ),
@@ -514,21 +531,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFE5E7EB)),
+                Divider(height: 1, color: borderColor),
                 const SizedBox(height: 10),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _kPrimary.withValues(alpha: 0.1),
+                    color: _primary.withValues(alpha: isDark ? 0.18 : 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     _roleLabel(u.roleName),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _kPrimary,
+                      color: _primary,
                     ),
                   ),
                 ),
@@ -542,14 +559,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     Container(
                       width: 44,
                       height: 44,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [_kPrimary, _kPrimaryDark],
+                          colors: [_primary, _primaryDark],
                         ),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.business_rounded,
-                          color: Colors.white, size: 24),
+                      child: Icon(Icons.business_rounded,
+                          color: _onPrimary, size: 24),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -562,29 +579,29 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                   '-',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF111827),
+                                color: textPrimary,
                               )),
-                          const Text('Organizacija',
+                          Text('Organizacija',
                               style: TextStyle(
-                                  fontSize: 11, color: Color(0xFF6B7280))),
+                                  fontSize: 11, color: textTertiary)),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFE5E7EB)),
+                Divider(height: 1, color: borderColor),
                 const SizedBox(height: 10),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: _orgActive
-                        ? const Color(0xFFDCFCE7)
-                        : const Color(0xFFFEF2F2),
+                        ? AppColors.success.withValues(alpha: isDark ? 0.18 : 0.1)
+                        : AppColors.error.withValues(alpha: isDark ? 0.18 : 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -593,8 +610,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: _orgActive
-                          ? const Color(0xFF16A34A)
-                          : const Color(0xFFDC2626),
+                          ? AppColors.successDark
+                          : AppColors.errorDark,
                     ),
                   ),
                 ),
@@ -607,10 +624,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _buildContent() {
     if (_mode == 'organization' && _loadingOrg) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(48),
-          child: CircularProgressIndicator(color: _kPrimary),
+          padding: const EdgeInsets.all(48),
+          child: CircularProgressIndicator(color: _primary),
         ),
       );
     }
@@ -689,11 +706,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
       children: [
         _sectionTitle('Sigurnost Naloga'),
         const SizedBox(height: 16),
-        const _InfoBanner(
+        _InfoBanner(
           icon: Icons.shield_outlined,
-          color: Color(0xFFF59E0B),
-          bg: Color(0xFFFFFBEB),
-          border: Color(0xFFFDE68A),
+          color: AppColors.warning,
+          bg: _isDark ? AppColors.warning.withValues(alpha: 0.15) : AppColors.warningBg,
+          border: _isDark ? AppColors.warning.withValues(alpha: 0.4) : AppColors.warningBorder,
           title: 'Promjena Lozinke',
           body:
               'Preporučujemo jaku lozinku sa najmanje 8 karaktera, brojevima i simbolima.',
@@ -723,7 +740,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           obscure: true,
         ),
         const SizedBox(height: 28),
-        const Divider(color: Color(0xFFE5E7EB)),
+        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
         const SizedBox(height: 20),
         _sectionSubtitle('Dvofaktorska Autentifikacija'),
         const SizedBox(height: 12),
@@ -738,6 +755,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   Widget _buildNotificationsTab() {
+    final isDark = _isDark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -745,8 +763,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SizedBox(height: 16),
         _ToggleRow(
           icon: Icons.mail_outline_rounded,
-          iconBg: _kPrimary.withValues(alpha: 0.1),
-          iconColor: _kPrimary,
+          iconBg: _primary.withValues(alpha: isDark ? 0.18 : 0.1),
+          iconColor: _primary,
           title: 'Email Obavještenja',
           subtitle: 'Primajte email notifikacije o važnim događajima',
           value: _emailNotif,
@@ -755,8 +773,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SizedBox(height: 10),
         _ToggleRow(
           icon: Icons.notifications_outlined,
-          iconBg: const Color(0xFFCFFAFE),
-          iconColor: const Color(0xFF0891B2),
+          iconBg: AppColors.roleCyan.withValues(alpha: isDark ? 0.18 : 0.1),
+          iconColor: AppColors.roleCyan,
           title: 'Push Obavještenja',
           subtitle: 'Primajte obavještenja na vašem uređaju',
           value: _pushNotif,
@@ -765,8 +783,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SizedBox(height: 10),
         _ToggleRow(
           icon: Icons.event_rounded,
-          iconBg: const Color(0xFFEDE9FE),
-          iconColor: const Color(0xFF7C3AED),
+          iconBg: AppColors.rolePurple.withValues(alpha: isDark ? 0.18 : 0.1),
+          iconColor: AppColors.rolePurple,
           title: 'Podsjetnike za Događaje',
           subtitle: 'Budite obaviješteni o nadolazećim događajima',
           value: _eventReminders,
@@ -775,8 +793,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SizedBox(height: 10),
         _ToggleRow(
           icon: Icons.bar_chart_rounded,
-          iconBg: const Color(0xFFFEF3C7),
-          iconColor: const Color(0xFFD97706),
+          iconBg: AppColors.warning.withValues(alpha: isDark ? 0.18 : 0.1),
+          iconColor: AppColors.warningDark,
           title: 'Sedmične Izvještaje',
           subtitle: 'Dobijajte sedmične preglede performansi',
           value: _weeklyReports,
@@ -790,6 +808,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _sectionTitle('Izgled'),
+        const SizedBox(height: 16),
+        ValueListenableBuilder<ThemeMode>(
+          valueListenable: ThemeController.mode,
+          builder: (context, mode, _) {
+            final isDark = ThemeController.isDark(context);
+            return _ToggleRow(
+              icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+              iconBg: _kPrimary.withValues(alpha: 0.1),
+              iconColor: _kPrimary,
+              title: 'Tamni Način Rada',
+              subtitle: 'Prebacite između svijetle i tamne teme',
+              value: isDark,
+              onChanged: (v) => ThemeController.setMode(v ? ThemeMode.dark : ThemeMode.light),
+            );
+          },
+        ),
+        const SizedBox(height: 28),
+        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        const SizedBox(height: 20),
         _sectionTitle('Opće Postavke'),
         const SizedBox(height: 16),
         _Grid(children: [
@@ -817,37 +855,42 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ),
         ]),
         const SizedBox(height: 28),
-        const Divider(color: Color(0xFFE5E7EB)),
+        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
         const SizedBox(height: 20),
         _sectionSubtitle('Zona Opasnosti'),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFEF2F2),
+            color: _isDark ? AppColors.errorBgDarkMode : AppColors.errorBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFECACA)),
+            border: Border.all(
+                color: _isDark
+                    ? AppColors.error.withValues(alpha: 0.4)
+                    : AppColors.errorBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Obriši Nalog',
+              Text('Obriši Nalog',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF991B1B),
+                    color: _isDark ? AppColors.error : AppColors.errorDarkest,
                   )),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Trajno obrišite svoj nalog i sve povezane podatke. '
                 'Ova akcija se ne može poništiti.',
-                style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                style: TextStyle(
+                    fontSize: 13,
+                    color: _isDark ? AppColors.error : AppColors.errorText),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: () {},
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFDC2626),
+                  backgroundColor: AppColors.errorDark,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -973,11 +1016,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
           onChanged: (v) => setState(() => _orgActive = v),
         ),
         const SizedBox(height: 12),
-        const _InfoBanner(
+        _InfoBanner(
           icon: Icons.info_outline_rounded,
-          color: Color(0xFF2563EB),
-          bg: Color(0xFFEFF6FF),
-          border: Color(0xFFBFDBFE),
+          color: AppColors.info,
+          bg: _isDark ? AppColors.info.withValues(alpha: 0.15) : AppColors.infoBg,
+          border: _isDark ? AppColors.info.withValues(alpha: 0.4) : AppColors.infoBorder,
           title: 'Napomena',
           body:
               'Promjene u postavkama organizacije će biti vidljive svim korisnicima koji '
@@ -992,9 +1035,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _buildFooter() {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFB),
-        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: _isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
+        border: Border(
+          top: BorderSide(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -1002,10 +1047,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
           OutlinedButton(
             onPressed: _closeDialog,
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Color(0xFFD1D5DB)),
+              side: BorderSide(
+                  color: _isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
-              foregroundColor: const Color(0xFF374151),
+              foregroundColor:
+                  _isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
               padding:
                   const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
             ),
@@ -1015,14 +1062,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ),
           const SizedBox(width: 12),
           _saving
-              ? const SizedBox(
+              ? SizedBox(
                   width: 120,
                   child: Center(
                     child: SizedBox(
                       width: 24,
                       height: 24,
                       child: CircularProgressIndicator(
-                        color: _kPrimary,
+                        color: _primary,
                         strokeWidth: 2.5,
                       ),
                     ),
@@ -1030,12 +1077,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 )
               : DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [_kPrimary, _kPrimaryDark]),
+                    gradient: LinearGradient(
+                        colors: [_primary, _primaryDark]),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: _kPrimary.withValues(alpha: 0.3),
+                        color: _primary.withValues(alpha: 0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -1047,21 +1094,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     child: InkWell(
                       onTap: _handleSave,
                       borderRadius: BorderRadius.circular(12),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
                             horizontal: 22, vertical: 12),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.save_rounded,
-                                size: 18, color: Colors.white),
-                            SizedBox(width: 8),
+                                size: 18, color: _onPrimary),
+                            const SizedBox(width: 8),
                             Text(
                               'Sačuvaj Promjene',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: _onPrimary,
                               ),
                             ),
                           ],
@@ -1078,16 +1125,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Widget _sectionTitle(String t) => Text(t,
-      style: const TextStyle(
+      style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF111827)));
+          color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary));
 
   Widget _sectionSubtitle(String t) => Text(t,
-      style: const TextStyle(
+      style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF111827)));
+          color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary));
 }
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -1115,20 +1162,26 @@ class _ModeTabBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final onPrimary = isDark ? AppColors.darkBackground : Colors.white;
+    final inactiveBg = isDark ? AppColors.darkSurface : Colors.white;
+    final inactiveBorder = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final inactiveText = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? _kPrimary : Colors.white,
+          color: active ? primary : inactiveBg,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: active ? _kPrimary : const Color(0xFFD1D5DB)),
+              color: active ? primary : inactiveBorder),
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: _kPrimary.withValues(alpha: 0.2),
+                    color: primary.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -1140,13 +1193,13 @@ class _ModeTabBtn extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 18,
-                color: active ? Colors.white : const Color(0xFF374151)),
+                color: active ? onPrimary : inactiveText),
             const SizedBox(width: 8),
             Text(label,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: active ? Colors.white : const Color(0xFF374151),
+                  color: active ? onPrimary : inactiveText,
                 )),
           ],
         ),
@@ -1167,6 +1220,12 @@ class _SideTabBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
+    final onPrimary = isDark ? AppColors.darkBackground : Colors.white;
+    final inactiveIcon = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final inactiveText = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: GestureDetector(
@@ -1177,13 +1236,13 @@ class _SideTabBtn extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             gradient: active
-                ? const LinearGradient(colors: [_kPrimary, _kPrimaryDark])
+                ? LinearGradient(colors: [primary, primaryDark])
                 : null,
             color: active ? null : Colors.transparent,
             boxShadow: active
                 ? [
                     BoxShadow(
-                      color: _kPrimary.withValues(alpha: 0.2),
+                      color: primary.withValues(alpha: 0.2),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     )
@@ -1197,8 +1256,7 @@ class _SideTabBtn extends StatelessWidget {
                 child: Center(
                   child: Icon(tab.icon,
                       size: 18,
-                      color:
-                          active ? Colors.white : const Color(0xFF6B7280)),
+                      color: active ? onPrimary : inactiveIcon),
                 ),
               ),
               Expanded(
@@ -1208,8 +1266,7 @@ class _SideTabBtn extends StatelessWidget {
                       fontSize: 13,
                       fontWeight:
                           active ? FontWeight.w600 : FontWeight.w500,
-                      color:
-                          active ? Colors.white : const Color(0xFF374151),
+                      color: active ? onPrimary : inactiveText,
                     )),
               ),
             ],
@@ -1230,11 +1287,13 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Decorative brand accent — kept as the static teal gradient in both
+    // themes (see _kPrimary/_kPrimaryDark doc note near the top of the file).
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [_kPrimary, _kPrimaryDark]),
@@ -1260,12 +1319,13 @@ class _AvatarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: Row(
         children: [
@@ -1275,14 +1335,15 @@ class _AvatarCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(name,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827))),
+                      color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
               const SizedBox(height: 4),
-              const Text('Profilna fotografija',
-                  style:
-                      TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+              Text('Profilna fotografija',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
             ],
           ),
         ],
@@ -1308,12 +1369,16 @@ class _OrgLogoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
+    final onPrimary = isDark ? AppColors.darkBackground : Colors.white;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: Row(
         children: [
@@ -1325,8 +1390,7 @@ class _OrgLogoCard extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: _hasLogo
                   ? null
-                  : const LinearGradient(
-                      colors: [_kPrimary, _kPrimaryDark]),
+                  : LinearGradient(colors: [primary, primaryDark]),
               image: logoFile != null
                   ? DecorationImage(
                       image: FileImage(logoFile!), fit: BoxFit.cover)
@@ -1338,31 +1402,34 @@ class _OrgLogoCard extends StatelessWidget {
             ),
             child: _hasLogo
                 ? null
-                : const Icon(Icons.business_rounded,
-                    color: Colors.white, size: 40),
+                : Icon(Icons.business_rounded,
+                    color: onPrimary, size: 40),
           ),
           const SizedBox(width: 20),
           // ── Text + button ─────────────────────────────────────────────
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Logo Organizacije',
+              Text('Logo Organizacije',
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827))),
+                      color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
               const SizedBox(height: 4),
-              const Text('PNG ili JPG (maks. 2MB)',
-                  style:
-                      TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+              Text('PNG ili JPG (maks. 2MB)',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
               const SizedBox(height: 10),
               OutlinedButton(
                 onPressed: onPickLogo,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFD1D5DB)),
+                  side: BorderSide(
+                      color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
-                  foregroundColor: const Color(0xFF374151),
+                  foregroundColor:
+                      isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
                   textStyle: const TextStyle(
@@ -1418,6 +1485,10 @@ class _FieldState extends State<_Field> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final borderColor = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final placeholderColor = isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
     return TextFormField(
       controller: widget.controller,
       obscureText: _obscure,
@@ -1427,25 +1498,23 @@ class _FieldState extends State<_Field> {
       style: TextStyle(
         fontSize: 14,
         color: widget.readOnly
-            ? const Color(0xFF6B7280)
-            : const Color(0xFF111827),
+            ? (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)
+            : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
       ),
       decoration: InputDecoration(
         labelText: widget.label,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF374151)),
+            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
         hintText: widget.hint,
-        hintStyle:
-            const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+        hintStyle: TextStyle(color: placeholderColor, fontSize: 14),
         filled: true,
         fillColor: widget.readOnly
-            ? const Color(0xFFF3F4F6)
-            : const Color(0xFFFAFAFA),
+            ? (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted)
+            : (isDark ? AppColors.darkInputFill : AppColors.lightInputFill),
         prefixIcon: widget.prefixIcon != null
-            ? Icon(widget.prefixIcon,
-                color: const Color(0xFF9CA3AF), size: 18)
+            ? Icon(widget.prefixIcon, color: placeholderColor, size: 18)
             : null,
         suffixIcon: widget.obscure
             ? IconButton(
@@ -1453,7 +1522,7 @@ class _FieldState extends State<_Field> {
                     _obscure
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
-                    color: const Color(0xFF9CA3AF),
+                    color: placeholderColor,
                     size: 18),
                 onPressed: () => setState(() => _obscure = !_obscure),
               )
@@ -1462,19 +1531,19 @@ class _FieldState extends State<_Field> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _kPrimary, width: 2),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
         ),
       ),
     );
@@ -1497,31 +1566,37 @@ class _DropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final borderColor = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
     return DropdownButtonFormField<String>(
       value: value,
       onChanged: onChanged,
-      style: const TextStyle(fontSize: 14, color: Color(0xFF111827)),
+      style: TextStyle(
+          fontSize: 14,
+          color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
+      dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF374151)),
+            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
         filled: true,
-        fillColor: const Color(0xFFFAFAFA),
+        fillColor: isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _kPrimary, width: 2),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
       ),
       items: items.entries
@@ -1608,12 +1683,14 @@ class _ToggleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.lightSurfaceSubtle,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: Row(
         children: [
@@ -1634,14 +1711,15 @@ class _ToggleRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF111827))),
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF6B7280))),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
               ],
             ),
           ),
@@ -1649,7 +1727,7 @@ class _ToggleRow extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: _kPrimary,
+            activeColor: primary,
           ),
         ],
       ),
