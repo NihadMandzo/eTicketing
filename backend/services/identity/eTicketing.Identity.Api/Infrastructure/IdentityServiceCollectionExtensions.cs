@@ -1,6 +1,7 @@
 using System.Text;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Identity.Business;
 using eTicketing.Identity.Business.Admins;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations;
@@ -51,14 +52,18 @@ public static class IdentityServiceCollectionExtensions
                 o => !string.IsNullOrWhiteSpace(o.SigningKey) && Encoding.UTF8.GetByteCount(o.SigningKey) >= 32,
                 "Jwt:SigningKey mora biti podešen i imati najmanje 32 bajta (HS256 minimum).")
             .ValidateOnStart();
+        builder.Services.AddOptions<IdentityOptions>()
+            .Bind(builder.Configuration.GetSection(IdentityOptions.SectionName));
         builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();
         builder.Services.AddScoped<IAdminService, AdminService>();
         builder.Services.AddScoped<IAuthCookieService, AuthCookieService>();
         builder.Services.AddValidatorsFromAssembly(typeof(IAuthService).Assembly);
-        // Registers the shared BaseSearchObjectValidator (for BaseSearchObject) used directly
-        // by routes like GetUsers that bind BaseSearchObject without a derived query type.
+        // Registers the shared BaseSearchObjectValidator (for BaseSearchObject) — kept
+        // registered for any future route that binds BaseSearchObject directly without a
+        // derived query type (no current route does; GetUsers used to before it gained a Role
+        // filter and moved to OrganizationUserQuery).
         builder.Services.AddValidatorsFromAssembly(typeof(BaseSearchObjectValidator).Assembly);
         // Mapster's IRegister configs (UserMappingConfig, OrganizationMappingConfig, ...) are
         // scanned into TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in

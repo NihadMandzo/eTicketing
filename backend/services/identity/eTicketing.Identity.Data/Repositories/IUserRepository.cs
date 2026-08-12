@@ -18,8 +18,11 @@ public interface IUserRepository : IRepository<User, Guid>
     /// role — backs AdminService.GetAsync.</summary>
     Task<PagedResult<User>> SearchByRoleAsync(RoleType role, BaseSearchObject query, CancellationToken ct = default);
 
-    /// <summary>Paged users belonging to an organization — backs OrganizationService.GetUsersAsync.</summary>
-    Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default);
+    /// <summary>Paged, FTS-filtered (first name/last name/email), optionally role-filtered users
+    /// belonging to an organization — backs OrganizationService.GetUsersAsync. role is passed as
+    /// a plain parameter rather than the Business-layer OrganizationUserQuery type so Data
+    /// doesn't need to reference Business (would be circular).</summary>
+    Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, RoleType? role, CancellationToken ct = default);
 
     /// <summary>Live count of an organization's users — backs OrganizationService.UpdateAsync,
     /// which needs a fresh count without re-loading every user row.</summary>

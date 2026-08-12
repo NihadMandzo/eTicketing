@@ -7,7 +7,9 @@ import '../models/responses/user_profile.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/role_badge.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/stat_card.dart';
 import '../main.dart';
 
 class UsersScreen extends StatefulWidget {
@@ -122,40 +124,6 @@ class _UsersScreenState extends State<UsersScreen> {
     return '${d.day}. ${months[d.month]}';
   }
 
-  String _roleBadgeText(String role) {
-    switch (role) {
-      case 'SuperAdmin':
-        return 'Super Admin';
-      case 'Admin':
-        return 'Admin';
-      case 'OrganizationSuperAdmin':
-        return 'Org Super Admin';
-      case 'OrganizationAdmin':
-        return 'Org Admin';
-      case 'User':
-        return 'Korisnik';
-      default:
-        return role;
-    }
-  }
-
-  Color _roleBadgeColor(String role, bool isDark) {
-    switch (role) {
-      case 'SuperAdmin':
-        return AppColors.rolePurple;
-      case 'Admin':
-        return AppColors.info;
-      case 'OrganizationSuperAdmin':
-        return isDark ? AppColors.secondary : AppColors.primary;
-      case 'OrganizationAdmin':
-        return AppColors.roleCyan;
-      case 'User':
-        return isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-      default:
-        return isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    }
-  }
-
   int get _activeCount => _users.where((u) => u.isActive).length;
 
   int get _adminCount =>
@@ -200,19 +168,19 @@ class _UsersScreenState extends State<UsersScreen> {
           if (!_isLoading)
             Row(
               children: [
-                _StatCard(
+                StatCard(
                   label: 'Ukupno Korisnika',
                   value: '$_totalCount',
                   valueColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                 ),
                 const SizedBox(width: 16),
-                _StatCard(
+                StatCard(
                   label: 'Aktivni (Prikazano)',
                   value: '$_activeCount',
                   valueColor: isDark ? AppColors.secondary : AppColors.primary,
                 ),
                 const SizedBox(width: 16),
-                _StatCard(
+                StatCard(
                   label: 'Admini (Prikazano)',
                   value: '$_adminCount',
                   valueColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
@@ -288,8 +256,8 @@ class _UsersScreenState extends State<UsersScreen> {
                         itemBuilder: (context, index) {
                           return _UserCard(
                             user: _users[index],
-                            roleBadgeText: _roleBadgeText,
-                            roleBadgeColor: (role) => _roleBadgeColor(role, isDark),
+                            roleBadgeText: roleBadgeText,
+                            roleBadgeColor: (role) => roleBadgeColor(role, isDark),
                             formatDate: _formatDate,
                             formatDateShort: _formatDateShort,
                           );
@@ -307,67 +275,6 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Stat Card
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : Colors.white,
-          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: isDark
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: valueColor,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

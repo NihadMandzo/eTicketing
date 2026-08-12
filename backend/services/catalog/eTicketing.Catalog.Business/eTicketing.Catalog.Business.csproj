@@ -6,7 +6,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Needed for IFormFile (CreateCategoryRequest/UpdateCategoryRequest icon upload) — same
+         reasoning as eTicketing.Identity.Business's FrameworkReference for AuthCookieService. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.0.0" />
+    <PackageReference Include="Mapster" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
   </ItemGroup>
 
   <PropertyGroup>

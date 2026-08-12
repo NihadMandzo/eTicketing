@@ -55,8 +55,12 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   }
 
   Future<void> _pickIcon() async {
+    // PNG only, matching the backend validator (CategoryIconValidation) —
+    // ≤100x100px, ≤100KB, enforced server-side regardless of what's picked
+    // here.
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
+      type: FileType.custom,
+      allowedExtensions: ['png'],
       allowMultiple: false,
     );
     if (result != null && result.files.single.path != null) {
@@ -433,7 +437,7 @@ class _IconPickerTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'PNG, JPG, JPEG',
+                    'PNG (maks. 100x100px)',
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark

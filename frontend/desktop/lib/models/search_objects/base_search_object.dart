@@ -12,8 +12,12 @@ class BaseSearchObject {
     assert(pageSize == null || pageSize! > 0, 'pageSize must be > 0');
   }
 
-  Map<String, String> toQueryString() {
-    final map = <String, String>{};
+  /// `dynamic` (not `String`) so subclasses can add list-valued filters
+  /// (e.g. `OrganizationSearchObject.organizationIds`) — Dio serializes a
+  /// `List<String>` query value as repeated keys (`Key=a&Key=b`) by default,
+  /// which is exactly what the backend's array-bound query params expect.
+  Map<String, dynamic> toQueryString() {
+    final map = <String, dynamic>{};
 
     if (page != null) {
       map['Page'] = page.toString();

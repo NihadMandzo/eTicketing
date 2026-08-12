@@ -6,6 +6,8 @@ using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Repositories;
 using Mapster;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 
 namespace eTicketing.Identity.Business.Organizations;
 
@@ -14,21 +16,31 @@ public class OrganizationService : IOrganizationService
     private readonly IOrganizationRepository _organizationRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IdentityOptions _options;
 
     public OrganizationService(
         IOrganizationRepository organizationRepository,
         IUserRepository userRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IOptions<IdentityOptions> options)
     {
         _organizationRepository = organizationRepository;
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
+        _options = options.Value;
     }
 
     public async Task<Result<PagedResult<OrganizationResponse>>> GetAsync(OrganizationQuery query, CancellationToken ct = default)
     {
-        var paged = await _organizationRepository.SearchAsync(query, ct);
-        return Result<PagedResult<OrganizationResponse>>.Success(paged.Adapt<PagedResult<OrganizationResponse>>());
+        var paged = await _organizationRepository.SearchAsync(query, query.OrganizationIds, ct);
+        var items = paged.Items.Select(ToResponse).ToList();
+        return Result<PagedResult<OrganizationResponse>>.Success(new PagedResult<OrganizationResponse>
+        {
+            Items = items,
+            TotalCount = paged.TotalCount,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+        });
     }
 
     public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
@@ -37,7 +49,15 @@ public class OrganizationService : IOrganizationService
 
         return organization is null
             ? Result<OrganizationResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."))
-            : Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>());
+            : Result<OrganizationResponse>.Success(ToResponse(organization));
+    }
+
+    public async Task<Result<OrganizationLogo>> GetLogoAsync(Guid id, CancellationToken ct = default)
+    {
+        var organization = await _organizationRepository.GetByIdAsync(id, ct);
+        return organization?.LogoData is null || organization.LogoContentType is null
+            ? Result<OrganizationLogo>.Failure(Error.NotFound("organization.logo_not_found", "Organizacija nema logo."))
+            : Result<OrganizationLogo>.Success(new OrganizationLogo(organization.LogoData, organization.LogoContentType));
     }
 
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
@@ -49,6 +69,10 @@ public class OrganizationService : IOrganizationService
         }
 
         var organization = request.Adapt<Organization>();
+        if (request.Logo is not null)
+        {
+            (organization.LogoData, organization.LogoContentType) = await ReadLogoAsync(request.Logo, ct);
+        }
         await _organizationRepository.AddAsync(organization, ct);
 
         var adminUser = request.Adapt<User>();
@@ -63,7 +87,7 @@ public class OrganizationService : IOrganizationService
         // EF's change-tracker fixup already put adminUser into organization.Users once both
         // entities were tracked (set via the Organization nav property above), so the mapped
         // UserCount comes out as 1 without a separate query.
-        return Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>());
+        return Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
     public async Task<Result<OrganizationResponse>> UpdateAsync(Guid id, UpdateOrganizationRequest request, CancellationToken ct = default)
@@ -77,6 +101,17 @@ public class OrganizationService : IOrganizationService
         // CreatedAt/Users untouched.
         request.Adapt(organization);
 
+        if (request.Logo is not null)
+        {
+            (organization.LogoData, organization.LogoContentType) = await ReadLogoAsync(request.Logo, ct);
+        }
+        else if (request.RemoveLogo)
+        {
+            organization.LogoData = null;
+            organization.LogoContentType = null;
+        }
+        // else: neither a replacement nor a removal was requested — keep the existing logo.
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         var userCount = await _userRepository.CountByOrganizationAsync(id, ct);
@@ -84,7 +119,7 @@ public class OrganizationService : IOrganizationService
         // organization.Users isn't loaded here (GetByIdAsync, unlike GetByIdWithUsersAsync,
         // doesn't Include it), so the mapped UserCount would come out as 0 — override it with
         // the freshly counted value instead of paying for an Include just for this one field.
-        return Result<OrganizationResponse>.Success(organization.Adapt<OrganizationResponse>() with { UserCount = userCount });
+        return Result<OrganizationResponse>.Success(ToResponse(organization) with { UserCount = userCount });
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken ct = default)
@@ -98,9 +133,9 @@ public class OrganizationService : IOrganizationService
         return Result.Success();
     }
 
-    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default)
+    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, OrganizationUserQuery query, CancellationToken ct = default)
     {
-        var paged = await _userRepository.SearchByOrganizationAsync(organizationId, query, ct);
+        var paged = await _userRepository.SearchByOrganizationAsync(organizationId, query, query.Role, ct);
         return Result<PagedResult<UserResponse>>.Success(paged.Adapt<PagedResult<UserResponse>>());
     }
 
@@ -136,4 +171,19 @@ public class OrganizationService : IOrganizationService
         await _unitOfWork.SaveChangesAsync(ct);
         return Result.Success();
     }
+
+    private static async Task<(byte[] Data, string ContentType)> ReadLogoAsync(IFormFile logo, CancellationToken ct)
+    {
+        await using var ms = new MemoryStream();
+        await logo.CopyToAsync(ms, ct);
+        return (ms.ToArray(), logo.ContentType);
+    }
+
+    // LogoUrl is derived (not a stored column), so it's filled in here rather than via Mapster
+    // — same reasoning as CategoryService.ToResponse in the Catalog service.
+    private OrganizationResponse ToResponse(Organization organization) =>
+        organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
+
+    private string? BuildLogoUrl(Organization organization) =>
+        organization.LogoData is null ? null : $"{_options.PublicBaseUrl.TrimEnd('/')}/organizations/{organization.Id}/logo";
 }

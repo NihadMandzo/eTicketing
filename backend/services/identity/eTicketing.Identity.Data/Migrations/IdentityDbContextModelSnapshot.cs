@@ -49,8 +49,11 @@ namespace eTicketing.Identity.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("LogoUrl")
+                    b.Property<string>("LogoContentType")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("LogoData")
+                        .HasColumnType("varbinary(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()

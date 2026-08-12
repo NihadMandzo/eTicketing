@@ -30,9 +30,12 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
             .OrderBy(u => u.LastName)
             .ToPagedResultAsync(query.Page, query.PageSize, ct);
 
-    public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, CancellationToken ct = default)
+    public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, RoleType? role, CancellationToken ct = default)
         => Query()
             .Where(u => u.OrganizationId == organizationId)
+            .Where(u => role == null || u.Role == role)
+            .Where(u => string.IsNullOrEmpty(query.FTS)
+                || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
             .ToPagedResultAsync(query.Page, query.PageSize, ct);
 
