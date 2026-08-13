@@ -14,20 +14,6 @@ public class UpdateOrganizationRequestValidator : AbstractValidator<UpdateOrgani
         RuleFor(x => x.Website).Must(BeAValidUrl)
             .When(x => !string.IsNullOrWhiteSpace(x.Website))
             .WithMessage("Website nije validan URL.");
-
-        // Logo is optional on update — only validated when a replacement file is provided.
-        RuleFor(x => x.Logo)
-            .Must(OrganizationLogoValidation.HasAllowedContentType)
-            .WithMessage("Dozvoljeni formati loga su PNG i JPEG.")
-            .When(x => x.Logo != null);
-        RuleFor(x => x.Logo)
-            .Must(OrganizationLogoValidation.IsWithinSizeLimit)
-            .WithMessage("Logo može biti maksimalno 2MB.")
-            .When(x => x.Logo != null);
-        RuleFor(x => x.Logo)
-            .MustAsync((file, ct) => OrganizationLogoValidation.HasValidContentAsync(file!, ct))
-            .WithMessage("Logo nije validna slika ili je prevelike rezolucije.")
-            .When(x => x.Logo != null);
     }
 
     private static bool BeAValidUrl(string? url) =>

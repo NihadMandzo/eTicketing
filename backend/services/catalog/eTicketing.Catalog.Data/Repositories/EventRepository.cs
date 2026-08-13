@@ -25,4 +25,7 @@ public class EventRepository : Repository<Event, Guid>, IEventRepository
             .Select(e => e.OrganizationId)
             .Distinct()
             .ToListAsync(ct);
+
+    public Task<bool> ExistsForCategoryAsync(int categoryId, CancellationToken ct = default)
+        => Query().AnyAsync(e => e.CategoryId == categoryId, ct);
 }

@@ -1,4 +1,5 @@
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,5 +15,8 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
         builder.Property(o => o.PhoneNumber).HasMaxLength(20);
         builder.Property(o => o.Email).HasMaxLength(255);
         builder.Property(o => o.Website).HasMaxLength(255);
+        builder.Property(o => o.LogoBlobName).HasMaxLength(300);
+
+        builder.HasData(OrganizationSeeder.GetSeedData());
     }
 }

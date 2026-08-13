@@ -41,14 +41,9 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
 
-                    b.Property<string>("IconContentType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<byte[]>("IconData")
-                        .IsRequired()
-                        .HasColumnType("varbinary(max)");
+                    b.Property<string>("IconBlobName")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -72,8 +67,6 @@ namespace eTicketing.Catalog.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Koncerti i muzički festivali",
                             DisplayOrder = 1,
-                            IconContentType = "image/png",
-                            IconData = new byte[0],
                             IsActive = true,
                             Name = "Muzika",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -84,8 +77,6 @@ namespace eTicketing.Catalog.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Sportski događaji",
                             DisplayOrder = 2,
-                            IconContentType = "image/png",
-                            IconData = new byte[0],
                             IsActive = true,
                             Name = "Sport",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -96,8 +87,6 @@ namespace eTicketing.Catalog.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Konferencije i meetupovi",
                             DisplayOrder = 3,
-                            IconContentType = "image/png",
-                            IconData = new byte[0],
                             IsActive = true,
                             Name = "Tehnologija",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -148,6 +137,80 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("Events");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000001"),
+                            CategoryId = 1,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 7, 15, 20, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Trodnevni festival na otvorenom sa regionalnim izvođačima.",
+                            Name = "Ljetni Muzički Festival",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000002"),
+                            CategoryId = 1,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 9, 5, 19, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Intimni akustični koncert u Vijećnici.",
+                            Name = "Akustična Večer u Vijećnici",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000003"),
+                            CategoryId = 2,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 8, 20, 18, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Regionalni košarkaški turnir za klupske ekipe.",
+                            Name = "Košarkaški Kup Mostar",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000004"),
+                            CategoryId = 2,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 10, 10, 9, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Gradski maraton kroz historijsku jezgru Mostara.",
+                            Name = "Maraton Mostar",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000005"),
+                            CategoryId = 3,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 11, 2, 9, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Konferencija o softverskom razvoju i startupima.",
+                            Name = "Tech Konferencija Sarajevo",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-0000-0000-0000-000000000006"),
+                            CategoryId = 3,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Date = new DateTime(2026, 11, 20, 18, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Neformalno druženje lokalne startup zajednice.",
+                            Name = "Startup Meetup Mostar",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
+                            Status = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Event", b =>

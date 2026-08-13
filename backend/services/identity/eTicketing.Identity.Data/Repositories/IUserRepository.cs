@@ -27,4 +27,10 @@ public interface IUserRepository : IRepository<User, Guid>
     /// <summary>Live count of an organization's users — backs OrganizationService.UpdateAsync,
     /// which needs a fresh count without re-loading every user row.</summary>
     Task<int> CountByOrganizationAsync(Guid organizationId, CancellationToken ct = default);
+
+    /// <summary>All of an organization's users, unpaged — backs OrganizationService.DeleteAsync,
+    /// which hard-deletes every user in the organization alongside it (no soft delete anywhere in
+    /// this app, and the FK is Restrict — see UserConfiguration — so leaving them behind isn't an
+    /// option).</summary>
+    Task<List<User>> GetAllByOrganizationAsync(Guid organizationId, CancellationToken ct = default);
 }

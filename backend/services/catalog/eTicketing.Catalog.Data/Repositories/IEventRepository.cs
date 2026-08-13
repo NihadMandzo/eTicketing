@@ -16,4 +16,8 @@ public interface IEventRepository : IRepository<Event, Guid>
     /// <summary>Distinct OrganizationIds among events whose CategoryId is in <paramref name="categoryIds"/>,
     /// any status — backs the org-list category multiselect filter (GET /events/organization-ids).</summary>
     Task<List<Guid>> GetOrganizationIdsByCategoryIdsAsync(IReadOnlyList<int> categoryIds, CancellationToken ct = default);
+
+    /// <summary>Whether any event (any status) still references this category — backs
+    /// CategoryService.DeleteAsync's proactive FK-conflict check.</summary>
+    Task<bool> ExistsForCategoryAsync(int categoryId, CancellationToken ct = default);
 }

@@ -13,11 +13,17 @@ public static class CategoryEndpoints
 
         group.MapGet("", GetAll).AllowAnonymous().WithValidation<CategoryQuery>();
         group.MapGet("/{id:int}", GetById).AllowAnonymous();
-        group.MapGet("/{id:int}/icon", GetIcon).AllowAnonymous();
 
-        group.MapPost("", Create).RequireAuthorization("PlatformStaff").WithValidation<CreateCategoryRequest>().DisableAntiforgery();
-        group.MapPut("/{id:int}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateCategoryRequest>().DisableAntiforgery();
+        group.MapPost("", Create).RequireAuthorization("PlatformStaff").WithValidation<CreateCategoryRequest>();
+        group.MapPut("/{id:int}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateCategoryRequest>();
         group.MapDelete("/{id:int}", Delete).RequireAuthorization("PlatformStaff");
+
+        // Icons are managed exclusively through these two dedicated multipart endpoints, never
+        // bundled into Create/Update above — see Category.IconBlobName / CategoryService.
+        group.MapPost("/{id:int}/icon", UploadIcon).RequireAuthorization("PlatformStaff")
+            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery();
+        group.MapPut("/{id:int}/icon", ReplaceIcon).RequireAuthorization("PlatformStaff")
+            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery();
     }
 
     private static async Task<IResult> GetAll([AsParameters] CategoryQuery query, ICategoryService service, CancellationToken ct)
@@ -32,19 +38,13 @@ public static class CategoryEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> GetIcon(int id, ICategoryService service, CancellationToken ct)
-    {
-        var result = await service.GetIconAsync(id, ct);
-        return result.IsSuccess ? Results.File(result.Value!.Data, result.Value!.ContentType) : result.ToHttpResult();
-    }
-
-    private static async Task<IResult> Create([FromForm] CreateCategoryRequest request, ICategoryService service, CancellationToken ct)
+    private static async Task<IResult> Create(CreateCategoryRequest request, ICategoryService service, CancellationToken ct)
     {
         var result = await service.CreateAsync(request, ct);
         return result.ToHttpResult(StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> Update(int id, [FromForm] UpdateCategoryRequest request, ICategoryService service, CancellationToken ct)
+    private static async Task<IResult> Update(int id, UpdateCategoryRequest request, ICategoryService service, CancellationToken ct)
     {
         var result = await service.UpdateAsync(id, request, ct);
         return result.ToHttpResult();
@@ -54,5 +54,17 @@ public static class CategoryEndpoints
     {
         var result = await service.DeleteAsync(id, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);
+    }
+
+    private static async Task<IResult> UploadIcon(int id, [FromForm] CategoryIconUploadRequest request, ICategoryService service, CancellationToken ct)
+    {
+        var result = await service.UploadIconAsync(id, request.Icon, ct);
+        return result.ToHttpResult(StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> ReplaceIcon(int id, [FromForm] CategoryIconUploadRequest request, ICategoryService service, CancellationToken ct)
+    {
+        var result = await service.ReplaceIconAsync(id, request.Icon, ct);
+        return result.ToHttpResult();
     }
 }

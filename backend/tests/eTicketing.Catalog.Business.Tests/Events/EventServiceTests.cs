@@ -24,8 +24,8 @@ public class EventServiceTests : IDisposable
 
     private async Task SeedCategoriesAndEvents()
     {
-        _music = new Category { Name = "Muzika", IconContentType = "image/png", IsActive = true };
-        _sport = new Category { Name = "Sport", IconContentType = "image/png", IsActive = true };
+        _music = new Category { Name = "Muzika", IsActive = true };
+        _sport = new Category { Name = "Sport", IsActive = true };
         await _fixture.CategoryRepository.AddAsync(_music);
         await _fixture.CategoryRepository.AddAsync(_sport);
         await _fixture.UnitOfWork.SaveChangesAsync();
@@ -97,9 +97,11 @@ public class EventServiceTests : IDisposable
     [Fact]
     public async Task GetAllAsync_WithNoFilters_ReturnsAllOrganizationsEvents()
     {
+        // 3 created here + the 6 fixed events from EventSeeder.cs (HasData, applied by
+        // EnsureCreated() too) — this query has no filter, so both sets come back.
         var result = await _sut.GetAllAsync(new EventQuery());
 
-        result.Value!.TotalCount.Should().Be(3);
+        result.Value!.TotalCount.Should().Be(9);
     }
 
     [Fact]
@@ -117,7 +119,7 @@ public class EventServiceTests : IDisposable
     [Fact]
     public async Task GetOrganizationIdsAsync_ForCategoryWithNoEvents_ReturnsEmpty()
     {
-        var unusedCategory = new Category { Name = "Tehnologija", IconContentType = "image/png", IsActive = true };
+        var unusedCategory = new Category { Name = "Tehnologija", IsActive = true };
         await _fixture.CategoryRepository.AddAsync(unusedCategory);
         await _fixture.UnitOfWork.SaveChangesAsync();
 

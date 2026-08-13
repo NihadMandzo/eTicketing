@@ -1,4 +1,3 @@
-using eTicketing.Catalog.Business;
 using eTicketing.Catalog.Business.Categories;
 using eTicketing.Catalog.Business.Events;
 using eTicketing.Catalog.Data;
@@ -6,16 +5,16 @@ using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace eTicketing.Catalog.Business.Tests.TestFixtures;
 
 /// <summary>
 /// A real EF Core Sqlite in-memory <see cref="CatalogDbContext"/> wired with the real
 /// repositories (not mocked), mirroring
-/// eTicketing.Identity.Business.Tests/TestFixtures/IdentityTestContext.cs — no genuine
-/// external system (RabbitMQ, HTTP client to another service) is involved in Catalog's
-/// business logic for this feature, so nothing needs mocking here at all.
+/// eTicketing.Identity.Business.Tests/TestFixtures/IdentityTestContext.cs — the only genuine
+/// external system involved in Catalog's business logic is Azure Blob Storage (icons), covered
+/// by <see cref="FakeBlobStorageService"/> rather than mocked with Moq, so upload/delete/replace
+/// behavior can be asserted for real.
 /// </summary>
 public sealed class CatalogTestContext : IDisposable
 {
@@ -25,7 +24,7 @@ public sealed class CatalogTestContext : IDisposable
     public ICategoryRepository CategoryRepository { get; }
     public IEventRepository EventRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
-    public CatalogOptions CatalogOptions { get; } = new() { PublicBaseUrl = "http://localhost:5000/api" };
+    public FakeBlobStorageService BlobStorage { get; } = new();
 
     public CatalogTestContext()
     {
@@ -46,7 +45,7 @@ public sealed class CatalogTestContext : IDisposable
     }
 
     public ICategoryService CreateCategoryService() =>
-        new CategoryService(CategoryRepository, UnitOfWork, Options.Create(CatalogOptions));
+        new CategoryService(CategoryRepository, EventRepository, UnitOfWork, BlobStorage);
 
     public IEventService CreateEventService() => new EventService(EventRepository);
 

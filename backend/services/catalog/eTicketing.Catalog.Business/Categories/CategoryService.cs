@@ -3,22 +3,31 @@ using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using eTicketing.Shared.Storage;
 using Mapster;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Catalog.Business.Categories;
 
 public class CategoryService : ICategoryService
 {
-    private readonly ICategoryRepository _categoryRepository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly CatalogOptions _options;
+    private const string ContainerName = "category-icons";
 
-    public CategoryService(ICategoryRepository categoryRepository, IUnitOfWork unitOfWork, IOptions<CatalogOptions> options)
+    private readonly ICategoryRepository _categoryRepository;
+    private readonly IEventRepository _eventRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IBlobStorageService _blobStorageService;
+
+    public CategoryService(
+        ICategoryRepository categoryRepository,
+        IEventRepository eventRepository,
+        IUnitOfWork unitOfWork,
+        IBlobStorageService blobStorageService)
     {
         _categoryRepository = categoryRepository;
+        _eventRepository = eventRepository;
         _unitOfWork = unitOfWork;
-        _options = options.Value;
+        _blobStorageService = blobStorageService;
     }
 
     public async Task<Result<PagedResult<CategoryResponse>>> GetAsync(CategoryQuery query, CancellationToken ct = default)
@@ -42,18 +51,9 @@ public class CategoryService : ICategoryService
             : Result<CategoryResponse>.Success(ToResponse(category));
     }
 
-    public async Task<Result<CategoryIcon>> GetIconAsync(int id, CancellationToken ct = default)
-    {
-        var category = await _categoryRepository.GetByIdAsync(id, ct);
-        return category is null
-            ? Result<CategoryIcon>.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."))
-            : Result<CategoryIcon>.Success(new CategoryIcon(category.IconData, category.IconContentType));
-    }
-
     public async Task<Result<CategoryResponse>> CreateAsync(CreateCategoryRequest request, CancellationToken ct = default)
     {
         var category = request.Adapt<Category>();
-        (category.IconData, category.IconContentType) = await ReadIconAsync(request.Icon, ct);
 
         await _categoryRepository.AddAsync(category, ct);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -68,11 +68,6 @@ public class CategoryService : ICategoryService
             return Result<CategoryResponse>.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
 
         request.Adapt(category);
-        if (request.Icon is not null)
-        {
-            (category.IconData, category.IconContentType) = await ReadIconAsync(request.Icon, ct);
-        }
-
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<CategoryResponse>.Success(ToResponse(category));
@@ -84,23 +79,73 @@ public class CategoryService : ICategoryService
         if (category is null)
             return Result.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
 
+        // Deleting a category still referenced by events would otherwise hit the FK-restrict
+        // constraint (EventConfiguration) and surface as a raw DbUpdateException → 500. This is
+        // an expected conflict, not a bug, so it's checked proactively and returned as a normal
+        // domain Result instead.
+        if (await _eventRepository.ExistsForCategoryAsync(id, ct))
+        {
+            return Result.Failure(Error.Conflict(
+                "category.in_use",
+                "Kategorija se ne može obrisati jer je u upotrebi od strane jednog ili više događaja."));
+        }
+
+        // Blob delete first: if it throws (genuine Azure outage), the category row is left
+        // untouched rather than ending up deleted with an orphaned blob still in storage.
+        if (category.IconBlobName is not null)
+        {
+            await _blobStorageService.DeleteAsync(ContainerName, category.IconBlobName, ct);
+        }
+
         _categoryRepository.Remove(category);
         await _unitOfWork.SaveChangesAsync(ct);
         return Result.Success();
     }
 
-    private static async Task<(byte[] Data, string ContentType)> ReadIconAsync(Microsoft.AspNetCore.Http.IFormFile icon, CancellationToken ct)
+    public async Task<Result<CategoryResponse>> UploadIconAsync(int id, IFormFile icon, CancellationToken ct = default)
     {
-        await using var ms = new MemoryStream();
-        await icon.CopyToAsync(ms, ct);
-        return (ms.ToArray(), icon.ContentType);
+        var category = await _categoryRepository.GetByIdAsync(id, ct);
+        if (category is null)
+            return Result<CategoryResponse>.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
+
+        if (category.IconBlobName is not null)
+        {
+            return Result<CategoryResponse>.Failure(Error.Conflict(
+                "category.icon_already_exists",
+                "Kategorija već ima ikonu — koristite izmjenu da je zamijenite."));
+        }
+
+        var blobName = BlobNaming.BuildBlobName(category.Id, category.Name, extension: "png");
+        await _blobStorageService.UploadAsync(ContainerName, blobName, icon.OpenReadStream(), "image/png", ct);
+        category.IconBlobName = blobName;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Result<CategoryResponse>.Success(ToResponse(category));
     }
 
-    // IconUrl is derived (not a stored column), so it's filled in here rather than via Mapster —
-    // same reasoning as OrganizationMappingConfig's UserCount, just done at the call site
-    // instead of inside the mapping config since it needs CatalogOptions.
-    private CategoryResponse ToResponse(Category category) =>
-        category.Adapt<CategoryResponse>() with { IconUrl = BuildIconUrl(category.Id) };
+    public async Task<Result<CategoryResponse>> ReplaceIconAsync(int id, IFormFile icon, CancellationToken ct = default)
+    {
+        var category = await _categoryRepository.GetByIdAsync(id, ct);
+        if (category is null)
+            return Result<CategoryResponse>.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
 
-    private string BuildIconUrl(int id) => $"{_options.PublicBaseUrl.TrimEnd('/')}/categories/{id}/icon";
+        if (category.IconBlobName is null)
+        {
+            return Result<CategoryResponse>.Failure(Error.NotFound(
+                "category.icon_not_found",
+                "Kategorija još nema ikonu — koristite kreiranje da je dodate."));
+        }
+
+        // Re-uploads to the SAME blob key (overwrite) — the key was fixed at first-upload time
+        // and deliberately doesn't track later Name changes (see Category.IconBlobName).
+        await _blobStorageService.UploadAsync(ContainerName, category.IconBlobName, icon.OpenReadStream(), "image/png", ct);
+
+        return Result<CategoryResponse>.Success(ToResponse(category));
+    }
+
+    private CategoryResponse ToResponse(Category category) =>
+        category.Adapt<CategoryResponse>() with { IconUrl = BuildIconUrl(category) };
+
+    private string? BuildIconUrl(Category category) =>
+        category.IconBlobName is null ? null : _blobStorageService.GetPublicUrl(ContainerName, category.IconBlobName);
 }

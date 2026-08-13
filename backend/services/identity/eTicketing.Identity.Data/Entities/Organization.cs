@@ -13,12 +13,12 @@ public class Organization : BaseEntity
     public string? Website { get; set; }
     public bool IsActive { get; set; } = true;
 
-    // Logo stored directly in IdentityDb rather than blob storage — no blob storage
-    // infrastructure exists anywhere in this repo (same reasoning as Catalog's Category icon
-    // storage). LogoUrl is not a stored column — OrganizationResponse.LogoUrl is computed by
-    // OrganizationService from LogoData's presence + IdentityOptions.PublicBaseUrl.
-    public byte[]? LogoData { get; set; }
-    public string? LogoContentType { get; set; } // "image/png" | "image/jpeg"
+    // Logo bytes live in Azure Blob Storage ("organization-logos" container), not in IdentityDb —
+    // only the blob's key is persisted here, so it can be looked up for delete/replace without
+    // re-deriving it from the (mutable) Name. Null until OrganizationService.UploadLogoAsync is
+    // called; LogoUrl on OrganizationResponse is derived from this via IBlobStorageService, not
+    // stored. See eTicketing.Shared.Storage.BlobNaming for the naming convention.
+    public string? LogoBlobName { get; set; }
 
     public ICollection<User> Users { get; set; } = new List<User>();
 }

@@ -10,6 +10,8 @@ import '../../models/requests/organization_update_request.dart';
 import '../../models/responses/organization_response.dart';
 import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utility/image_validation.dart';
+import '../../utility/snackbar_service.dart';
 
 class OrganizationUpsertDialog extends StatefulWidget {
   final OrganizationResponse? organization;
@@ -88,15 +90,36 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
     super.dispose();
   }
 
+  // Mirrors OrganizationLogoValidation on the backend — that validator is
+  // still authoritative and re-checks regardless (see
+  // 00-workflow-and-testing.md), this just gives instant feedback instead
+  // of a round-trip to the API.
+  static const int _maxLogoBytes = 1 * 1024 * 1024;
+
   Future<void> _pickLogo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg'],
       allowMultiple: false,
     );
-    if (result != null && result.files.single.path != null) {
+    if (result == null || result.files.single.path == null) return;
+
+    final path = result.files.single.path!;
+    final bytes = await File(path).readAsBytes();
+    final error = await ImageValidation.validateSquare(
+      bytes,
+      maxBytes: _maxLogoBytes,
+      sizeErrorMessage: 'Logo može biti maksimalno 1MB.',
+      aspectRatioErrorMessage: 'Logo mora biti kvadratan (omjer 1:1).',
+    );
+    if (error != null) {
+      if (mounted) SnackbarService.showError(error);
+      return;
+    }
+
+    if (mounted) {
       setState(() {
-        _logoFile = File(result.files.single.path!);
+        _logoFile = File(path);
         _logoFileName = result.files.single.name;
       });
     }
@@ -108,8 +131,11 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
     setState(() => _isSaving = true);
 
     try {
+      // Metadata is always saved first, as a plain JSON request — the logo
+      // (if any) is a separate dedicated call afterwards, never bundled in.
+      final String organizationId;
       if (_isEditing) {
-        await _provider.updateOrganization(
+        final saved = await _provider.updateOrganization(
           widget.organization!.id,
           OrganizationUpdateRequest(
             name: _nameCtrl.text.trim(),
@@ -122,10 +148,10 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                 : _websiteCtrl.text.trim(),
             isActive: widget.organization!.isActive,
           ),
-          logoFile: _logoFile,
         );
+        organizationId = saved.id;
       } else {
-        await _provider.insertOrganization(
+        final saved = await _provider.insertOrganization(
           OrganizationInsertRequest(
             name: _nameCtrl.text.trim(),
             description: _descCtrl.text.trim(),
@@ -144,8 +170,20 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                 ? null
                 : _adminPhoneCtrl.text.trim(),
           ),
-          logoFile: _logoFile,
         );
+        organizationId = saved.id;
+      }
+
+      if (_logoFile != null) {
+        // An existing logo (edit case) can only be replaced via PUT; an
+        // organization that doesn't have one yet (new, or edited-but-never-
+        // had-one) needs the create (POST) call instead.
+        final hasExistingLogo = widget.organization?.logoUrl != null;
+        if (hasExistingLogo) {
+          await _provider.replaceLogo(organizationId, _logoFile!);
+        } else {
+          await _provider.createLogo(organizationId, _logoFile!);
+        }
       }
 
       if (mounted) {
@@ -493,7 +531,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
           icon: LucideIcons.image,
           label: _isEditing
               ? 'Logo (ostavite prazno da zadržite postojeći)'
-              : 'Logo Organizacije',
+              : 'Logo Organizacije (opcionalno, može se dodati i kasnije)',
         ),
         const SizedBox(height: 10),
         _LogoPickerTile(
@@ -916,7 +954,7 @@ class _LogoPickerTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'PNG, JPG, JPEG',
+                    'PNG/JPG, kvadratan (maks. 1MB)',
                     style: TextStyle(fontSize: 11, color: placeholderColor),
                   ),
                 ],

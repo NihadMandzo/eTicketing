@@ -3,37 +3,40 @@ using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Catalog.Business.Categories;
 
+/// <summary>IconUrl is null until an icon has been uploaded via the dedicated
+/// POST/PUT /categories/{id}/icon endpoints — categories no longer carry icon bytes at all
+/// (see Category.IconBlobName); it's derived from Azure Blob Storage, not a stored column.</summary>
 public record CategoryResponse(
     int Id,
     string Name,
     string Description,
-    string IconUrl,
+    string? IconUrl,
     bool IsActive,
     int DisplayOrder,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-/// <summary>Raw icon bytes + content-type, returned by CategoryService.GetIconAsync and
-/// streamed as-is by GET /categories/{id}/icon.</summary>
-public record CategoryIcon(byte[] Data, string ContentType);
-
 public sealed record CategoryQuery : BaseSearchObject;
 
-/// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].</summary>
-public class CreateCategoryRequest
+public record CreateCategoryRequest
 {
-    public string Name { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public bool IsActive { get; set; } = true;
-    public int DisplayOrder { get; set; }
-    public IFormFile Icon { get; set; } = null!;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public bool IsActive { get; init; } = true;
+    public int DisplayOrder { get; init; }
 }
 
-public class UpdateCategoryRequest
+public record UpdateCategoryRequest
 {
-    public string Name { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public bool IsActive { get; set; } = true;
-    public int DisplayOrder { get; set; }
-    public IFormFile? Icon { get; set; }
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public bool IsActive { get; init; } = true;
+    public int DisplayOrder { get; init; }
+}
+
+/// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].
+/// Shared shape for both POST (create) and PUT (replace) /categories/{id}/icon.</summary>
+public class CategoryIconUploadRequest
+{
+    public IFormFile Icon { get; set; } = null!;
 }

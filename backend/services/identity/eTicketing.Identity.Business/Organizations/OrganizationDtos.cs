@@ -22,11 +22,6 @@ public record CreateOrganizationRequest
 
     /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in AdminRoleValidator.</summary>
     public RoleType AdminRole { get; init; } = RoleType.OrganizationSuperAdmin;
-
-    /// <summary>Optional — PNG/JPEG, validated by OrganizationLogoValidation. Bound via
-    /// [FromForm]; this endpoint (and Update) is multipart/form-data specifically so a logo can
-    /// be attached alongside the text fields, same shape as Category's icon upload.</summary>
-    public IFormFile? Logo { get; init; }
 }
 
 public record UpdateOrganizationRequest
@@ -38,14 +33,6 @@ public record UpdateOrganizationRequest
     public string Email { get; init; } = string.Empty;
     public string? Website { get; init; }
     public bool IsActive { get; init; } = true;
-
-    /// <summary>Optional replacement logo — omit to keep the existing one.</summary>
-    public IFormFile? Logo { get; init; }
-
-    /// <summary>Explicitly clears the existing logo when true (and no replacement Logo is
-    /// supplied) — mirrors Category's update-without-touching-icon default, but organizations
-    /// need an explicit "remove" signal since a logo is optional in the first place.</summary>
-    public bool RemoveLogo { get; init; }
 }
 
 public record AddOrganizationUserRequest
@@ -60,6 +47,10 @@ public record AddOrganizationUserRequest
     public RoleType Role { get; init; } = RoleType.OrganizationAdmin;
 }
 
+/// <summary>LogoUrl is null until a logo has been uploaded via the dedicated
+/// POST/PUT /organizations/{id}/logo endpoints — organizations no longer carry logo bytes at
+/// all (see Organization.LogoBlobName); it's derived from Azure Blob Storage, not a stored
+/// column.</summary>
 public record OrganizationResponse(
     Guid Id,
     string Name,
@@ -73,9 +64,12 @@ public record OrganizationResponse(
     int UserCount,
     DateTime CreatedAt);
 
-/// <summary>Raw logo bytes + content-type, returned by OrganizationService.GetLogoAsync and
-/// streamed as-is by GET /organizations/{id}/logo.</summary>
-public record OrganizationLogo(byte[] Data, string ContentType);
+/// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].
+/// Shared shape for both POST (create) and PUT (replace) /organizations/{id}/logo.</summary>
+public class OrganizationLogoUploadRequest
+{
+    public IFormFile Logo { get; set; } = null!;
+}
 
 public sealed record OrganizationQuery : BaseSearchObject
 {

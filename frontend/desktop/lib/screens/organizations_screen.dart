@@ -34,6 +34,11 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   int _totalCount = 0;
   static const int _pageSize = 9;
 
+  // Bumped at the start of every _loadData() call — a response is only applied if its captured
+  // token still matches this field, so a stale (superseded) request can't overwrite the results
+  // of a newer one that started after it (e.g. rapid category-filter toggling).
+  int _requestToken = 0;
+
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
 
   @override
@@ -59,6 +64,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   }
 
   Future<void> _loadData() async {
+    final requestToken = ++_requestToken;
     setState(() => _isLoading = true);
     try {
       // Organizations and Events/Categories live in separate microservices/
@@ -70,6 +76,10 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
       if (_selectedCategoryIds.isNotEmpty) {
         organizationIds = await EventOrganizationIdsProvider()
             .getOrganizationIds(categoryIds: _selectedCategoryIds);
+
+        // A newer _loadData() call started while we were awaiting above —
+        // its result (or the one after it) is what should win, not this one.
+        if (requestToken != _requestToken) return;
 
         if (organizationIds.isEmpty) {
           // No organization has events in the selected categories. An empty
@@ -105,6 +115,9 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
         searchObject: searchObject,
         fromJson: OrganizationResponse.fromJson,
       );
+
+      if (requestToken != _requestToken) return; // superseded by a newer request
+
       if (mounted) {
         setState(() {
           _organizations = result.items;
@@ -113,6 +126,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
         });
       }
     } catch (e) {
+      if (requestToken != _requestToken) return;
       if (mounted) {
         setState(() => _isLoading = false);
         handleApiError(e);
@@ -408,12 +422,18 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                               final org = _organizations[index];
                               return _OrganizationCard(
                                 organization: org,
-                                onView: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => OrganizationDetailScreen(organization: org),
-                                  ),
-                                ),
+                                onView: () async {
+                                  // The detail screen can edit its local organization (e.g. add
+                                  // logo, rename) — await the route so this list reloads and
+                                  // picks up any change instead of showing a stale card.
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => OrganizationDetailScreen(organization: org),
+                                    ),
+                                  );
+                                  if (mounted) _loadData();
+                                },
                                 onEdit: () =>
                                     _openDialog(organization: org),
                                 onDelete: () =>
@@ -578,6 +598,7 @@ class _OrganizationCardState extends State<_OrganizationCard> {
                   const SizedBox(width: 8),
                   _IconOnlyButton(
                     icon: LucideIcons.pencil,
+                    tooltip: 'Uredi organizaciju',
                     onTap: widget.onEdit,
                   ),
                   const SizedBox(width: 8),
@@ -702,29 +723,33 @@ class _ActionButton extends StatelessWidget {
 class _IconOnlyButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
+  final String tooltip;
 
-  const _IconOnlyButton({required this.icon, required this.onTap});
+  const _IconOnlyButton({required this.icon, required this.onTap, required this.tooltip});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          width: 40,
-          height: 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            ),
+            child: Icon(icon,
+                size: 16,
+                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
           ),
-          child: Icon(icon,
-              size: 16,
-              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
         ),
       ),
     );

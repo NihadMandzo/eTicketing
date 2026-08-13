@@ -1,4 +1,5 @@
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,5 +22,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .WithMany(o => o.Users)
             .HasForeignKey(u => u.OrganizationId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasData(UserSeeder.GetSeedData());
     }
 }

@@ -4,6 +4,7 @@ using eTicketing.Catalog.Business.Events;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Storage;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,8 +22,7 @@ public static class CatalogServiceCollectionExtensions
         builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
         builder.Services.AddScoped<IEventRepository, EventRepository>();
 
-        builder.Services.AddOptions<CatalogOptions>()
-            .Bind(builder.Configuration.GetSection(CatalogOptions.SectionName));
+        builder.AddAzureBlobStorage();
 
         builder.Services.AddScoped<ICategoryService, CategoryService>();
         builder.Services.AddScoped<IEventService, EventService>();

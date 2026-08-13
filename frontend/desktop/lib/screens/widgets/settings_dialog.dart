@@ -13,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_controller.dart';
+import '../../utility/image_validation.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
@@ -82,7 +83,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _orgNameProfileCtrl = TextEditingController();
   bool _orgActive = true;
   File? _logoFile;
-  bool _removeLogo = false;
 
   bool _saving = false;
   bool _loadingOrg = false;
@@ -240,7 +240,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
       _showError('Organizacija nije pronađena.');
       return;
     }
-    final updated = await _orgProvider.updateOrganization(
+    // Metadata is always saved first, as a plain JSON request — the logo (if
+    // a new one was picked) is a separate dedicated call afterwards, never
+    // bundled in.
+    var updated = await _orgProvider.updateOrganization(
       _orgId!,
       OrganizationUpdateRequest(
         name: _orgName.text.trim(),
@@ -252,9 +255,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
             _orgWebsite.text.trim().isEmpty ? null : _orgWebsite.text.trim(),
         isActive: _orgActive,
       ),
-      logoFile: _logoFile,
-      removeLogo: _removeLogo,
     );
+
+    if (_logoFile != null) {
+      // An existing logo can only be replaced via PUT; an organization that
+      // doesn't have one yet needs the create (POST) call instead.
+      final hasExistingLogo = _orgData?.logoUrl != null;
+      updated = hasExistingLogo
+          ? await _orgProvider.replaceLogo(_orgId!, _logoFile!)
+          : await _orgProvider.createLogo(_orgId!, _logoFile!);
+    }
+
     if (mounted) {
       // Refresh form fields from the response
       _orgData = updated;
@@ -267,7 +278,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
       setState(() {
         _orgActive = updated.isActive;
         _logoFile = null;
-        _removeLogo = false;
       });
       _showSuccess('Organizacija uspješno ažurirana.');
     }
@@ -936,17 +946,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
               type: FileType.custom,
               allowedExtensions: ['png', 'jpg', 'jpeg'],
             );
-            if (result != null && result.files.single.path != null) {
-              final file = File(result.files.single.path!);
-              if (file.lengthSync() > 2 * 1024 * 1024) {
-                if (mounted) _showError('Logo može biti maksimalno 2MB.');
-                return;
-              }
-              setState(() {
-                _logoFile = file;
-                _removeLogo = false;
-              });
+            if (result == null || result.files.single.path == null) return;
+
+            final path = result.files.single.path!;
+            final bytes = await File(path).readAsBytes();
+            // Mirrors OrganizationLogoValidation on the backend — that
+            // validator is still authoritative and re-checks regardless
+            // (see 00-workflow-and-testing.md), this just gives instant
+            // feedback instead of a round-trip to the API.
+            final error = await ImageValidation.validateSquare(
+              bytes,
+              maxBytes: 1 * 1024 * 1024,
+              sizeErrorMessage: 'Logo može biti maksimalno 1MB.',
+              aspectRatioErrorMessage: 'Logo mora biti kvadratan (omjer 1:1).',
+            );
+            if (error != null) {
+              if (mounted) _showError(error);
+              return;
             }
+
+            if (mounted) setState(() => _logoFile = File(path));
           },
         ),
         const SizedBox(height: 20),
@@ -1416,7 +1435,7 @@ class _OrgLogoCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
               const SizedBox(height: 4),
-              Text('PNG ili JPG (maks. 2MB)',
+              Text('PNG/JPG, kvadratan (maks. 1MB)',
                   style: TextStyle(
                       fontSize: 12,
                       color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),

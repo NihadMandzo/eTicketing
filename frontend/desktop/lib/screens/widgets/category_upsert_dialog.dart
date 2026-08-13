@@ -10,6 +10,8 @@ import '../../models/requests/category_update_request.dart';
 import '../../models/responses/category_response.dart';
 import '../../providers/category_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utility/image_validation.dart';
+import '../../utility/snackbar_service.dart';
 
 class CategoryUpsertDialog extends StatefulWidget {
   final CategoryResponse? category;
@@ -54,18 +56,38 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
     super.dispose();
   }
 
+  // Mirrors CategoryIconValidation on the backend — that validator is still
+  // authoritative and re-checks regardless (see 00-workflow-and-testing.md),
+  // this just gives instant feedback instead of a round-trip to the API.
+  static const int _maxIconBytes = 100 * 1024;
+
   Future<void> _pickIcon() async {
     // PNG only, matching the backend validator (CategoryIconValidation) —
-    // ≤100x100px, ≤100KB, enforced server-side regardless of what's picked
-    // here.
+    // ≤100x100px, ≤100KB, square, enforced server-side regardless of what's
+    // picked here.
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png'],
       allowMultiple: false,
     );
-    if (result != null && result.files.single.path != null) {
+    if (result == null || result.files.single.path == null) return;
+
+    final path = result.files.single.path!;
+    final bytes = await File(path).readAsBytes();
+    final error = await ImageValidation.validateSquare(
+      bytes,
+      maxBytes: _maxIconBytes,
+      sizeErrorMessage: 'Ikona je prevelika (maks. 100 KB).',
+      aspectRatioErrorMessage: 'Ikona mora biti kvadratna (omjer 1:1).',
+    );
+    if (error != null) {
+      if (mounted) SnackbarService.showError(error);
+      return;
+    }
+
+    if (mounted) {
       setState(() {
-        _iconFile = File(result.files.single.path!);
+        _iconFile = File(path);
         _iconFileName = result.files.single.name;
       });
     }
@@ -74,45 +96,39 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (!_isEditing && _iconFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.white),
-              SizedBox(width: 10),
-              Text('Ikona kategorije je obavezna'),
-            ],
-          ),
-          backgroundColor: AppColors.errorDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
-      return;
-    }
-
     setState(() => _isSaving = true);
 
     try {
+      // Metadata is always saved first, as a plain JSON request — the icon
+      // (if any) is a separate dedicated call afterwards, never bundled in.
+      final CategoryResponse saved;
       if (_isEditing) {
-        await _provider.updateCategory(
+        saved = await _provider.updateCategory(
           widget.category!.id,
           CategoryUpdateRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
           ),
-          iconFile: _iconFile,
         );
       } else {
-        await _provider.insertCategory(
+        saved = await _provider.insertCategory(
           CategoryInsertRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
           ),
-          iconFile: _iconFile!,
         );
+      }
+
+      if (_iconFile != null) {
+        // An existing icon (edit case) can only be replaced via PUT; a
+        // category that doesn't have one yet (new, or edited-but-never-had-
+        // one) needs the create (POST) call instead.
+        final hasExistingIcon = widget.category?.iconUrl != null;
+        if (hasExistingIcon) {
+          await _provider.replaceIcon(saved.id, _iconFile!);
+        } else {
+          await _provider.createIcon(saved.id, _iconFile!);
+        }
       }
 
       if (mounted) {
@@ -263,11 +279,13 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
 
                         const SizedBox(height: 14),
 
-                        // Icon picker
+                        // Icon picker — optional, and no longer sent together with the
+                        // metadata above: submitting calls the dedicated icon endpoint
+                        // separately (create or replace, depending on whether one already exists).
                         _Label(
                           _isEditing
                               ? 'Ikona (ostavite prazno da zadržite postojeću)'
-                              : 'Ikona Kategorije *',
+                              : 'Ikona Kategorije (opcionalno, može se dodati i kasnije)',
                         ),
                         const SizedBox(height: 6),
                         _IconPickerTile(
@@ -437,7 +455,7 @@ class _IconPickerTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'PNG (maks. 100x100px)',
+                    'PNG, kvadratna (maks. 100x100px, 100 KB)',
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark

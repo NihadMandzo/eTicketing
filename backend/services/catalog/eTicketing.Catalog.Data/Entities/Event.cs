@@ -6,7 +6,8 @@ namespace eTicketing.Catalog.Data.Entities;
 /// Read-only in this iteration — no create/publish/organizer flow exists yet (see
 /// SPRINTS/SPRINT_2.md for that future scope). Only the fields needed for the superadmin
 /// browsing feature (organization detail's event count + paginated event list) are populated
-/// today; rows are seeded manually via Migrations/SeedEvents.sql, not created through the API.
+/// today; rows come from Seeders/EventSeeder.cs (via EventConfiguration's HasData), not created
+/// through the API.
 /// </summary>
 public class Event : BaseEntity
 {

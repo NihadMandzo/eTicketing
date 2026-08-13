@@ -28,7 +28,7 @@ public sealed class IdentityTestContext : IDisposable
     public IUnitOfWork UnitOfWork { get; }
     public IJwtTokenGenerator TokenGenerator { get; }
     public JwtOptions JwtOptions { get; }
-    public IdentityOptions IdentityOptions { get; } = new() { PublicBaseUrl = "http://localhost:5000/api" };
+    public FakeBlobStorageService BlobStorage { get; } = new();
     public Mock<IEventPublisher> EventPublisherMock { get; } = new();
 
     public IdentityTestContext()
@@ -65,7 +65,7 @@ public sealed class IdentityTestContext : IDisposable
         EventPublisherMock.Object, Options.Create(JwtOptions));
 
     public IOrganizationService CreateOrganizationService() => new OrganizationService(
-        OrganizationRepository, UserRepository, UnitOfWork, Options.Create(IdentityOptions));
+        OrganizationRepository, UserRepository, UnitOfWork, BlobStorage);
 
     public void Dispose()
     {

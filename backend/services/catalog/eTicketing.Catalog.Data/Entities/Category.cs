@@ -10,12 +10,12 @@ public class Category : BaseEntity
     public bool IsActive { get; set; } = true;
     public int DisplayOrder { get; set; }
 
-    // Icon stored directly in CatalogDb rather than blob storage — no blob storage
-    // infrastructure exists anywhere in this repo, and icons are capped small (see
-    // Categories/Validators/CreateCategoryRequestValidator.cs), so storing the raw bytes here
-    // is simpler than standing up Azurite/blob storage for a ~100x100px image.
-    public byte[] IconData { get; set; } = [];
-    public string IconContentType { get; set; } = string.Empty; // "image/png" — PNG-only, see CategoryIconValidation
+    // Icon bytes live in Azure Blob Storage ("category-icons" container), not in CatalogDb —
+    // only the blob's key is persisted here, so it can be looked up for delete/replace without
+    // re-deriving it from the (mutable) Name. Null until CategoryService.UploadIconAsync is
+    // called; IconUrl on CategoryResponse is derived from this via IBlobStorageService, not
+    // stored. See eTicketing.Shared.Storage.BlobNaming for the naming convention.
+    public string? IconBlobName { get; set; }
 
     public ICollection<Event> Events { get; set; } = new List<Event>();
 }

@@ -41,4 +41,7 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
 
     public Task<int> CountByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => Query().CountAsync(u => u.OrganizationId == organizationId, ct);
+
+    public Task<List<User>> GetAllByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
+        => Query().Where(u => u.OrganizationId == organizationId).ToListAsync(ct);
 }

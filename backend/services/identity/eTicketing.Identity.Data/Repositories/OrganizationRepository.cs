@@ -11,6 +11,7 @@ public class OrganizationRepository : Repository<Organization, Guid>, IOrganizat
 
     public Task<PagedResult<Organization>> SearchAsync(BaseSearchObject query, IReadOnlyList<Guid>? organizationIds, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Where(o => string.IsNullOrEmpty(query.FTS) || o.Name.Contains(query.FTS))
             // Minimal APIs bind an absent array-typed query param to an empty array, not null —
             // organizationIds.Count == 0 must also mean "no filter", or every organization gets

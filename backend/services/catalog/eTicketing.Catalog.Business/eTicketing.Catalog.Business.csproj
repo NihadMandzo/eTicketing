@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\eTicketing.Catalog.Data\eTicketing.Catalog.Data.csproj" />
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Storage\eTicketing.Shared.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

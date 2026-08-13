@@ -8,6 +8,7 @@ using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data;
 using eTicketing.Identity.Data.Repositories;
+using eTicketing.Shared.Storage;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,8 +53,7 @@ public static class IdentityServiceCollectionExtensions
                 o => !string.IsNullOrWhiteSpace(o.SigningKey) && Encoding.UTF8.GetByteCount(o.SigningKey) >= 32,
                 "Jwt:SigningKey mora biti podešen i imati najmanje 32 bajta (HS256 minimum).")
             .ValidateOnStart();
-        builder.Services.AddOptions<IdentityOptions>()
-            .Bind(builder.Configuration.GetSection(IdentityOptions.SectionName));
+        builder.AddAzureBlobStorage();
         builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();

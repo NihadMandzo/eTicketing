@@ -43,21 +43,53 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
   Future<void> _loadCategories() async {
     try {
       // 100 is the server's enforced ceiling (BaseSearchObjectValidator caps
-      // PageSize at 1-100) — category lists are inherently small, so this
-      // is effectively "all categories", no separate unpaged endpoint needed.
-      final result = await CategoryProvider().getAll(
-        searchObject: BaseSearchObject(page: 0, pageSize: 100),
-        fromJson: CategoryResponse.fromJson,
-      );
+      // PageSize at 1-100) — page through all results rather than assuming
+      // one page is "all categories", so a catalog that grows past 100
+      // entries doesn't silently lose entries from this filter.
+      final provider = CategoryProvider();
+      final allCategories = <CategoryResponse>[];
+      var page = 0;
+      const pageSize = 100;
+      while (true) {
+        final result = await provider.getAll(
+          searchObject: BaseSearchObject(page: page, pageSize: pageSize),
+          fromJson: CategoryResponse.fromJson,
+        );
+        allCategories.addAll(result.items);
+        if (result.items.isEmpty || allCategories.length >= result.totalCount) break;
+        page++;
+      }
+
       if (mounted) {
         setState(() {
-          _categories = result.items;
+          _categories = allCategories;
           _isLoading = false;
         });
+        // setState rebuilds this widget's element, but the dropdown content
+        // is rendered by a separate OverlayEntry — if it's open, it needs to
+        // be told to rebuild too or it stays on the spinner.
+        _scheduleOverlayRebuild();
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _scheduleOverlayRebuild();
+      }
     }
+  }
+
+  /// Defers `_overlay?.markNeedsBuild()` to just after the current frame
+  /// instead of calling it inline. Calling it inline from `didUpdateWidget`
+  /// (see below) throws "setState() or markNeedsBuild() called during
+  /// build": `didUpdateWidget` runs while the framework's BuildOwner still
+  /// holds the build-phase lock for the *whole* tree (not just this
+  /// widget), and marking a different element (the OverlayEntry's) dirty
+  /// during that window trips the same assertion setState() would.
+  /// Post-frame callbacks run after that lock is released, so this is safe
+  /// from every call site, not just didUpdateWidget's.
+  void _scheduleOverlayRebuild() {
+    if (_overlay == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _overlay?.markNeedsBuild());
   }
 
   void _toggleCategory(int id) {
@@ -87,6 +119,18 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
   }
 
   void _toggleMenu() => _menuOpen ? _closeMenu() : _openMenu();
+
+  @override
+  void didUpdateWidget(covariant CategoryMultiSelectFilter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The checked state is rendered by the OverlayEntry, not by this
+    // widget's own build() — after onChanged rebuilds the parent with a new
+    // selectedCategoryIds, the open menu needs to be told to rebuild too, or
+    // it keeps showing the pre-click checkbox values. Deferred — see
+    // _scheduleOverlayRebuild's doc comment for why calling this inline
+    // here crashed the app.
+    _scheduleOverlayRebuild();
+  }
 
   @override
   void dispose() {

@@ -23,6 +23,18 @@ Future<void> main() async {
   // screen (including the session-restore check below) makes a call.
   await initApiClient();
 
+  // Wired once, at startup — api_client.dart deliberately has no screen
+  // imports of its own, so it calls this to send the user back to the
+  // login screen when a 401 survives a refresh attempt (refresh cookie
+  // itself missing/expired/revoked, not just an expired access token).
+  onSessionExpired = () {
+    SnackbarService.showError('Sesija je istekla. Prijavite se ponovo.');
+    SnackbarService.navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  };
+
   // Restore the persisted light/dark preference before first paint.
   await ThemeController.init();
 

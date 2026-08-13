@@ -26,18 +26,10 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
 
   bool _isSuccess(int? code) => code != null && code >= 200 && code < 300;
 
-  /// POST /api/organizations (multipart – logo is optional)
-  Future<OrganizationResponse> insertOrganization(
-    OrganizationInsertRequest request, {
-    File? logoFile,
-  }) async {
-    final formData = FormData.fromMap({
-      ...request.toFields(),
-      'AdminPassword': request.adminPassword,
-      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
-    });
-
-    final response = await apiClient.post('organizations', data: formData);
+  /// POST /api/organizations — plain JSON, metadata only. The logo (if any) is
+  /// uploaded separately afterwards via [createLogo].
+  Future<OrganizationResponse> insertOrganization(OrganizationInsertRequest request) async {
+    final response = await apiClient.post('organizations', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -48,24 +40,50 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
     return getById(id, fromJson: OrganizationResponse.fromJson);
   }
 
-  /// Updates the organization using multipart/form-data so a logo file can
-  /// be attached alongside the regular text fields.
-  Future<OrganizationResponse> updateOrganization(
-    String id,
-    OrganizationUpdateRequest request, {
-    File? logoFile,
-    bool removeLogo = false,
-  }) async {
-    final formData = FormData.fromMap({
-      ...request.toFields(),
-      'RemoveLogo': removeLogo.toString(),
-      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
-    });
-
-    final response = await apiClient.put('organizations/$id', data: formData);
+  /// PUT /api/organizations/:id — plain JSON, metadata only. Never touches the logo.
+  Future<OrganizationResponse> updateOrganization(String id, OrganizationUpdateRequest request) async {
+    final response = await apiClient.put('organizations/$id', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// POST /api/organizations/:id/logo (multipart) — first-time logo upload. Fails
+  /// with a conflict if the organization already has one; use [replaceLogo] then.
+  Future<OrganizationResponse> createLogo(String id, File logoFile) async {
+    final formData = FormData.fromMap({
+      'Logo': await MultipartFile.fromFile(logoFile.path, contentType: _contentTypeFor(logoFile)),
+    });
+
+    final response = await apiClient.post('organizations/$id/logo', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/organizations/:id/logo (multipart) — replaces an existing logo in place.
+  Future<OrganizationResponse> replaceLogo(String id, File logoFile) async {
+    final formData = FormData.fromMap({
+      'Logo': await MultipartFile.fromFile(logoFile.path, contentType: _contentTypeFor(logoFile)),
+    });
+
+    final response = await apiClient.put('organizations/$id/logo', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Organization logos allow PNG or JPEG (unlike category icons, PNG-only) — pick
+  /// the multipart Content-Type from the picked file's extension so it's set
+  /// explicitly rather than left to Dio's (unreliable) filename-based default.
+  DioMediaType _contentTypeFor(File file) {
+    final path = file.path.toLowerCase();
+    if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+      return DioMediaType('image', 'jpeg');
+    }
+    return DioMediaType('image', 'png');
   }
 }

@@ -2,7 +2,7 @@ class CategoryResponse {
   final int id;
   final String name;
   final String description;
-  final String iconUrl;
+  final String? iconUrl;
   final bool isActive;
   final int displayOrder;
   final DateTime createdAt;
@@ -22,8 +22,9 @@ class CategoryResponse {
   factory CategoryResponse.fromJson(Map<String, dynamic> json) {
     if (json['id'] == null) throw const FormatException('Missing id in payload');
     if (json['name'] == null) throw const FormatException('Missing name in payload');
-    if (json['iconUrl'] == null) throw const FormatException('Missing iconUrl in payload');
-    
+    // iconUrl is null until an icon has been uploaded via the dedicated icon endpoints — no
+    // longer required on the payload (categories can now exist without one).
+
     DateTime? parsedCreatedAt;
     if (json['createdAt'] != null) {
       parsedCreatedAt = DateTime.tryParse(json['createdAt'] as String);
@@ -34,7 +35,7 @@ class CategoryResponse {
       id: json['id'] as int,
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
-      iconUrl: json['iconUrl'] as String,
+      iconUrl: json['iconUrl'] as String?,
       isActive: json['isActive'] as bool? ?? false,
       displayOrder: json['displayOrder'] as int? ?? 0,
       createdAt: parsedCreatedAt,

@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Data.Entities;
+using eTicketing.Catalog.Data.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,5 +23,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         // Hot filter paths for GET /events/all?OrganizationId=...&CategoryId=...
         builder.HasIndex(e => e.OrganizationId);
         builder.HasIndex(e => e.CategoryId);
+
+        builder.HasData(EventSeeder.GetSeedData());
     }
 }

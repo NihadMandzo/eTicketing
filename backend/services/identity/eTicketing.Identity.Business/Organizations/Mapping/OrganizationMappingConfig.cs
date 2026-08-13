@@ -14,21 +14,17 @@ public class OrganizationMappingConfig : IRegister
 {
     public void Register(TypeAdapterConfig config)
     {
-        // LogoUrl has no matching source property (Organization stores LogoData/
-        // LogoContentType bytes, not a URL) — left at its default null here and filled in by
-        // OrganizationService via `with` when a logo is present, same reasoning as UserCount.
+        // LogoUrl has no matching source property (Organization stores LogoBlobName, not a URL)
+        // — left at its default null here and filled in by OrganizationService via `with` when
+        // a logo is present, same reasoning as UserCount.
         config.NewConfig<Organization, OrganizationResponse>()
             .Map(dest => dest.UserCount, src => src.Users.Count);
 
-        // Logo/RemoveLogo are request-only fields with no matching Organization member
-        // (LogoData/LogoContentType are set manually in the service after validation) —
-        // explicit Ignore for clarity, though Mapster would skip unmatched members anyway.
-        config.NewConfig<CreateOrganizationRequest, Organization>()
-            .Ignore(dest => dest.LogoData)
-            .Ignore(dest => dest.LogoContentType);
-        config.NewConfig<UpdateOrganizationRequest, Organization>()
-            .Ignore(dest => dest.LogoData)
-            .Ignore(dest => dest.LogoContentType);
+        // LogoBlobName has no matching source on Create/UpdateOrganizationRequest (logos are
+        // managed exclusively through the dedicated logo-upload endpoints) — Mapster leaves it
+        // untouched on update and defaulted to null on create, no explicit Ignore() needed.
+        config.NewConfig<CreateOrganizationRequest, Organization>();
+        config.NewConfig<UpdateOrganizationRequest, Organization>();
 
         // The first organizer created alongside a new organization. Request fields are
         // "Admin"-prefixed (AdminFirstName, AdminEmail, ...) so they don't line up with User's

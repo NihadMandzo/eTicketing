@@ -14,13 +14,17 @@ public static class OrganizationEndpoints
 
         group.MapGet("", GetAll).AllowAnonymous().WithValidation<OrganizationQuery>();
         group.MapGet("/{id:guid}", GetById).AllowAnonymous();
-        group.MapGet("/{id:guid}/logo", GetLogo).AllowAnonymous();
 
-        // multipart/form-data — the desktop app always posts an optional Logo file alongside
-        // the text fields (see OrganizationProvider.insertOrganization/updateOrganization).
-        group.MapPost("", Create).RequireAuthorization("SuperAdminOnly").WithValidation<CreateOrganizationRequest>().DisableAntiforgery();
-        group.MapPut("/{id:guid}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateOrganizationRequest>().DisableAntiforgery();
+        group.MapPost("", Create).RequireAuthorization("SuperAdminOnly").WithValidation<CreateOrganizationRequest>();
+        group.MapPut("/{id:guid}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateOrganizationRequest>();
         group.MapDelete("/{id:guid}", Delete).RequireAuthorization("SuperAdminOnly");
+
+        // Logos are managed exclusively through these two dedicated multipart endpoints, never
+        // bundled into Create/Update above — see Organization.LogoBlobName / OrganizationService.
+        group.MapPost("/{id:guid}/logo", UploadLogo).RequireAuthorization("PlatformStaff")
+            .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
+        group.MapPut("/{id:guid}/logo", ReplaceLogo).RequireAuthorization("PlatformStaff")
+            .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
 
         group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization().WithValidation<OrganizationUserQuery>();
         group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("SuperAdminOnly").WithValidation<AddOrganizationUserRequest>();
@@ -39,28 +43,34 @@ public static class OrganizationEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> Create([FromForm] CreateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> Create(CreateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.CreateAsync(request, ct);
         return result.ToHttpResult(StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> Update(Guid id, [FromForm] UpdateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> Update(Guid id, UpdateOrganizationRequest request, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.UpdateAsync(id, request, ct);
         return result.ToHttpResult();
-    }
-
-    private static async Task<IResult> GetLogo(Guid id, IOrganizationService service, CancellationToken ct)
-    {
-        var result = await service.GetLogoAsync(id, ct);
-        return result.IsSuccess ? Results.File(result.Value!.Data, result.Value!.ContentType) : result.ToHttpResult();
     }
 
     private static async Task<IResult> Delete(Guid id, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.DeleteAsync(id, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);
+    }
+
+    private static async Task<IResult> UploadLogo(Guid id, [FromForm] OrganizationLogoUploadRequest request, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.UploadLogoAsync(id, request.Logo, ct);
+        return result.ToHttpResult(StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> ReplaceLogo(Guid id, [FromForm] OrganizationLogoUploadRequest request, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.ReplaceLogoAsync(id, request.Logo, ct);
+        return result.ToHttpResult();
     }
 
     private static async Task<IResult> GetUsers(Guid id, [AsParameters] OrganizationUserQuery query, IOrganizationService service, CancellationToken ct)

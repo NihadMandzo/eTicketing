@@ -454,9 +454,9 @@ class _CategoryCardState extends State<_CategoryCard> {
                   // Centered Image
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: widget.category.iconUrl.isNotEmpty
+                    child: (widget.category.iconUrl?.isNotEmpty ?? false)
                         ? Image.network(
-                            widget.category.iconUrl,
+                            widget.category.iconUrl!,
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,

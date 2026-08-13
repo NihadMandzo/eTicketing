@@ -112,6 +112,8 @@ public class OrganizationServiceTests : IDisposable
     [Fact]
     public async Task GetAsync_WithNullOrganizationIds_ReturnsAllOrganizations()
     {
+        // 2 created here + the 2 fixed organizations from OrganizationSeeder.cs (HasData,
+        // applied by EnsureCreated() too) — a null filter means "no filter", so all 4 come back.
         await _sut.CreateAsync(ValidCreateRequest());
         await _sut.CreateAsync(ValidCreateRequest() with
         {
@@ -121,7 +123,7 @@ public class OrganizationServiceTests : IDisposable
 
         var result = await _sut.GetAsync(new OrganizationQuery { OrganizationIds = null });
 
-        result.Value!.Items.Should().HaveCount(2);
+        result.Value!.Items.Should().HaveCount(4);
     }
 
     [Fact]
@@ -133,12 +135,12 @@ public class OrganizationServiceTests : IDisposable
         // The frontend never sends a genuinely-empty array to mean "match nothing" — it
         // short-circuits locally instead (see OrganizationsScreen._loadData()) — but the
         // repository still needs to treat this input this way for the "filter not in use at
-        // all" case to keep working.
+        // all" case to keep working. 1 created here + the 2 fixed seeded organizations = 3.
         await _sut.CreateAsync(ValidCreateRequest());
 
         var result = await _sut.GetAsync(new OrganizationQuery { OrganizationIds = [] });
 
-        result.Value!.Items.Should().HaveCount(1);
+        result.Value!.Items.Should().HaveCount(3);
     }
 
     [Fact]
@@ -212,22 +214,7 @@ public class OrganizationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAsync_WithLogo_StoresBytesAndBuildsLogoUrl()
-    {
-        var logoBytes = CreatePngBytes(80, 80);
-
-        var result = await _sut.CreateAsync(ValidCreateRequest() with { Logo = CreateLogoFile(logoBytes) });
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.LogoUrl.Should().Be($"http://localhost:5000/api/organizations/{result.Value.Id}/logo");
-
-        var logo = await _sut.GetLogoAsync(result.Value.Id);
-        logo.IsSuccess.Should().BeTrue();
-        logo.Value!.Data.Should().BeEquivalentTo(logoBytes);
-    }
-
-    [Fact]
-    public async Task CreateAsync_WithoutLogo_LogoUrlIsNull()
+    public async Task CreateAsync_LogoUrlIsNullUntilUploaded()
     {
         var result = await _sut.CreateAsync(ValidCreateRequest());
 
@@ -235,76 +222,122 @@ public class OrganizationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateAsync_WithoutLogoOrRemoveLogo_KeepsExistingLogo()
+    public async Task UploadLogoAsync_ForOrganizationWithoutLogo_StoresBlobAndReturnsUrl()
     {
-        var originalLogo = CreatePngBytes(60, 60);
-        var created = await _sut.CreateAsync(ValidCreateRequest() with { Logo = CreateLogoFile(originalLogo) });
+        var created = await _sut.CreateAsync(ValidCreateRequest());
 
-        var updated = await _sut.UpdateAsync(created.Value!.Id, new UpdateOrganizationRequest
-        {
-            Name = "Acme Events Renamed",
-            Description = "Updated",
-            Address = "456 Other St",
-            PhoneNumber = "+387 61 111 111",
-            Email = "info@acme.example.com",
-            IsActive = true,
-        });
+        var result = await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(80, 80)));
 
-        updated.Value!.LogoUrl.Should().NotBeNull();
-        var logo = await _sut.GetLogoAsync(created.Value.Id);
-        logo.Value!.Data.Should().BeEquivalentTo(originalLogo);
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.LogoUrl.Should().NotBeNull();
+        result.Value.LogoUrl.Should().Contain("organization-logos");
     }
 
     [Fact]
-    public async Task UpdateAsync_WithRemoveLogoTrue_ClearsLogo()
+    public async Task UploadLogoAsync_ForOrganizationThatAlreadyHasLogo_ReturnsConflict()
     {
-        var created = await _sut.CreateAsync(ValidCreateRequest() with { Logo = CreateLogoFile(CreatePngBytes(60, 60)) });
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(60, 60)));
 
-        var updated = await _sut.UpdateAsync(created.Value!.Id, new UpdateOrganizationRequest
-        {
-            Name = "Acme Events",
-            Description = "Updated",
-            Address = "456 Other St",
-            PhoneNumber = "+387 61 111 111",
-            Email = "info@acme.example.com",
-            IsActive = true,
-            RemoveLogo = true,
-        });
+        var result = await _sut.UploadLogoAsync(created.Value.Id, CreateLogoFile(CreatePngBytes(60, 60)));
 
-        updated.Value!.LogoUrl.Should().BeNull();
-        var logo = await _sut.GetLogoAsync(created.Value.Id);
-        logo.IsFailure.Should().BeTrue();
-        logo.Error.Code.Should().Be("organization.logo_not_found");
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.logo_already_exists");
     }
 
     [Fact]
-    public async Task UpdateAsync_WithNewLogo_ReplacesExistingLogo()
+    public async Task UploadLogoAsync_ForUnknownOrganization_ReturnsNotFound()
     {
-        var created = await _sut.CreateAsync(ValidCreateRequest() with { Logo = CreateLogoFile(CreatePngBytes(40, 40)) });
-        var replacementLogo = CreatePngBytes(90, 90);
+        var result = await _sut.UploadLogoAsync(Guid.NewGuid(), CreateLogoFile(CreatePngBytes(60, 60)));
 
-        await _sut.UpdateAsync(created.Value!.Id, new UpdateOrganizationRequest
-        {
-            Name = "Acme Events",
-            Description = "Updated",
-            Address = "456 Other St",
-            PhoneNumber = "+387 61 111 111",
-            Email = "info@acme.example.com",
-            IsActive = true,
-            Logo = CreateLogoFile(replacementLogo),
-        });
-
-        var logo = await _sut.GetLogoAsync(created.Value.Id);
-        logo.Value!.Data.Should().BeEquivalentTo(replacementLogo);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.not_found");
     }
 
     [Fact]
-    public async Task GetLogoAsync_ForUnknownOrganization_ReturnsNotFound()
+    public async Task ReplaceLogoAsync_ForOrganizationWithLogo_OverwritesSameBlobKey()
     {
-        var result = await _sut.GetLogoAsync(Guid.NewGuid());
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        var uploaded = await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(40, 40)));
+        var originalUrl = uploaded.Value!.LogoUrl;
+
+        var replaced = await _sut.ReplaceLogoAsync(created.Value.Id, CreateLogoFile(CreatePngBytes(90, 90)));
+
+        replaced.IsSuccess.Should().BeTrue();
+        replaced.Value!.LogoUrl.Should().Be(originalUrl); // same blob key, just overwritten
+    }
+
+    [Fact]
+    public async Task ReplaceLogoAsync_ForOrganizationWithoutLogo_ReturnsNotFound()
+    {
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.ReplaceLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(40, 40)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("organization.logo_not_found");
+    }
+
+    [Fact]
+    public async Task ReplaceLogoAsync_ForUnknownOrganization_ReturnsNotFound()
+    {
+        var result = await _sut.ReplaceLogoAsync(Guid.NewGuid(), CreateLogoFile(CreatePngBytes(40, 40)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.not_found");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ForOrganizationWithLogo_DeletesBlobToo()
+    {
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        var uploaded = await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(50, 50)));
+        var blobName = uploaded.Value!.LogoUrl!.Split('/').Last();
+        _fixture.BlobStorage.Exists("organization-logos", blobName).Should().BeTrue();
+
+        await _sut.DeleteAsync(created.Value.Id);
+
+        _fixture.BlobStorage.Exists("organization-logos", blobName).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ForOrganizationWithUsers_CascadeDeletesAllOfItsUsers()
+    {
+        // Every organization has at least one user (the admin created alongside it in
+        // CreateAsync) — add a second so this also covers users beyond the first admin.
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        await _sut.AddUserAsync(created.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationAdmin
+        });
+
+        var result = await _sut.DeleteAsync(created.Value.Id);
+
+        result.IsSuccess.Should().BeTrue();
+        (await _fixture.UserRepository.GetByEmailAsync("alice@acme.example.com")).Should().BeNull();
+        (await _fixture.UserRepository.GetByEmailAsync("bob@acme.example.com")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsCorrectLogoUrlPresenceForEachOrganization()
+    {
+        var withLogo = await _sut.CreateAsync(ValidCreateRequest());
+        await _sut.UploadLogoAsync(withLogo.Value!.Id, CreateLogoFile(CreatePngBytes(50, 50)));
+        var withoutLogo = await _sut.CreateAsync(ValidCreateRequest() with
+        {
+            AdminEmail = "other@acme.example.com",
+            AdminUsername = "otheradmin"
+        });
+
+        var result = await _sut.GetAsync(new OrganizationQuery { OrganizationIds = [withLogo.Value.Id, withoutLogo.Value!.Id] });
+
+        result.Value!.Items.Should().ContainSingle(o => o.Id == withLogo.Value.Id && o.LogoUrl != null);
+        result.Value.Items.Should().ContainSingle(o => o.Id == withoutLogo.Value.Id && o.LogoUrl == null);
     }
 
     public void Dispose() => _fixture.Dispose();

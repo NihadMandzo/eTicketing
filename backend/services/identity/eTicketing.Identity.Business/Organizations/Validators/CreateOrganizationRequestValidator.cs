@@ -24,20 +24,6 @@ public class CreateOrganizationRequestValidator : AbstractValidator<CreateOrgani
         RuleFor(x => x.AdminRole).IsInEnum()
             .Must(r => r is RoleType.OrganizationSuperAdmin or RoleType.OrganizationAdmin)
             .WithMessage("Uloga administratora organizacije mora biti OrganizationSuperAdmin ili OrganizationAdmin.");
-
-        // Logo is optional on create — only validated when one is actually supplied.
-        RuleFor(x => x.Logo)
-            .Must(OrganizationLogoValidation.HasAllowedContentType)
-            .WithMessage("Dozvoljeni formati loga su PNG i JPEG.")
-            .When(x => x.Logo != null);
-        RuleFor(x => x.Logo)
-            .Must(OrganizationLogoValidation.IsWithinSizeLimit)
-            .WithMessage("Logo može biti maksimalno 2MB.")
-            .When(x => x.Logo != null);
-        RuleFor(x => x.Logo)
-            .MustAsync((file, ct) => OrganizationLogoValidation.HasValidContentAsync(file!, ct))
-            .WithMessage("Logo nije validna slika ili je prevelike rezolucije.")
-            .When(x => x.Logo != null);
     }
 
     private static bool BeAValidUrl(string? url) =>
