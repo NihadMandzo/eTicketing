@@ -15,11 +15,7 @@ public class CategoryIconUploadRequestValidator : AbstractValidator<CategoryIcon
             .When(x => x.Icon != null);
         RuleFor(x => x.Icon)
             .Must(CategoryIconValidation.IsWithinSizeLimit)
-            .WithMessage("Ikona je prevelika (maks. 100 KB).")
-            .When(x => x.Icon != null);
-        RuleFor(x => x.Icon)
-            .MustAsync((file, ct) => CategoryIconValidation.HasValidContentAsync(file!, ct))
-            .WithMessage("Ikona ne zadovoljava ograničenja (maks. 100x100px).")
+            .WithMessage("Ikona može biti maksimalno 1MB.")
             .When(x => x.Icon != null);
         RuleFor(x => x.Icon)
             .MustAsync((file, ct) => CategoryIconValidation.HasSquareAspectRatioAsync(file!, ct))

@@ -108,14 +108,6 @@ public class OrganizationService : IOrganizationService
         if (organization is null)
             return Result.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
 
-        // Blob delete first: if it throws (genuine Azure outage), nothing else has been touched
-        // yet — the organization and its users are left untouched rather than ending up deleted
-        // with an orphaned blob still in storage.
-        if (organization.LogoBlobName is not null)
-        {
-            await _blobStorageService.DeleteAsync(ContainerName, organization.LogoBlobName, ct);
-        }
-
         // Hard-deleting an organization takes its users with it — every organization has at
         // least one (the admin created alongside it, see CreateAsync), and there's no soft
         // delete anywhere in this app to fall back on. The FK (Users.OrganizationId ->
@@ -132,6 +124,18 @@ public class OrganizationService : IOrganizationService
 
         _organizationRepository.Remove(organization);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // DB delete first: if SaveChangesAsync above throws, the blob is left untouched rather
+        // than ending up orphaned while the organization row is still alive and pointing at it.
+        // If the blob delete below throws instead (genuine Azure outage) — after the DB commit
+        // already succeeded — the organization is gone but the blob lingers; that orphaned-blob
+        // state is acceptable and recoverable (it's simply never referenced again), unlike the
+        // reverse.
+        if (organization.LogoBlobName is not null)
+        {
+            await _blobStorageService.DeleteAsync(ContainerName, organization.LogoBlobName, ct);
+        }
+
         return Result.Success();
     }
 

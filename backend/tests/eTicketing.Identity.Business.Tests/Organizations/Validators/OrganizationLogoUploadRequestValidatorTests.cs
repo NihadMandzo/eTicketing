@@ -112,8 +112,8 @@ public class OrganizationLogoUploadRequestValidatorTests
     [Fact]
     public async Task Logo_NonSquareDimensions_Fails()
     {
-        // 300x150 is well within the 2000x2000 dimension cap and under 1MB, so this isolates the
-        // aspect-ratio rule from the size/dimension rules above.
+        // 300x150 is well under the 1MB size cap, so this isolates the aspect-ratio rule from
+        // the size rule above.
         var result = await _validator.TestValidateAsync(new OrganizationLogoUploadRequest
         {
             Logo = CreateFormFile(CreatePngBytes(300, 150)),
@@ -137,27 +137,16 @@ public class OrganizationLogoUploadRequestValidatorTests
     [Fact]
     public async Task Logo_CorruptContent_FailsWithoutThrowing()
     {
-        // Regression test: format/content detection throws (rather than returning null) for
-        // content that merely looks like an image but isn't decodable — OrganizationLogoValidation
-        // must catch that and report it as a normal validation failure, not let it become an
+        // Regression test: content detection throws (rather than returning null) for content
+        // that carries a PNG-like signature but isn't actually decodable — the format sniff
+        // (header bytes only) passes, but the square-aspect-ratio check (full decode) must catch
+        // the failure and report it as a normal validation failure, not let it become an
         // unhandled exception (surfaced as a 500 via GlobalExceptionHandler otherwise).
         var corrupt = "\x89PNG\r\n\x1a\nnot a real png"u8.ToArray();
 
         var result = await _validator.TestValidateAsync(new OrganizationLogoUploadRequest { Logo = CreateFormFile(corrupt) });
 
         result.ShouldHaveValidationErrorFor(x => x.Logo)
-            .WithErrorMessage("Logo nije validna slika ili je prevelike rezolucije.");
-    }
-
-    [Fact]
-    public async Task Logo_OversizedDimensions_Fails()
-    {
-        var result = await _validator.TestValidateAsync(new OrganizationLogoUploadRequest
-        {
-            Logo = CreateFormFile(CreatePngBytes(2001, 2001)),
-        });
-
-        result.ShouldHaveValidationErrorFor(x => x.Logo)
-            .WithErrorMessage("Logo nije validna slika ili je prevelike rezolucije.");
+            .WithErrorMessage("Logo mora biti kvadratan (omjer 1:1).");
     }
 }

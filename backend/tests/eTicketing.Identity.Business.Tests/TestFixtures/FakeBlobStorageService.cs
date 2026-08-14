@@ -12,6 +12,10 @@ public sealed class FakeBlobStorageService : IBlobStorageService
 {
     private readonly Dictionary<string, byte[]> _blobs = [];
 
+    /// <summary>When set, DeleteAsync throws instead of deleting — lets tests simulate a genuine
+    /// blob-storage outage to assert on delete-ordering (DB commit vs. blob delete).</summary>
+    public bool ThrowOnDelete { get; set; }
+
     public Task<string> UploadAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default)
     {
         using var ms = new MemoryStream();
@@ -22,6 +26,8 @@ public sealed class FakeBlobStorageService : IBlobStorageService
 
     public Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default)
     {
+        if (ThrowOnDelete) throw new InvalidOperationException("Simulated blob storage outage.");
+
         _blobs.Remove(Key(containerName, blobName));
         return Task.CompletedTask;
     }

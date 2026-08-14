@@ -18,10 +18,6 @@ public class OrganizationLogoUploadRequestValidator : AbstractValidator<Organiza
             .WithMessage("Logo može biti maksimalno 1MB.")
             .When(x => x.Logo != null);
         RuleFor(x => x.Logo)
-            .MustAsync((file, ct) => OrganizationLogoValidation.HasValidContentAsync(file!, ct))
-            .WithMessage("Logo nije validna slika ili je prevelike rezolucije.")
-            .When(x => x.Logo != null);
-        RuleFor(x => x.Logo)
             .MustAsync((file, ct) => OrganizationLogoValidation.HasSquareAspectRatioAsync(file, ct))
             .WithMessage("Logo mora biti kvadratan (omjer 1:1).")
             .When(x => x.Logo != null);

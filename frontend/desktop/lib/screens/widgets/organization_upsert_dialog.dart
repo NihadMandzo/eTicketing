@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/image_validation.dart';
 import '../../utility/snackbar_service.dart';
+import 'image_crop_dialog.dart';
 
 class OrganizationUpsertDialog extends StatefulWidget {
   final OrganizationResponse? organization;
@@ -48,7 +50,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
   final _adminPasswordCtrl = TextEditingController();
   final _adminPhoneCtrl = TextEditingController();
 
-  File? _logoFile;
+  Uint8List? _logoBytes;
   String? _logoFileName;
   bool _isSaving = false;
   bool _obscurePassword = true;
@@ -106,11 +108,14 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
     final path = result.files.single.path!;
     final bytes = await File(path).readAsBytes();
-    final error = await ImageValidation.validateSquare(
-      bytes,
+    if (!mounted) return;
+    final cropped = await ImageCropDialog.show(context, bytes);
+    if (cropped == null) return;
+
+    final error = ImageValidation.validateMaxBytes(
+      cropped,
       maxBytes: _maxLogoBytes,
       sizeErrorMessage: 'Logo može biti maksimalno 1MB.',
-      aspectRatioErrorMessage: 'Logo mora biti kvadratan (omjer 1:1).',
     );
     if (error != null) {
       if (mounted) SnackbarService.showError(error);
@@ -119,7 +124,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
 
     if (mounted) {
       setState(() {
-        _logoFile = File(path);
+        _logoBytes = cropped;
         _logoFileName = result.files.single.name;
       });
     }
@@ -174,15 +179,15 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
         organizationId = saved.id;
       }
 
-      if (_logoFile != null) {
+      if (_logoBytes != null) {
         // An existing logo (edit case) can only be replaced via PUT; an
         // organization that doesn't have one yet (new, or edited-but-never-
         // had-one) needs the create (POST) call instead.
         final hasExistingLogo = widget.organization?.logoUrl != null;
         if (hasExistingLogo) {
-          await _provider.replaceLogo(organizationId, _logoFile!);
+          await _provider.replaceLogo(organizationId, _logoBytes!);
         } else {
-          await _provider.createLogo(organizationId, _logoFile!);
+          await _provider.createLogo(organizationId, _logoBytes!);
         }
       }
 
@@ -535,7 +540,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
         ),
         const SizedBox(height: 10),
         _LogoPickerTile(
-          logoFile: _logoFile,
+          logoBytes: _logoBytes,
           fileName: _logoFileName,
           onTap: _pickLogo,
         ),
@@ -886,12 +891,12 @@ class _FieldLabel extends StatelessWidget {
 }
 
 class _LogoPickerTile extends StatelessWidget {
-  final File? logoFile;
+  final Uint8List? logoBytes;
   final String? fileName;
   final VoidCallback onTap;
 
   const _LogoPickerTile({
-    required this.logoFile,
+    required this.logoBytes,
     required this.fileName,
     required this.onTap,
   });
@@ -906,7 +911,7 @@ class _LogoPickerTile extends StatelessWidget {
     final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
-    final picked = logoFile != null;
+    final picked = logoBytes != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -933,7 +938,7 @@ class _LogoPickerTile extends StatelessWidget {
               child: picked
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.file(logoFile!, fit: BoxFit.cover),
+                      child: Image.memory(logoBytes!, fit: BoxFit.cover),
                     )
                   : Icon(LucideIcons.upload, color: placeholderColor, size: 20),
             ),

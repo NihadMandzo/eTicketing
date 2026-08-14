@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../providers/category_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/image_validation.dart';
 import '../../utility/snackbar_service.dart';
+import 'image_crop_dialog.dart';
 
 class CategoryUpsertDialog extends StatefulWidget {
   final CategoryResponse? category;
@@ -33,7 +35,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   final _descController = TextEditingController();
   final _provider = CategoryProvider();
 
-  File? _iconFile;
+  Uint8List? _iconBytes;
   String? _iconFileName;
   bool _isSaving = false;
 
@@ -59,12 +61,11 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   // Mirrors CategoryIconValidation on the backend — that validator is still
   // authoritative and re-checks regardless (see 00-workflow-and-testing.md),
   // this just gives instant feedback instead of a round-trip to the API.
-  static const int _maxIconBytes = 100 * 1024;
+  static const int _maxIconBytes = 1 * 1024 * 1024;
 
   Future<void> _pickIcon() async {
-    // PNG only, matching the backend validator (CategoryIconValidation) —
-    // ≤100x100px, ≤100KB, square, enforced server-side regardless of what's
-    // picked here.
+    // PNG only, matching the backend validator (CategoryIconValidation) — ≤1MB, square
+    // (enforced here by the forced crop below), enforced server-side regardless.
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png'],
@@ -74,11 +75,14 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
 
     final path = result.files.single.path!;
     final bytes = await File(path).readAsBytes();
-    final error = await ImageValidation.validateSquare(
-      bytes,
+    if (!mounted) return;
+    final cropped = await ImageCropDialog.show(context, bytes);
+    if (cropped == null) return;
+
+    final error = ImageValidation.validateMaxBytes(
+      cropped,
       maxBytes: _maxIconBytes,
-      sizeErrorMessage: 'Ikona je prevelika (maks. 100 KB).',
-      aspectRatioErrorMessage: 'Ikona mora biti kvadratna (omjer 1:1).',
+      sizeErrorMessage: 'Ikona može biti maksimalno 1MB.',
     );
     if (error != null) {
       if (mounted) SnackbarService.showError(error);
@@ -87,7 +91,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
 
     if (mounted) {
       setState(() {
-        _iconFile = File(path);
+        _iconBytes = cropped;
         _iconFileName = result.files.single.name;
       });
     }
@@ -119,15 +123,15 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
         );
       }
 
-      if (_iconFile != null) {
+      if (_iconBytes != null) {
         // An existing icon (edit case) can only be replaced via PUT; a
         // category that doesn't have one yet (new, or edited-but-never-had-
         // one) needs the create (POST) call instead.
         final hasExistingIcon = widget.category?.iconUrl != null;
         if (hasExistingIcon) {
-          await _provider.replaceIcon(saved.id, _iconFile!);
+          await _provider.replaceIcon(saved.id, _iconBytes!);
         } else {
-          await _provider.createIcon(saved.id, _iconFile!);
+          await _provider.createIcon(saved.id, _iconBytes!);
         }
       }
 
@@ -289,7 +293,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                         ),
                         const SizedBox(height: 6),
                         _IconPickerTile(
-                          iconFile: _iconFile,
+                          iconBytes: _iconBytes,
                           fileName: _iconFileName,
                           onTap: _pickIcon,
                         ),
@@ -387,12 +391,12 @@ class _Label extends StatelessWidget {
 }
 
 class _IconPickerTile extends StatelessWidget {
-  final File? iconFile;
+  final Uint8List? iconBytes;
   final String? fileName;
   final VoidCallback onTap;
 
   const _IconPickerTile({
-    required this.iconFile,
+    required this.iconBytes,
     required this.fileName,
     required this.onTap,
   });
@@ -401,7 +405,7 @@ class _IconPickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = isDark ? AppColors.secondary : AppColors.primary;
-    final picked = iconFile != null;
+    final picked = iconBytes != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -430,7 +434,7 @@ class _IconPickerTile extends StatelessWidget {
               child: picked
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(iconFile!, fit: BoxFit.cover),
+                      child: Image.memory(iconBytes!, fit: BoxFit.cover),
                     )
                   : Icon(LucideIcons.upload,
                       color: isDark
@@ -455,7 +459,7 @@ class _IconPickerTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'PNG, kvadratna (maks. 100x100px, 100 KB)',
+                    'PNG, kvadratna (maks. 1MB)',
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark

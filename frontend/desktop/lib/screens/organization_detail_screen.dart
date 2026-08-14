@@ -150,7 +150,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     }
   }
 
-  void _onSearchChanged(_TabState state, Future<void> Function() reload) {
+  void _onSearchChanged(_TabState<dynamic> state, Future<void> Function() reload) {
     if (state.debounce?.isActive ?? false) state.debounce!.cancel();
     state.debounce = Timer(const Duration(milliseconds: 300), () {
       setState(() => state.currentPage = 0);
@@ -158,7 +158,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     });
   }
 
-  void _goToPage(_TabState state, int page, Future<void> Function() reload) {
+  void _goToPage(_TabState<dynamic> state, int page, Future<void> Function() reload) {
     if (page < 0 || page >= state.totalPages(_pageSize)) return;
     setState(() => state.currentPage = page);
     reload();
@@ -388,7 +388,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     );
   }
 
-  Widget _searchField(_TabState state, Future<void> Function() reload, String hint, bool isDark,
+  Widget _searchField(_TabState<dynamic> state, Future<void> Function() reload, String hint, bool isDark,
       Color textPrimary, Color textTertiary) {
     return Container(
       height: 44,

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_controller.dart';
 import '../../utility/image_validation.dart';
+import 'image_crop_dialog.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
@@ -82,7 +84,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _roleCtrl = TextEditingController();
   final _orgNameProfileCtrl = TextEditingController();
   bool _orgActive = true;
-  File? _logoFile;
+  Uint8List? _logoBytes;
 
   bool _saving = false;
   bool _loadingOrg = false;
@@ -257,13 +259,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ),
     );
 
-    if (_logoFile != null) {
+    if (_logoBytes != null) {
       // An existing logo can only be replaced via PUT; an organization that
       // doesn't have one yet needs the create (POST) call instead.
       final hasExistingLogo = _orgData?.logoUrl != null;
       updated = hasExistingLogo
-          ? await _orgProvider.replaceLogo(_orgId!, _logoFile!)
-          : await _orgProvider.createLogo(_orgId!, _logoFile!);
+          ? await _orgProvider.replaceLogo(_orgId!, _logoBytes!)
+          : await _orgProvider.createLogo(_orgId!, _logoBytes!);
     }
 
     if (mounted) {
@@ -277,7 +279,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       _orgWebsite.text = updated.website ?? '';
       setState(() {
         _orgActive = updated.isActive;
-        _logoFile = null;
+        _logoBytes = null;
       });
       _showSuccess('Organizacija uspješno ažurirana.');
     }
@@ -940,7 +942,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SizedBox(height: 16),
         _OrgLogoCard(
           logoUrl: _orgData?.logoUrl,
-          logoFile: _logoFile,
+          logoBytes: _logoBytes,
           onPickLogo: () async {
             final result = await FilePicker.platform.pickFiles(
               type: FileType.custom,
@@ -950,22 +952,25 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
             final path = result.files.single.path!;
             final bytes = await File(path).readAsBytes();
+            if (!mounted) return;
+            final cropped = await ImageCropDialog.show(context, bytes);
+            if (cropped == null) return;
+
             // Mirrors OrganizationLogoValidation on the backend — that
             // validator is still authoritative and re-checks regardless
             // (see 00-workflow-and-testing.md), this just gives instant
             // feedback instead of a round-trip to the API.
-            final error = await ImageValidation.validateSquare(
-              bytes,
+            final error = ImageValidation.validateMaxBytes(
+              cropped,
               maxBytes: 1 * 1024 * 1024,
               sizeErrorMessage: 'Logo može biti maksimalno 1MB.',
-              aspectRatioErrorMessage: 'Logo mora biti kvadratan (omjer 1:1).',
             );
             if (error != null) {
               if (mounted) _showError(error);
               return;
             }
 
-            if (mounted) setState(() => _logoFile = File(path));
+            if (mounted) setState(() => _logoBytes = cropped);
           },
         ),
         const SizedBox(height: 20),
@@ -1375,16 +1380,16 @@ class _AvatarCard extends StatelessWidget {
 
 class _OrgLogoCard extends StatelessWidget {
   final String? logoUrl;
-  final File? logoFile;
+  final Uint8List? logoBytes;
   final VoidCallback onPickLogo;
 
   const _OrgLogoCard({
     this.logoUrl,
-    this.logoFile,
+    this.logoBytes,
     required this.onPickLogo,
   });
 
-  bool get _hasLogo => logoFile != null || (logoUrl != null && logoUrl!.isNotEmpty);
+  bool get _hasLogo => logoBytes != null || (logoUrl != null && logoUrl!.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -1410,9 +1415,9 @@ class _OrgLogoCard extends StatelessWidget {
               gradient: _hasLogo
                   ? null
                   : LinearGradient(colors: [primary, primaryDark]),
-              image: logoFile != null
+              image: logoBytes != null
                   ? DecorationImage(
-                      image: FileImage(logoFile!), fit: BoxFit.cover)
+                      image: MemoryImage(logoBytes!), fit: BoxFit.cover)
                   : (logoUrl != null && logoUrl!.isNotEmpty)
                       ? DecorationImage(
                           image: NetworkImage(logoUrl!),

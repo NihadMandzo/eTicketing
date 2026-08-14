@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -47,9 +47,12 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
   /// POST /api/categories/:id/icon (multipart) — first-time icon upload. Fails
   /// with a conflict if the category already has one; use [replaceIcon] then.
-  Future<CategoryResponse> createIcon(int id, File iconFile) async {
+  /// [iconBytes] is always PNG — it's already been through ImageCropDialog's forced square crop
+  /// (which preserves the source format, and the file picker only allows .png) by the time it
+  /// reaches here.
+  Future<CategoryResponse> createIcon(int id, Uint8List iconBytes) async {
     final formData = FormData.fromMap({
-      'Icon': await MultipartFile.fromFile(iconFile.path, contentType: DioMediaType('image', 'png')),
+      'Icon': MultipartFile.fromBytes(iconBytes, filename: 'icon.png', contentType: DioMediaType('image', 'png')),
     });
 
     final response = await apiClient.post('categories/$id/icon', data: formData);
@@ -60,9 +63,9 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
   }
 
   /// PUT /api/categories/:id/icon (multipart) — replaces an existing icon in place.
-  Future<CategoryResponse> replaceIcon(int id, File iconFile) async {
+  Future<CategoryResponse> replaceIcon(int id, Uint8List iconBytes) async {
     final formData = FormData.fromMap({
-      'Icon': await MultipartFile.fromFile(iconFile.path, contentType: DioMediaType('image', 'png')),
+      'Icon': MultipartFile.fromBytes(iconBytes, filename: 'icon.png', contentType: DioMediaType('image', 'png')),
     });
 
     final response = await apiClient.put('categories/$id/icon', data: formData);

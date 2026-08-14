@@ -90,15 +90,20 @@ public class CategoryService : ICategoryService
                 "Kategorija se ne može obrisati jer je u upotrebi od strane jednog ili više događaja."));
         }
 
-        // Blob delete first: if it throws (genuine Azure outage), the category row is left
-        // untouched rather than ending up deleted with an orphaned blob still in storage.
+        _categoryRepository.Remove(category);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        // DB delete first: if SaveChangesAsync above throws (concurrency conflict, transient DB
+        // error), the blob is left untouched rather than ending up orphaned while the category
+        // row is still alive and pointing at it. If the blob delete below throws instead
+        // (genuine Azure outage) — after the DB commit already succeeded — the category is gone
+        // but the blob lingers; that orphaned-blob state is acceptable and recoverable (it's
+        // simply never referenced again), unlike the reverse.
         if (category.IconBlobName is not null)
         {
             await _blobStorageService.DeleteAsync(ContainerName, category.IconBlobName, ct);
         }
 
-        _categoryRepository.Remove(category);
-        await _unitOfWork.SaveChangesAsync(ct);
         return Result.Success();
     }
 

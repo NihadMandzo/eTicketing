@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -51,9 +51,10 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
 
   /// POST /api/organizations/:id/logo (multipart) — first-time logo upload. Fails
   /// with a conflict if the organization already has one; use [replaceLogo] then.
-  Future<OrganizationResponse> createLogo(String id, File logoFile) async {
+  Future<OrganizationResponse> createLogo(String id, Uint8List logoBytes) async {
     final formData = FormData.fromMap({
-      'Logo': await MultipartFile.fromFile(logoFile.path, contentType: _contentTypeFor(logoFile)),
+      'Logo': MultipartFile.fromBytes(logoBytes,
+          filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
     });
 
     final response = await apiClient.post('organizations/$id/logo', data: formData);
@@ -64,9 +65,10 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
   }
 
   /// PUT /api/organizations/:id/logo (multipart) — replaces an existing logo in place.
-  Future<OrganizationResponse> replaceLogo(String id, File logoFile) async {
+  Future<OrganizationResponse> replaceLogo(String id, Uint8List logoBytes) async {
     final formData = FormData.fromMap({
-      'Logo': await MultipartFile.fromFile(logoFile.path, contentType: _contentTypeFor(logoFile)),
+      'Logo': MultipartFile.fromBytes(logoBytes,
+          filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
     });
 
     final response = await apiClient.put('organizations/$id/logo', data: formData);
@@ -76,14 +78,16 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
     return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Organization logos allow PNG or JPEG (unlike category icons, PNG-only) — pick
-  /// the multipart Content-Type from the picked file's extension so it's set
-  /// explicitly rather than left to Dio's (unreliable) filename-based default.
-  DioMediaType _contentTypeFor(File file) {
-    final path = file.path.toLowerCase();
-    if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
-      return DioMediaType('image', 'jpeg');
-    }
-    return DioMediaType('image', 'png');
-  }
+  /// Organization logos allow PNG or JPEG (unlike category icons, PNG-only). The cropped bytes
+  /// no longer carry a file path/extension (ImageCropDialog hands back raw pixels, not a File),
+  /// so the format is sniffed from the actual PNG magic number instead — mirrors the backend's
+  /// own approach of never trusting client-supplied metadata
+  /// (OrganizationLogoValidation.HasAllowedFormatAsync).
+  bool _isPng(Uint8List bytes) =>
+      bytes.length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+
+  DioMediaType _contentTypeFor(Uint8List bytes) =>
+      _isPng(bytes) ? DioMediaType('image', 'png') : DioMediaType('image', 'jpeg');
+
+  String _extensionFor(Uint8List bytes) => _isPng(bytes) ? 'png' : 'jpg';
 }

@@ -301,6 +301,23 @@ public class OrganizationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAsync_WhenBlobDeleteFails_StillRemovesOrganizationRow()
+    {
+        // Regression test for the fix this task made: the blob is now deleted only after the DB
+        // delete commits, so a blob-storage failure (e.g. transient Azure outage) can no longer
+        // leave the organization row alive while pointing at an already-deleted blob.
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(50, 50)));
+        _fixture.BlobStorage.ThrowOnDelete = true;
+
+        var act = () => _sut.DeleteAsync(created.Value.Id);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        var fetched = await _sut.GetByIdAsync(created.Value.Id);
+        fetched.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DeleteAsync_ForOrganizationWithUsers_CascadeDeletesAllOfItsUsers()
     {
         // Every organization has at least one user (the admin created alongside it in

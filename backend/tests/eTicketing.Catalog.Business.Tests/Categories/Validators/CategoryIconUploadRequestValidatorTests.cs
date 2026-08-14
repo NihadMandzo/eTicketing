@@ -97,33 +97,22 @@ public class CategoryIconUploadRequestValidatorTests
     [Fact]
     public async Task Validate_WithOversizedIcon_Fails()
     {
-        // 101 KB of raw bytes is well over the 100 KB cap regardless of what codec-level
+        // 1MB + 1 byte of raw bytes is well over the cap regardless of what codec-level
         // validation would say about it — the size rule runs before content validation.
-        var oversized = new byte[101 * 1024];
+        var oversized = new byte[(1 * 1024 * 1024) + 1];
         var request = Request(CreateFormFile(oversized));
 
         var result = await _validator.ValidateAsync(request);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.ErrorMessage == "Ikona je prevelika (maks. 100 KB).");
-    }
-
-    [Fact]
-    public async Task Validate_WithOversizedDimensions_Fails()
-    {
-        var request = Request(CreateFormFile(CreatePngBytes(101, 101)));
-
-        var result = await _validator.ValidateAsync(request);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.ErrorMessage == "Ikona ne zadovoljava ograničenja (maks. 100x100px).");
+        result.Errors.Should().Contain(e => e.ErrorMessage == "Ikona može biti maksimalno 1MB.");
     }
 
     [Fact]
     public async Task Validate_WithNonSquareDimensions_Fails()
     {
-        // 80x40 is well within the 100x100 size cap, so this isolates the aspect-ratio rule
-        // from the dimension-cap rule above.
+        // 80x40 is well under the 1MB size cap, so this isolates the aspect-ratio rule from the
+        // size rule above.
         var request = Request(CreateFormFile(CreatePngBytes(80, 40)));
 
         var result = await _validator.ValidateAsync(request);
