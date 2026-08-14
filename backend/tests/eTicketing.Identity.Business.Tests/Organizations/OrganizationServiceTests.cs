@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Tests.TestFixtures;
 using eTicketing.Identity.Data.Enums;
@@ -30,12 +31,29 @@ public class OrganizationServiceTests : IDisposable
         AdminLastName = "Admin",
         AdminEmail = "alice@acme.example.com",
         AdminUsername = "aliceadmin",
-        AdminPassword = "SuperSecret123",
-        AdminRole = RoleType.OrganizationSuperAdmin
+        AdminPassword = "SuperSecret123"
     };
 
+    /// <summary>Builds a ClaimsPrincipal matching the claim shape JwtTokenGenerator mints
+    /// (ClaimTypes.NameIdentifier/Role + a plain "organizationId" claim), for exercising
+    /// OrganizationService's ownership checks without going through real JWT issuance.</summary>
+    private static ClaimsPrincipal BuildCaller(RoleType role, Guid? organizationId = null, Guid? userId = null)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, (userId ?? Guid.NewGuid()).ToString()),
+            new(ClaimTypes.Role, role.ToString()),
+        };
+        if (organizationId is not null)
+            claims.Add(new Claim("organizationId", organizationId.Value.ToString()));
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
+    }
+
+    private static ClaimsPrincipal PlatformStaffCaller() => BuildCaller(RoleType.SuperAdmin);
+
     [Fact]
-    public async Task CreateAsync_CreatesOrganizationAndFirstAdminInOneTransaction()
+    public async Task CreateAsync_FirstAdminIsAlwaysOrganizationSuperAdmin()
     {
         var result = await _sut.CreateAsync(ValidCreateRequest());
 
@@ -58,7 +76,7 @@ public class OrganizationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task AddUserAsync_AddsUserScopedToOrganization()
+    public async Task AddUserAsync_ByPlatformStaff_ForAnyOrg_Succeeds()
     {
         var org = await _sut.CreateAsync(ValidCreateRequest());
 
@@ -70,10 +88,115 @@ public class OrganizationServiceTests : IDisposable
             Username = "bobstaff",
             Password = "SuperSecret123",
             Role = RoleType.OrganizationAdmin
-        });
+        }, PlatformStaffCaller());
 
         added.IsSuccess.Should().BeTrue();
         added.Value!.OrganizationId.Should().Be(org.Value.Id);
+    }
+
+    [Fact]
+    public async Task AddUserAsync_ByOrganizationSuperAdmin_ForOwnOrg_CreatesOrganizationAdmin()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var alice = await _fixture.UserRepository.GetByEmailAsync("alice@acme.example.com");
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, org.Value!.Id, alice!.Id);
+
+        var result = await _sut.AddUserAsync(org.Value.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationAdmin
+        }, caller);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.RoleName.Should().Be("OrganizationAdmin");
+    }
+
+    [Fact]
+    public async Task AddUserAsync_ByOrganizationSuperAdmin_ForOtherOrg_ReturnsForbidden()
+    {
+        var orgA = await _sut.CreateAsync(ValidCreateRequest());
+        var orgB = await _sut.CreateAsync(ValidCreateRequest() with
+        {
+            AdminEmail = "carol@other.example.com",
+            AdminUsername = "carolother"
+        });
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, orgB.Value!.Id);
+
+        var result = await _sut.AddUserAsync(orgA.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationAdmin
+        }, caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.forbidden");
+    }
+
+    [Fact]
+    public async Task AddUserAsync_ByOrganizationSuperAdmin_AttemptingSuperAdminRole_ReturnsValidationError()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, org.Value!.Id);
+
+        var result = await _sut.AddUserAsync(org.Value.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationSuperAdmin
+        }, caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.role_not_allowed");
+    }
+
+    [Fact]
+    public async Task AddUserAsync_ByOrganizationAdmin_ReturnsForbidden()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var caller = BuildCaller(RoleType.OrganizationAdmin, org.Value!.Id);
+
+        var result = await _sut.AddUserAsync(org.Value.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationAdmin
+        }, caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.forbidden");
+    }
+
+    [Fact]
+    public async Task AddUserAsync_SecondOrganizationSuperAdminForSameOrg_ReturnsConflict()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.AddUserAsync(org.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Carl",
+            LastName = "Second",
+            Email = "carl@acme.example.com",
+            Username = "carlsecond",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationSuperAdmin
+        }, PlatformStaffCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.super_admin_already_exists");
     }
 
     [Fact]
@@ -88,10 +211,134 @@ public class OrganizationServiceTests : IDisposable
 
         var userInOrgA = await _fixture.UserRepository.GetByEmailAsync("alice@acme.example.com");
 
-        var result = await _sut.RemoveUserAsync(orgB.Value!.Id, userInOrgA!.Id);
+        var result = await _sut.RemoveUserAsync(orgB.Value!.Id, userInOrgA!.Id, PlatformStaffCaller());
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("user.not_found");
+    }
+
+    [Fact]
+    public async Task RemoveUserAsync_ByOrganizationSuperAdmin_OwnOrgOrganizationAdmin_Succeeds()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var added = await _sut.AddUserAsync(org.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
+            Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, org.Value.Id);
+
+        var result = await _sut.RemoveUserAsync(org.Value.Id, added.Value!.Id, caller);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveUserAsync_ByOrganizationSuperAdmin_OtherOrg_ReturnsForbidden()
+    {
+        var orgA = await _sut.CreateAsync(ValidCreateRequest());
+        var orgB = await _sut.CreateAsync(ValidCreateRequest() with
+        {
+            AdminEmail = "carol@other.example.com",
+            AdminUsername = "carolother"
+        });
+        var added = await _sut.AddUserAsync(orgA.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
+            Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, orgB.Value!.Id);
+
+        var result = await _sut.RemoveUserAsync(orgA.Value.Id, added.Value!.Id, caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.forbidden");
+    }
+
+    [Fact]
+    public async Task RemoveUserAsync_TargetingOrganizationSuperAdmin_ReturnsConflict()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var alice = await _fixture.UserRepository.GetByEmailAsync("alice@acme.example.com");
+
+        var result = await _sut.RemoveUserAsync(org.Value!.Id, alice!.Id, PlatformStaffCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.super_admin_required");
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ByOrganizationSuperAdmin_OwnOrgOrganizationAdmin_UpdatesFields()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var added = await _sut.AddUserAsync(org.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
+            Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, org.Value.Id);
+
+        var result = await _sut.UpdateUserAsync(org.Value.Id, added.Value!.Id, new UpdateOrganizationUserRequest
+        {
+            FirstName = "Robert",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            PhoneNumber = "+387 61 222 333"
+        }, caller);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.FirstName.Should().Be("Robert");
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_ByOrganizationSuperAdmin_OtherOrg_ReturnsForbidden()
+    {
+        var orgA = await _sut.CreateAsync(ValidCreateRequest());
+        var orgB = await _sut.CreateAsync(ValidCreateRequest() with
+        {
+            AdminEmail = "carol@other.example.com",
+            AdminUsername = "carolother"
+        });
+        var added = await _sut.AddUserAsync(orgA.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
+            Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+        var caller = BuildCaller(RoleType.OrganizationSuperAdmin, orgB.Value!.Id);
+
+        var result = await _sut.UpdateUserAsync(orgA.Value.Id, added.Value!.Id, new UpdateOrganizationUserRequest
+        {
+            FirstName = "Robert",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff"
+        }, caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.forbidden");
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_DuplicateEmail_ReturnsConflict()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var added = await _sut.AddUserAsync(org.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
+            Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+
+        var result = await _sut.UpdateUserAsync(org.Value.Id, added.Value!.Id, new UpdateOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "alice@acme.example.com", // Alice's (the org superadmin's) email — already taken
+            Username = "bobstaff"
+        }, PlatformStaffCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("user.already_exists");
     }
 
     [Fact]
@@ -151,9 +398,9 @@ public class OrganizationServiceTests : IDisposable
         {
             FirstName = "Bob", LastName = "Admin", Email = "bob@acme.example.com",
             Username = "bobadmin", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
-        });
+        }, PlatformStaffCaller());
 
-        var result = await _sut.GetUsersAsync(org.Value.Id, new OrganizationUserQuery { Role = RoleType.OrganizationSuperAdmin });
+        var result = await _sut.GetUsersAsync(org.Value.Id, new OrganizationUserQuery { Role = RoleType.OrganizationSuperAdmin }, PlatformStaffCaller());
 
         // The org's own first admin (Alice, from CreateAsync) is OrganizationSuperAdmin — only
         // she should come back, not Bob (OrganizationAdmin).
@@ -170,9 +417,9 @@ public class OrganizationServiceTests : IDisposable
         {
             FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
             Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
-        });
+        }, PlatformStaffCaller());
 
-        var result = await _sut.GetUsersAsync(org.Value.Id, new OrganizationUserQuery { FTS = "Bob" });
+        var result = await _sut.GetUsersAsync(org.Value.Id, new OrganizationUserQuery { FTS = "Bob" }, PlatformStaffCaller());
 
         result.Value!.Items.Should().ContainSingle(u => u.Email == "bob@acme.example.com");
     }
@@ -185,14 +432,42 @@ public class OrganizationServiceTests : IDisposable
         {
             FirstName = "Bob", LastName = "Staff", Email = "bob@acme.example.com",
             Username = "bobstaff", Password = "SuperSecret123", Role = RoleType.OrganizationAdmin
-        });
+        }, PlatformStaffCaller());
 
         // Bob is OrganizationAdmin, not OrganizationSuperAdmin — searching for his name while
         // filtering to the wrong role must return nothing, not ignore one of the two filters.
         var result = await _sut.GetUsersAsync(org.Value.Id,
-            new OrganizationUserQuery { Role = RoleType.OrganizationSuperAdmin, FTS = "Bob" });
+            new OrganizationUserQuery { Role = RoleType.OrganizationSuperAdmin, FTS = "Bob" }, PlatformStaffCaller());
 
         result.Value!.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetUsersAsync_ByOrganizationAdmin_OwnOrg_Succeeds()
+    {
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        var caller = BuildCaller(RoleType.OrganizationAdmin, org.Value!.Id);
+
+        var result = await _sut.GetUsersAsync(org.Value.Id, new OrganizationUserQuery(), caller);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetUsersAsync_ByUnrelatedOrgUser_ReturnsForbidden()
+    {
+        var orgA = await _sut.CreateAsync(ValidCreateRequest());
+        var orgB = await _sut.CreateAsync(ValidCreateRequest() with
+        {
+            AdminEmail = "carol@other.example.com",
+            AdminUsername = "carolother"
+        });
+        var caller = BuildCaller(RoleType.OrganizationAdmin, orgB.Value!.Id);
+
+        var result = await _sut.GetUsersAsync(orgA.Value!.Id, new OrganizationUserQuery(), caller);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("organization.forbidden");
     }
 
     private static byte[] CreatePngBytes(int width, int height)
@@ -331,7 +606,7 @@ public class OrganizationServiceTests : IDisposable
             Username = "bobstaff",
             Password = "SuperSecret123",
             Role = RoleType.OrganizationAdmin
-        });
+        }, PlatformStaffCaller());
 
         var result = await _sut.DeleteAsync(created.Value.Id);
 

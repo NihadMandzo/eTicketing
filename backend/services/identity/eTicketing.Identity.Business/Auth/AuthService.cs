@@ -161,7 +161,7 @@ public class AuthService : IAuthService
 
     public async Task<Result<UserResponse>> GetMeAsync(Guid userId, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
+        var user = await _userRepository.GetByIdWithOrganizationAsync(userId, ct);
         return user is null
             ? Result<UserResponse>.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."))
             : Result<UserResponse>.Success(user.Adapt<UserResponse>());
@@ -194,7 +194,7 @@ public class AuthService : IAuthService
 
     public async Task<Result<UserResponse>> UpdateUserAsync(Guid userId, UpdateUserRequest request, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
+        var user = await _userRepository.GetByIdWithOrganizationAsync(userId, ct);
         if (user is null)
         {
             return Result<UserResponse>.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."));

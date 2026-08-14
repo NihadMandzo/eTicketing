@@ -32,7 +32,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
 
   int _currentPage = 0;
   int _totalCount = 0;
-  static const int _pageSize = 9;
+  int _pageSize = 10;
 
   // Bumped at the start of every _loadData() call — a response is only applied if its captured
   // token still matches this field, so a stale (superseded) request can't overwrite the results
@@ -235,6 +235,14 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     _loadData();
   }
 
+  void _onPageSizeChanged(int size) {
+    setState(() {
+      _pageSize = size;
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -252,7 +260,12 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final placeholderColor = isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
 
-    return Padding(
+    // The whole page is one SingleChildScrollView (not header-fixed +
+    // internally-scrolling grid) — scrolling moves the title/search/count out
+    // of view along with everything else, so the pagination bar is always
+    // reachable by scrolling the same way as the rest of the content, not
+    // hidden behind a separately-scrolled grid region.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,76 +387,74 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               ),
             ),
 
-          // ── Grid ──────────────────────────────────────────────────
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(color: primaryColor),
-                  )
-                : _organizations.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(LucideIcons.building2,
-                                size: 48,
-                                color: isDark
-                                    ? AppColors.darkBorderInput
-                                    : AppColors.lightBorderInput),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Nema organizacija',
-                              style: TextStyle(color: textTertiary, fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          int crossAxisCount = 3;
-                          if (constraints.maxWidth >= 1400) {
-                            crossAxisCount = 5;
-                          } else if (constraints.maxWidth >= 1100) {
-                            crossAxisCount = 4;
-                          } else if (constraints.maxWidth >= 800) {
-                            crossAxisCount = 3;
-                          }
-
-                          return GridView.builder(
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                              childAspectRatio: 1.0,
-                            ),
-                            itemCount: _organizations.length,
-                            itemBuilder: (context, index) {
-                              final org = _organizations[index];
-                              return _OrganizationCard(
-                                organization: org,
-                                onView: () async {
-                                  // The detail screen can edit its local organization (e.g. add
-                                  // logo, rename) — await the route so this list reloads and
-                                  // picks up any change instead of showing a stale card.
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => OrganizationDetailScreen(organization: org),
-                                    ),
-                                  );
-                                  if (mounted) _loadData();
-                                },
-                                onEdit: () =>
-                                    _openDialog(organization: org),
-                                onDelete: () =>
-                                    _deleteOrganization(org),
-                              );
-                            },
-                          );
-                        },
+          // ── Grid ── not wrapped in Expanded (the page is one scroll view,
+          // not header-fixed + internally-scrolling grid) — loading/empty
+          // states get an explicit height since there's no ambient Expanded
+          // to size them anymore.
+          if (_isLoading)
+            SizedBox(
+              height: 300,
+              child: Center(child: CircularProgressIndicator(color: primaryColor)),
+            )
+          else if (_organizations.isEmpty)
+            SizedBox(
+              height: 300,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.building2,
+                        size: 48,
+                        color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nema organizacija',
+                      style: TextStyle(color: textTertiary, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            GridView.builder(
+              // MaxCrossAxisExtent (not a breakpoint-driven fixed count) caps how
+              // wide any single card can get — a fixed crossAxisCount let a card
+              // grow arbitrarily large (e.g. ~380px wide/~530px tall on a >2000px
+              // monitor with few results), which looked broken even though nothing
+              // overflowed. This way more columns simply appear as the window
+              // widens instead of existing cards stretching. mainAxisExtent (a
+              // fixed pixel height, not an aspect ratio) is generous enough for the
+              // card's tallest realistic content, so it can never overflow either.
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 300,
+                mainAxisExtent: 380,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              itemCount: _organizations.length,
+              itemBuilder: (context, index) {
+                final org = _organizations[index];
+                return _OrganizationCard(
+                  organization: org,
+                  onView: () async {
+                    // The detail screen can edit its local organization (e.g. add
+                    // logo, rename) — await the route so this list reloads and
+                    // picks up any change instead of showing a stale card.
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OrganizationDetailScreen(organization: org),
                       ),
-          ),
+                    );
+                    if (mounted) _loadData();
+                  },
+                  onEdit: () => _openDialog(organization: org),
+                  onDelete: () => _deleteOrganization(org),
+                );
+              },
+            ),
 
           // ── Pagination ───────────────────────────────────────────
           Padding(
@@ -452,6 +463,8 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               currentPage: _currentPage,
               totalPages: _totalPages,
               onPageChanged: _goToPage,
+              pageSize: _pageSize,
+              onPageSizeChanged: _onPageSizeChanged,
             ),
           ),
         ],
@@ -519,9 +532,10 @@ class _OrganizationCardState extends State<_OrganizationCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Logo ──
+              // ── Logo ── 72 (not the previous 100) to match the card's new
+              // fixed, more compact height (see the grid's mainAxisExtent).
               Center(
-                child: EntityAvatar(name: org.name, logoUrl: org.logoUrl, size: 100),
+                child: EntityAvatar(name: org.name, logoUrl: org.logoUrl, size: 72),
               ),
 
               const SizedBox(height: 16),
@@ -541,46 +555,53 @@ class _OrganizationCardState extends State<_OrganizationCard> {
 
               const SizedBox(height: 12),
 
-              // ── Contact info ──
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // ── Contact info ── plain (not Expanded/Flexible) — the card now has
+              // a fixed pixel height (see the grid's mainAxisExtent), not an
+              // elastic aspect-ratio height, so there's no "remaining space" that
+              // needs to be measured and clamped at build time. Wrapping this in
+              // Expanded previously forced it into whatever leftover height the
+              // Column's flex algorithm computed, which could be (and was)
+              // smaller than the 3 rows' actual natural height, overflowing
+              // regardless of the inner Flexible. Laying it out top-down at
+              // natural size and giving the card generous fixed height headroom
+              // instead is what actually guarantees no overflow.
+              _ContactRow(emoji: '📧', text: org.email),
+              const SizedBox(height: 6),
+              _ContactRow(emoji: '📞', text: org.phoneNumber),
+              const SizedBox(height: 6),
+              _ContactRow(emoji: '📍', text: org.address),
+
+              const SizedBox(height: 12),
+
+              // ── User count chip ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: isDark ? 0.16 : 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _ContactRow(emoji: '📧', text: org.email),
-                    const SizedBox(height: 6),
-                    _ContactRow(emoji: '📞', text: org.phoneNumber),
-                    const SizedBox(height: 6),
-                    _ContactRow(emoji: '📍', text: org.address),
-
-                    const Spacer(),
-
-                    // ── User count chip ──
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: isDark ? 0.16 : 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(LucideIcons.users, size: 14, color: primaryColor),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${org.userCount} korisnika',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: primaryColor,
-                            ),
-                          ),
-                        ],
+                    Icon(LucideIcons.users, size: 14, color: primaryColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${org.userCount} korisnika',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: primaryColor,
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // Spacer (not Expanded around fixed content) — safe by
+              // construction, its minimum size is 0, so it can never be the
+              // cause of an overflow; it only pushes the buttons down when
+              // there's genuine leftover room.
+              const Spacer(),
 
               const SizedBox(height: 14),
 
@@ -602,12 +623,14 @@ class _OrganizationCardState extends State<_OrganizationCard> {
                     onTap: widget.onEdit,
                   ),
                   const SizedBox(width: 8),
-                  _ActionButton(
-                    icon: LucideIcons.trash2,
-                    label: 'Obriši',
-                    isPrimary: false,
-                    isDestructive: true,
-                    onTap: widget.onDelete,
+                  Expanded(
+                    child: _ActionButton(
+                      icon: LucideIcons.trash2,
+                      label: 'Obriši',
+                      isPrimary: false,
+                      isDestructive: true,
+                      onTap: widget.onDelete,
+                    ),
                   ),
                 ],
               ),
@@ -690,7 +713,7 @@ class _ActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 14),
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
           decoration: (isPrimary || isDestructive)
               ? BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
@@ -702,12 +725,23 @@ class _ActionButton extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: fg),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: fg,
+              // Flexible+ellipsis (not a bare Text) — this button sits inside an
+              // Expanded whose actual width depends on the grid's computed
+              // column count, which can be narrower than the card's nominal
+              // maxCrossAxisExtent (SliverGridDelegateWithMaxCrossAxisExtent may
+              // pick more, narrower columns to fill the row). Without this, the
+              // label previously caused a RenderFlex right-overflow at some
+              // window widths instead of just truncating.
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

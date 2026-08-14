@@ -13,15 +13,14 @@ public record CreateOrganizationRequest
     public string Email { get; init; } = string.Empty;
     public string? Website { get; init; }
 
-    // Podaci prvog organizatora — kreira se u istoj transakciji kao i organizacija
+    // Podaci prvog organizatora — kreira se u istoj transakciji kao i organizacija. Uvijek
+    // postaje OrganizationSuperAdmin (vidi OrganizationMappingConfig) — svaka organizacija mora
+    // imati tačno jednog, pa ovdje nema izbora uloge.
     public string AdminFirstName { get; init; } = string.Empty;
     public string AdminLastName { get; init; } = string.Empty;
     public string AdminEmail { get; init; } = string.Empty;
     public string AdminUsername { get; init; } = string.Empty;
     public string AdminPassword { get; init; } = string.Empty;
-
-    /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in AdminRoleValidator.</summary>
-    public RoleType AdminRole { get; init; } = RoleType.OrganizationSuperAdmin;
 }
 
 public record UpdateOrganizationRequest
@@ -43,8 +42,23 @@ public record AddOrganizationUserRequest
     public string Username { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
 
-    /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in RoleValidator.</summary>
+    /// <summary>Must be OrganizationSuperAdmin or OrganizationAdmin — validated in RoleValidator.
+    /// A caller that isn't platform staff (i.e. an OrganizationSuperAdmin self-servicing their
+    /// own org) is further restricted to OrganizationAdmin only — see
+    /// OrganizationService.AddUserAsync.</summary>
     public RoleType Role { get; init; } = RoleType.OrganizationAdmin;
+}
+
+/// <summary>Profile-only edit of an existing organization user — role isn't editable here (see
+/// AddOrganizationUserRequest's doc comment on why the org's roles can't just be reassigned
+/// freely).</summary>
+public sealed record UpdateOrganizationUserRequest
+{
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string? PhoneNumber { get; init; }
 }
 
 /// <summary>LogoUrl is null until a logo has been uploaded via the dedicated

@@ -67,13 +67,14 @@ const List<NavItem> kNavItems = [
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const double _kExpanded = 240.0;
-const double _kCollapsed = 72.0;
-const Duration _kDur = Duration(milliseconds: 250);
+// The sidebar is a fixed-width icon-only rail — it never expands into a
+// drawer. Hovering a nav item surfaces its label via a Tooltip instead (see
+// _NavButton) rather than growing the whole shell.
+const double _kWidth = 72.0;
 
 // ─── AppSidebar ───────────────────────────────────────────────────────────────
 
-class AppSidebar extends StatefulWidget {
+class AppSidebar extends StatelessWidget {
   final UserProfile user;
   final String currentPage;
   final ValueChanged<String> onPageChange;
@@ -87,69 +88,25 @@ class AppSidebar extends StatefulWidget {
     required this.onSettings,
   });
 
-  @override
-  State<AppSidebar> createState() => _AppSidebarState();
-}
-
-class _AppSidebarState extends State<AppSidebar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _widthAnim;
-  late final Animation<double> _labelFade;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: _kDur);
-    _widthAnim = Tween<double>(begin: _kCollapsed, end: _kExpanded)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-    _labelFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _ctrl, curve: const Interval(0.45, 1.0)));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _onEnter(_) => _ctrl.forward();
-  void _onExit(_) => _ctrl.reverse();
-
   List<NavItem> get _filtered => kNavItems
-      .where((i) =>
-          i.allowedRoles.isEmpty ||
-          i.allowedRoles.contains(widget.user.roleName))
+      .where((i) => i.allowedRoles.isEmpty || i.allowedRoles.contains(user.roleName))
       .toList();
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: _onEnter,
-      onExit: _onExit,
-      child: AnimatedBuilder(
-        animation: _widthAnim,
-        builder: (_, __) => _SidebarShell(
-          width: _widthAnim.value,
-          labelFade: _labelFade,
-          child: Column(
-            children: [
-              _Logo(labelFade: _labelFade),
-              Expanded(
-                child: _NavList(
-                  items: _filtered,
-                  currentPage: widget.currentPage,
-                  labelFade: _labelFade,
-                  onPageChange: widget.onPageChange,
-                ),
-              ),
-              _BottomActions(
-                labelFade: _labelFade,
-                onSettings: widget.onSettings,
-              ),
-            ],
+    return _SidebarShell(
+      child: Column(
+        children: [
+          const _Logo(),
+          Expanded(
+            child: _NavList(
+              items: _filtered,
+              currentPage: currentPage,
+              onPageChange: onPageChange,
+            ),
           ),
-        ),
+          _BottomActions(onSettings: onSettings),
+        ],
       ),
     );
   }
@@ -158,39 +115,34 @@ class _AppSidebarState extends State<AppSidebar>
 // ─── Sidebar shell container ──────────────────────────────────────────────────
 
 class _SidebarShell extends StatelessWidget {
-  final double width;
-  final Animation<double> labelFade;
   final Widget child;
 
-  const _SidebarShell(
-      {required this.width, required this.labelFade, required this.child});
+  const _SidebarShell({required this.child});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRect(
-      child: SizedBox(
-        width: width,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : Colors.white,
-            border: Border(
-              right: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-              ),
+    return SizedBox(
+      width: _kWidth,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          border: Border(
+            right: BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
             ),
-            boxShadow: isDark
-                ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x0C000000),
-                      blurRadius: 16,
-                      offset: Offset(4, 0),
-                    ),
-                  ],
           ),
-          child: child,
+          boxShadow: isDark
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x0C000000),
+                    blurRadius: 16,
+                    offset: Offset(4, 0),
+                  ),
+                ],
         ),
+        child: child,
       ),
     );
   }
@@ -199,16 +151,14 @@ class _SidebarShell extends StatelessWidget {
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
 class _Logo extends StatelessWidget {
-  final Animation<double> labelFade;
-
-  const _Logo({required this.labelFade});
+  const _Logo();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
@@ -216,41 +166,20 @@ class _Logo extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          // Logo image
-          SizedBox(
-            width: 40,
-            height: 40,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/eTicketing-logo.png',
-                fit: BoxFit.contain,
-              ),
+      child: Tooltip(
+        message: 'eKarta Manager',
+        waitDuration: const Duration(milliseconds: 600),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/eTicketing-logo.png',
+              fit: BoxFit.contain,
             ),
           ),
-          // App name fades in
-          Expanded(
-            child: FadeTransition(
-              opacity: labelFade,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 10),
-                child: Text(
-                  'eKarta Manager',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -261,26 +190,23 @@ class _Logo extends StatelessWidget {
 class _NavList extends StatelessWidget {
   final List<NavItem> items;
   final String currentPage;
-  final Animation<double> labelFade;
   final ValueChanged<String> onPageChange;
 
   const _NavList({
     required this.items,
     required this.currentPage,
-    required this.labelFade,
     required this.onPageChange,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       child: Column(
         children: items
             .map((item) => _NavButton(
                   item: item,
                   isActive: currentPage == item.id,
-                  labelFade: labelFade,
                   onTap: () => onPageChange(item.id),
                 ))
             .toList(),
@@ -292,13 +218,9 @@ class _NavList extends StatelessWidget {
 // ─── Bottom actions (settings) ────────────────────────────────────────────────
 
 class _BottomActions extends StatelessWidget {
-  final Animation<double> labelFade;
   final VoidCallback onSettings;
 
-  const _BottomActions({
-    required this.labelFade,
-    required this.onSettings,
-  });
+  const _BottomActions({required this.onSettings});
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +239,6 @@ class _BottomActions extends StatelessWidget {
           icon: Icons.settings_rounded,
         ),
         isActive: false,
-        labelFade: labelFade,
         onTap: onSettings,
       ),
     );
@@ -329,13 +250,11 @@ class _BottomActions extends StatelessWidget {
 class _NavButton extends StatelessWidget {
   final NavItem item;
   final bool isActive;
-  final Animation<double> labelFade;
   final VoidCallback onTap;
 
   const _NavButton({
     required this.item,
     required this.isActive,
-    required this.labelFade,
     required this.onTap,
   });
 
@@ -358,8 +277,7 @@ class _NavButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          child: Container(
             height: 44,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
@@ -376,42 +294,16 @@ class _NavButton extends StatelessWidget {
                     ]
                   : null,
             ),
-            child: Row(
-              children: [
-                // Icon — fixed width so it never overflows
-                SizedBox(
-                  width: 56,
-                  child: Center(
-                    child: Icon(
-                      item.icon,
-                      size: 20,
-                      color: isActive
-                          ? onActiveColor
-                          : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
-                    ),
-                  ),
-                ),
-                // Label — takes remaining space, fades in
-                Expanded(
-                  child: FadeTransition(
-                    opacity: labelFade,
-                    child: Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isActive
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: isActive
-                            ? onActiveColor
-                            : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            // Icon-only — the sidebar is a fixed-width rail with no room for an
+            // inline label; the Tooltip above is the only place item.label surfaces.
+            child: Center(
+              child: Icon(
+                item.icon,
+                size: 20,
+                color: isActive
+                    ? onActiveColor
+                    : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
+              ),
             ),
           ),
         ),

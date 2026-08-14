@@ -14,9 +14,14 @@ public class UserMappingConfig : IRegister
     public void Register(TypeAdapterConfig config)
     {
         // The one response shape shared by Auth, Admins and Organizations, so the mapping is
-        // defined once here instead of being hand-rolled at every call site.
+        // defined once here instead of being hand-rolled at every call site. OrganizationName is
+        // only ever populated when the query that loaded this User also `.Include(u =>
+        // u.Organization)`d it — callers that don't need it (e.g. a bare role check) don't pay
+        // for the join and simply get null back, same as OrganizationId already does for a User
+        // with no org.
         config.NewConfig<User, UserResponse>()
-            .Map(dest => dest.RoleName, src => src.Role.ToString());
+            .Map(dest => dest.RoleName, src => src.Role.ToString())
+            .Map(dest => dest.OrganizationName, src => src.Organization != null ? src.Organization.Name : null);
 
         // Self-service registration — always a plain User (RoleType.User), unlike the
         // Admin/Organization creation flows. PasswordHash/PasswordSalt are computed separately

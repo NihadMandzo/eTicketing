@@ -43,7 +43,10 @@ class _AppHeaderState extends State<AppHeader> {
     if (_menuOpen) return;
     setState(() => _menuOpen = true);
     _overlay = OverlayEntry(builder: (_) => _buildOverlay());
-    Overlay.of(context).insert(_overlay!);
+    // rootOverlay: true — defensive: always anchor to the app's outermost Overlay rather than
+    // the nearest one, so this keeps working even if a future caller ever renders AppHeader
+    // inside a dialog/route that provides its own nested Overlay.
+    Overlay.of(context, rootOverlay: true).insert(_overlay!);
   }
 
   void _closeMenu() {

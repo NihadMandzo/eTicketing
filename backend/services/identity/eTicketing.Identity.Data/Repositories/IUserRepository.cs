@@ -14,9 +14,33 @@ public interface IUserRepository : IRepository<User, Guid>
     /// <summary>Username ownership check that excludes <paramref name="excludeUserId"/>, so a user renaming themselves back to their own current username never trips a "taken" conflict.</summary>
     Task<bool> ExistsByUsernameAsync(string username, Guid excludeUserId, CancellationToken ct = default);
 
+    /// <summary>Email+username ownership check that excludes <paramref name="excludeUserId"/> —
+    /// used by the new admin-edits-another-user flows (AdminService.UpdateAsync,
+    /// OrganizationService.UpdateUserAsync), which unlike self-service UpdateUserAsync also allow
+    /// changing Email, so both fields need the same self-exclusion as ExistsByUsernameAsync.</summary>
+    Task<bool> ExistsByEmailOrUsernameAsync(string email, string username, Guid excludeUserId, CancellationToken ct = default);
+
+    /// <summary>Whether an organization already has a user with the given role — used to enforce
+    /// "exactly one OrganizationSuperAdmin per organization" before inserting a second one.</summary>
+    Task<bool> ExistsByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default);
+
+    /// <summary>Same as the base <see cref="eTicketing.Contracts.Persistence.IRepository{T,TKey}.GetByIdAsync"/>
+    /// but with <c>Organization</c> included, for the call sites that actually surface
+    /// <see cref="eTicketing.Identity.Business.Auth.UserResponse.OrganizationName"/> to a caller
+    /// (the base lookup uses DbSet.FindAsync, which never includes navigation properties).</summary>
+    Task<User?> GetByIdWithOrganizationAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Paged, FTS-filtered (first name/last name/email) search over users with a given
     /// role — backs AdminService.GetAsync.</summary>
     Task<PagedResult<User>> SearchByRoleAsync(RoleType role, BaseSearchObject query, CancellationToken ct = default);
+
+    /// <summary>Paged, FTS-filtered (first name/last name/email) search over every non-buyer
+    /// (Role != User) account — platform staff + organization accounts — optionally narrowed to
+    /// any subset of roles (multiselect). Backs AdminService.GetAsync (the SuperAdmin-facing
+    /// "platform Users" list). Includes Organization so OrganizationName is populated for
+    /// org-scoped roles. Null or empty roleFilters means "every role" — same
+    /// absent-array-binds-to-empty-not-null convention as OrganizationRepository.SearchAsync.</summary>
+    Task<PagedResult<User>> SearchStaffAsync(IReadOnlyList<RoleType>? roleFilters, BaseSearchObject query, CancellationToken ct = default);
 
     /// <summary>Paged, FTS-filtered (first name/last name/email), optionally role-filtered users
     /// belonging to an organization — backs OrganizationService.GetUsersAsync. role is passed as

@@ -26,9 +26,10 @@ public static class OrganizationEndpoints
         group.MapPut("/{id:guid}/logo", ReplaceLogo).RequireAuthorization("PlatformStaff")
             .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
 
-        group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization().WithValidation<OrganizationUserQuery>();
-        group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("SuperAdminOnly").WithValidation<AddOrganizationUserRequest>();
-        group.MapDelete("/{id:guid}/users/{userId:guid}", RemoveUser).RequireAuthorization("SuperAdminOnly");
+        group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization("Organizer").WithValidation<OrganizationUserQuery>();
+        group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("Organizer").WithValidation<AddOrganizationUserRequest>();
+        group.MapPut("/{id:guid}/users/{userId:guid}", UpdateUser).RequireAuthorization("Organizer").WithValidation<UpdateOrganizationUserRequest>();
+        group.MapDelete("/{id:guid}/users/{userId:guid}", RemoveUser).RequireAuthorization("Organizer");
     }
 
     private static async Task<IResult> GetAll([AsParameters] OrganizationQuery query, IOrganizationService service, CancellationToken ct)
@@ -73,21 +74,27 @@ public static class OrganizationEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> GetUsers(Guid id, [AsParameters] OrganizationUserQuery query, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> GetUsers(Guid id, [AsParameters] OrganizationUserQuery query, IOrganizationService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.GetUsersAsync(id, query, ct);
+        var result = await service.GetUsersAsync(id, query, http.User, ct);
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> AddUser(Guid id, AddOrganizationUserRequest request, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> AddUser(Guid id, AddOrganizationUserRequest request, IOrganizationService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.AddUserAsync(id, request, ct);
+        var result = await service.AddUserAsync(id, request, http.User, ct);
         return result.ToHttpResult(StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> RemoveUser(Guid id, Guid userId, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> UpdateUser(Guid id, Guid userId, UpdateOrganizationUserRequest request, IOrganizationService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.RemoveUserAsync(id, userId, ct);
+        var result = await service.UpdateUserAsync(id, userId, request, http.User, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> RemoveUser(Guid id, Guid userId, IOrganizationService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.RemoveUserAsync(id, userId, http.User, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);
     }
 }

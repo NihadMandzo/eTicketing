@@ -1,4 +1,5 @@
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Enums;
 using Mapster;
 
 namespace eTicketing.Identity.Business.Organizations.Mapping;
@@ -36,7 +37,10 @@ public class OrganizationMappingConfig : IRegister
             .Map(dest => dest.LastName, src => src.AdminLastName)
             .Map(dest => dest.Email, src => src.AdminEmail)
             .Map(dest => dest.Username, src => src.AdminUsername)
-            .Map(dest => dest.Role, src => src.AdminRole)
+            // Every organization must have exactly one OrganizationSuperAdmin, and the first
+            // account created alongside a brand-new organization always is one — there is no
+            // "which role should the first admin be" choice, unlike AddOrganizationUserRequest.
+            .Map(dest => dest.Role, src => RoleType.OrganizationSuperAdmin)
             .Map(dest => dest.IsEmailVerified, src => true)
             .Ignore(dest => dest.PasswordHash)
             .Ignore(dest => dest.PasswordSalt);

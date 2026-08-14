@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../main.dart';
 import '../../models/responses/category_response.dart';
 import '../../models/search_objects/base_search_object.dart';
 import '../../providers/category_provider.dart';
@@ -70,10 +71,14 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
         // be told to rebuild too or it stays on the spinner.
         _scheduleOverlayRebuild();
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         _scheduleOverlayRebuild();
+        // Previously swallowed silently, leaving _categories empty with no
+        // feedback — indistinguishable from a catalog that genuinely has 0
+        // categories. Surface it like every other screen does.
+        handleApiError(e);
       }
     }
   }
@@ -108,7 +113,10 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
     if (_menuOpen) return;
     setState(() => _menuOpen = true);
     _overlay = OverlayEntry(builder: (_) => _buildOverlay());
-    Overlay.of(context).insert(_overlay!);
+    // rootOverlay: true — defensive: always anchor to the app's outermost Overlay rather than
+    // the nearest one, so this keeps working correctly even if a future caller ever renders this
+    // filter inside a dialog/route that provides its own nested Overlay.
+    Overlay.of(context, rootOverlay: true).insert(_overlay!);
   }
 
   void _closeMenu() {

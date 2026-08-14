@@ -40,6 +40,7 @@ public record UserResponse(
     string? PhoneNumber,
     string RoleName,
     Guid? OrganizationId,
+    string? OrganizationName,
     bool IsActive,
     bool IsEmailVerified,
     bool IsFirstLogin,

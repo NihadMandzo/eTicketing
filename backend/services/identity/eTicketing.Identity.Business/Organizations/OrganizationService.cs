@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
@@ -5,6 +6,7 @@ using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations.Validators;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Enums;
 using eTicketing.Identity.Data.Repositories;
 using eTicketing.Shared.Storage;
 using Mapster;
@@ -185,14 +187,34 @@ public class OrganizationService : IOrganizationService
         return Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
-    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, OrganizationUserQuery query, CancellationToken ct = default)
+    public async Task<Result<PagedResult<UserResponse>>> GetUsersAsync(Guid organizationId, OrganizationUserQuery query, ClaimsPrincipal caller, CancellationToken ct = default)
     {
+        // Read-only — any member of the organization (either org role) may view their own org's
+        // staff list, not just an OrganizationSuperAdmin. Platform staff can view any org's.
+        if (!caller.IsPlatformStaff() && caller.GetOrganizationId() != organizationId)
+            return Result<PagedResult<UserResponse>>.Failure(Error.Unauthorized(
+                "organization.forbidden", "Nemate ovlaštenje za pregled korisnika ove organizacije."));
+
         var paged = await _userRepository.SearchByOrganizationAsync(organizationId, query, query.Role, ct);
         return Result<PagedResult<UserResponse>>.Success(paged.Adapt<PagedResult<UserResponse>>());
     }
 
-    public async Task<Result<UserResponse>> AddUserAsync(Guid organizationId, AddOrganizationUserRequest request, CancellationToken ct = default)
+    public async Task<Result<UserResponse>> AddUserAsync(Guid organizationId, AddOrganizationUserRequest request, ClaimsPrincipal caller, CancellationToken ct = default)
     {
+        var authError = AuthorizeOrgUserManagement(caller, organizationId);
+        if (authError is not null)
+            return Result<UserResponse>.Failure(authError);
+
+        // A self-servicing OrganizationSuperAdmin may only add OrganizationAdmin accounts to
+        // their own org — this alone rules out the self-service path ever creating a second
+        // OrganizationSuperAdmin. Platform staff aren't restricted here, so the uniqueness check
+        // below still guards their path too.
+        if (!caller.IsPlatformStaff() && request.Role != RoleType.OrganizationAdmin)
+        {
+            return Result<UserResponse>.Failure(Error.Validation(
+                "organization.role_not_allowed", "Možete dodati samo korisnike sa ulogom OrganizationAdmin."));
+        }
+
         var organization = await _organizationRepository.GetByIdAsync(organizationId, ct);
         if (organization is null)
             return Result<UserResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
@@ -201,6 +223,15 @@ public class OrganizationService : IOrganizationService
         {
             return Result<UserResponse>.Failure(
                 Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
+        }
+
+        // Every organization must have exactly one OrganizationSuperAdmin — reject a second one
+        // regardless of who's adding it.
+        if (request.Role == RoleType.OrganizationSuperAdmin
+            && await _userRepository.ExistsByOrganizationAndRoleAsync(organizationId, RoleType.OrganizationSuperAdmin, ct))
+        {
+            return Result<UserResponse>.Failure(Error.Conflict(
+                "organization.super_admin_already_exists", "Organizacija već ima Super Administratora."));
         }
 
         var user = request.Adapt<User>();
@@ -213,15 +244,69 @@ public class OrganizationService : IOrganizationService
         return Result<UserResponse>.Success(user.Adapt<UserResponse>());
     }
 
-    public async Task<Result> RemoveUserAsync(Guid organizationId, Guid userId, CancellationToken ct = default)
+    public async Task<Result<UserResponse>> UpdateUserAsync(Guid organizationId, Guid userId, UpdateOrganizationUserRequest request, ClaimsPrincipal caller, CancellationToken ct = default)
     {
+        var authError = AuthorizeOrgUserManagement(caller, organizationId);
+        if (authError is not null)
+            return Result<UserResponse>.Failure(authError);
+
+        var user = await _userRepository.GetByIdWithOrganizationAsync(userId, ct);
+        if (user is null || user.OrganizationId != organizationId)
+            return Result<UserResponse>.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen u ovoj organizaciji."));
+
+        if (await _userRepository.ExistsByEmailOrUsernameAsync(request.Email, request.Username, user.Id, ct))
+        {
+            return Result<UserResponse>.Failure(
+                Error.Conflict("user.already_exists", "Korisnik sa ovim emailom ili korisničkim imenom već postoji."));
+        }
+
+        request.Adapt(user);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Result<UserResponse>.Success(user.Adapt<UserResponse>());
+    }
+
+    public async Task<Result> RemoveUserAsync(Guid organizationId, Guid userId, ClaimsPrincipal caller, CancellationToken ct = default)
+    {
+        var authError = AuthorizeOrgUserManagement(caller, organizationId);
+        if (authError is not null)
+            return Result.Failure(authError);
+
         var user = await _userRepository.GetByIdAsync(userId, ct);
         if (user is null || user.OrganizationId != organizationId)
             return Result.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen u ovoj organizaciji."));
 
+        // Same invariant as AdminService.DeleteAsync: exactly one OrganizationSuperAdmin per
+        // organization, always — no transfer-ownership flow exists, so this is blocked
+        // unconditionally, even for platform staff.
+        if (user.Role == RoleType.OrganizationSuperAdmin)
+        {
+            return Result.Failure(Error.Conflict(
+                "organization.super_admin_required",
+                "Ne možete obrisati Super Administratora organizacije."));
+        }
+
         _userRepository.Remove(user);
         await _unitOfWork.SaveChangesAsync(ct);
         return Result.Success();
+    }
+
+    /// <summary>Shared ownership/role check for AddUserAsync/UpdateUserAsync/RemoveUserAsync:
+    /// platform staff (SuperAdmin/Admin) may manage any organization's users; anyone else must be
+    /// that exact organization's OrganizationSuperAdmin — an OrganizationAdmin cannot manage
+    /// their own org's other users, and nobody can reach into a different organization.</summary>
+    private static Error? AuthorizeOrgUserManagement(ClaimsPrincipal caller, Guid organizationId)
+    {
+        if (caller.IsPlatformStaff())
+            return null;
+
+        if (caller.GetRole() != nameof(RoleType.OrganizationSuperAdmin))
+            return Error.Unauthorized("organization.forbidden", "Nemate ovlaštenje za upravljanje korisnicima organizacije.");
+
+        if (caller.GetOrganizationId() != organizationId)
+            return Error.Unauthorized("organization.forbidden", "Nemate ovlaštenje za upravljanje korisnicima ove organizacije.");
+
+        return null;
     }
 
     private static string ContentTypeFor(string extension) => extension == "png" ? "image/png" : "image/jpeg";

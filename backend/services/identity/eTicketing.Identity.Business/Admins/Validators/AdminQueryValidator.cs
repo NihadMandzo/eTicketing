@@ -8,5 +8,6 @@ public class AdminQueryValidator : AbstractValidator<AdminQuery>
     public AdminQueryValidator()
     {
         Include(new BaseSearchObjectValidator<AdminQuery>());
+        RuleForEach(x => x.RoleFilters).IsInEnum();
     }
 }

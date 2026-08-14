@@ -13,6 +13,7 @@ public static class AdminEndpoints
         group.MapGet("", GetAll).WithValidation<AdminQuery>();
         group.MapGet("/{id:guid}", GetById);
         group.MapPost("", Create).WithValidation<CreateAdminRequest>();
+        group.MapPut("/{id:guid}", Update).WithValidation<UpdateStaffUserRequest>();
         group.MapDelete("/{id:guid}", Delete);
     }
 
@@ -32,6 +33,12 @@ public static class AdminEndpoints
     {
         var result = await service.CreateAsync(request, ct);
         return result.ToHttpResult(StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> Update(Guid id, UpdateStaffUserRequest request, IAdminService service, CancellationToken ct)
+    {
+        var result = await service.UpdateAsync(id, request, ct);
+        return result.ToHttpResult();
     }
 
     private static async Task<IResult> Delete(Guid id, IAdminService service, CancellationToken ct)

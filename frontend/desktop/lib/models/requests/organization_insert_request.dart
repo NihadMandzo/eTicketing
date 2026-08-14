@@ -28,11 +28,11 @@ class OrganizationInsertRequest {
   });
 
   // Plain JSON body now — Logo moved to the dedicated POST /organizations/{id}/logo
-  // endpoint, so this request is no longer sent as multipart/form-data. AdminRole
-  // is deliberately omitted: the backend's CreateOrganizationRequest.AdminRole
-  // record property keeps its OrganizationSuperAdmin init default when the JSON
-  // body doesn't include the key at all — "the first organizer created alongside
-  // a new organization" is always an org super admin.
+  // endpoint, so this request is no longer sent as multipart/form-data. There is no
+  // AdminRole field at all — the backend's CreateOrganizationRequest -> User mapping
+  // hardcodes the first account created alongside a new organization to
+  // OrganizationSuperAdmin (every organization must have exactly one), so there's
+  // nothing for the caller to choose here.
   Map<String, dynamic> toJson() => {
         'Name': name,
         'Description': description,
