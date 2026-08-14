@@ -14,8 +14,17 @@ public class OrganizationMappingConfig : IRegister
 {
     public void Register(TypeAdapterConfig config)
     {
+        // LogoUrl has no matching source property (Organization stores LogoBlobName, not a URL)
+        // — left at its default null here and filled in by OrganizationService via `with` when
+        // a logo is present, same reasoning as UserCount.
         config.NewConfig<Organization, OrganizationResponse>()
             .Map(dest => dest.UserCount, src => src.Users.Count);
+
+        // LogoBlobName has no matching source on Create/UpdateOrganizationRequest (logos are
+        // managed exclusively through the dedicated logo-upload endpoints) — Mapster leaves it
+        // untouched on update and defaulted to null on create, no explicit Ignore() needed.
+        config.NewConfig<CreateOrganizationRequest, Organization>();
+        config.NewConfig<UpdateOrganizationRequest, Organization>();
 
         // The first organizer created alongside a new organization. Request fields are
         // "Admin"-prefixed (AdminFirstName, AdminEmail, ...) so they don't line up with User's

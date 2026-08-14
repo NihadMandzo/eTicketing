@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,9 @@ import '../../models/requests/category_update_request.dart';
 import '../../models/responses/category_response.dart';
 import '../../providers/category_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utility/image_validation.dart';
+import '../../utility/snackbar_service.dart';
+import 'image_crop_dialog.dart';
 
 class CategoryUpsertDialog extends StatefulWidget {
   final CategoryResponse? category;
@@ -31,7 +35,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   final _descController = TextEditingController();
   final _provider = CategoryProvider();
 
-  File? _iconFile;
+  Uint8List? _iconBytes;
   String? _iconFileName;
   bool _isSaving = false;
 
@@ -54,14 +58,40 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
     super.dispose();
   }
 
+  // Mirrors CategoryIconValidation on the backend — that validator is still
+  // authoritative and re-checks regardless (see 00-workflow-and-testing.md),
+  // this just gives instant feedback instead of a round-trip to the API.
+  static const int _maxIconBytes = 1 * 1024 * 1024;
+
   Future<void> _pickIcon() async {
+    // PNG only, matching the backend validator (CategoryIconValidation) — ≤1MB, square
+    // (enforced here by the forced crop below), enforced server-side regardless.
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
+      type: FileType.custom,
+      allowedExtensions: ['png'],
       allowMultiple: false,
     );
-    if (result != null && result.files.single.path != null) {
+    if (result == null || result.files.single.path == null) return;
+
+    final path = result.files.single.path!;
+    final bytes = await File(path).readAsBytes();
+    if (!mounted) return;
+    final cropped = await ImageCropDialog.show(context, bytes);
+    if (cropped == null) return;
+
+    final error = ImageValidation.validateMaxBytes(
+      cropped,
+      maxBytes: _maxIconBytes,
+      sizeErrorMessage: 'Ikona može biti maksimalno 1MB.',
+    );
+    if (error != null) {
+      if (mounted) SnackbarService.showError(error);
+      return;
+    }
+
+    if (mounted) {
       setState(() {
-        _iconFile = File(result.files.single.path!);
+        _iconBytes = cropped;
         _iconFileName = result.files.single.name;
       });
     }
@@ -70,45 +100,39 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (!_isEditing && _iconFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.white),
-              SizedBox(width: 10),
-              Text('Ikona kategorije je obavezna'),
-            ],
-          ),
-          backgroundColor: AppColors.errorDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
-      return;
-    }
-
     setState(() => _isSaving = true);
 
     try {
+      // Metadata is always saved first, as a plain JSON request — the icon
+      // (if any) is a separate dedicated call afterwards, never bundled in.
+      final CategoryResponse saved;
       if (_isEditing) {
-        await _provider.updateCategory(
+        saved = await _provider.updateCategory(
           widget.category!.id,
           CategoryUpdateRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
           ),
-          iconFile: _iconFile,
         );
       } else {
-        await _provider.insertCategory(
+        saved = await _provider.insertCategory(
           CategoryInsertRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
           ),
-          iconFile: _iconFile!,
         );
+      }
+
+      if (_iconBytes != null) {
+        // An existing icon (edit case) can only be replaced via PUT; a
+        // category that doesn't have one yet (new, or edited-but-never-had-
+        // one) needs the create (POST) call instead.
+        final hasExistingIcon = widget.category?.iconUrl != null;
+        if (hasExistingIcon) {
+          await _provider.replaceIcon(saved.id, _iconBytes!);
+        } else {
+          await _provider.createIcon(saved.id, _iconBytes!);
+        }
       }
 
       if (mounted) {
@@ -259,15 +283,17 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
 
                         const SizedBox(height: 14),
 
-                        // Icon picker
+                        // Icon picker — optional, and no longer sent together with the
+                        // metadata above: submitting calls the dedicated icon endpoint
+                        // separately (create or replace, depending on whether one already exists).
                         _Label(
                           _isEditing
                               ? 'Ikona (ostavite prazno da zadržite postojeću)'
-                              : 'Ikona Kategorije *',
+                              : 'Ikona Kategorije (opcionalno, može se dodati i kasnije)',
                         ),
                         const SizedBox(height: 6),
                         _IconPickerTile(
-                          iconFile: _iconFile,
+                          iconBytes: _iconBytes,
                           fileName: _iconFileName,
                           onTap: _pickIcon,
                         ),
@@ -365,12 +391,12 @@ class _Label extends StatelessWidget {
 }
 
 class _IconPickerTile extends StatelessWidget {
-  final File? iconFile;
+  final Uint8List? iconBytes;
   final String? fileName;
   final VoidCallback onTap;
 
   const _IconPickerTile({
-    required this.iconFile,
+    required this.iconBytes,
     required this.fileName,
     required this.onTap,
   });
@@ -379,7 +405,7 @@ class _IconPickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = isDark ? AppColors.secondary : AppColors.primary;
-    final picked = iconFile != null;
+    final picked = iconBytes != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -408,7 +434,7 @@ class _IconPickerTile extends StatelessWidget {
               child: picked
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(iconFile!, fit: BoxFit.cover),
+                      child: Image.memory(iconBytes!, fit: BoxFit.cover),
                     )
                   : Icon(LucideIcons.upload,
                       color: isDark
@@ -433,7 +459,7 @@ class _IconPickerTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'PNG, JPG, JPEG',
+                    'PNG, kvadratna (maks. 1MB)',
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark

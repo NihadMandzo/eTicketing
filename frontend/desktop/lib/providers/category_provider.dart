@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -26,35 +26,49 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
   bool _isSuccess(int? code) => code != null && code >= 200 && code < 300;
 
-  /// POST /api/categories (multipart – icon is required)
-  Future<CategoryResponse> insertCategory(
-    CategoryInsertRequest request, {
-    required File iconFile,
-  }) async {
-    final formData = FormData.fromMap({
-      ...request.toFields(),
-      'Icon': await MultipartFile.fromFile(iconFile.path),
-    });
-
-    final response = await apiClient.post('categories', data: formData);
+  /// POST /api/categories — plain JSON, metadata only. The icon (if any) is
+  /// uploaded separately afterwards via [createIcon].
+  Future<CategoryResponse> insertCategory(CategoryInsertRequest request) async {
+    final response = await apiClient.post('categories', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// PUT /api/categories/:id (multipart – icon optional)
-  Future<CategoryResponse> updateCategory(
-    int id,
-    CategoryUpdateRequest request, {
-    File? iconFile,
-  }) async {
+  /// PUT /api/categories/:id — plain JSON, metadata only. Never touches the icon.
+  Future<CategoryResponse> updateCategory(int id, CategoryUpdateRequest request) async {
+    final response = await apiClient.put('categories/$id', data: request.toJson());
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// POST /api/categories/:id/icon (multipart) — first-time icon upload. Fails
+  /// with a conflict if the category already has one; use [replaceIcon] then.
+  /// [iconBytes] is always PNG — it's already been through ImageCropDialog's forced square crop
+  /// (which preserves the source format, and the file picker only allows .png) by the time it
+  /// reaches here.
+  Future<CategoryResponse> createIcon(int id, Uint8List iconBytes) async {
     final formData = FormData.fromMap({
-      ...request.toFields(),
-      if (iconFile != null) 'Icon': await MultipartFile.fromFile(iconFile.path),
+      'Icon': MultipartFile.fromBytes(iconBytes, filename: 'icon.png', contentType: DioMediaType('image', 'png')),
     });
 
-    final response = await apiClient.put('categories/$id', data: formData);
+    final response = await apiClient.post('categories/$id/icon', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/categories/:id/icon (multipart) — replaces an existing icon in place.
+  Future<CategoryResponse> replaceIcon(int id, Uint8List iconBytes) async {
+    final formData = FormData.fromMap({
+      'Icon': MultipartFile.fromBytes(iconBytes, filename: 'icon.png', contentType: DioMediaType('image', 'png')),
+    });
+
+    final response = await apiClient.put('categories/$id/icon', data: formData);
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

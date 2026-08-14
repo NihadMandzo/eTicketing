@@ -1,3 +1,4 @@
+using eTicketing.Catalog.Api.Endpoints;
 using eTicketing.Catalog.Api.Infrastructure;
 using eTicketing.Catalog.Data;
 using eTicketing.Contracts.Hosting;
@@ -30,7 +31,8 @@ app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// TODO (Sprint 2): app.MapCategoryEndpoints(); app.MapEventEndpoints();
+app.MapCategoryEndpoints();
+app.MapEventEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

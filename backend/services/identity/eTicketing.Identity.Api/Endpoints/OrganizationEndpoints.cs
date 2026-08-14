@@ -2,6 +2,7 @@ using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using eTicketing.Identity.Business.Organizations;
+using Microsoft.AspNetCore.Mvc;
 
 namespace eTicketing.Identity.Api.Endpoints;
 
@@ -18,7 +19,14 @@ public static class OrganizationEndpoints
         group.MapPut("/{id:guid}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateOrganizationRequest>();
         group.MapDelete("/{id:guid}", Delete).RequireAuthorization("SuperAdminOnly");
 
-        group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization().WithValidation<BaseSearchObject>();
+        // Logos are managed exclusively through these two dedicated multipart endpoints, never
+        // bundled into Create/Update above — see Organization.LogoBlobName / OrganizationService.
+        group.MapPost("/{id:guid}/logo", UploadLogo).RequireAuthorization("PlatformStaff")
+            .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
+        group.MapPut("/{id:guid}/logo", ReplaceLogo).RequireAuthorization("PlatformStaff")
+            .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
+
+        group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization().WithValidation<OrganizationUserQuery>();
         group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("SuperAdminOnly").WithValidation<AddOrganizationUserRequest>();
         group.MapDelete("/{id:guid}/users/{userId:guid}", RemoveUser).RequireAuthorization("SuperAdminOnly");
     }
@@ -53,7 +61,19 @@ public static class OrganizationEndpoints
         return result.ToHttpResult(StatusCodes.Status204NoContent);
     }
 
-    private static async Task<IResult> GetUsers(Guid id, [AsParameters] BaseSearchObject query, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> UploadLogo(Guid id, [FromForm] OrganizationLogoUploadRequest request, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.UploadLogoAsync(id, request.Logo, ct);
+        return result.ToHttpResult(StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> ReplaceLogo(Guid id, [FromForm] OrganizationLogoUploadRequest request, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.ReplaceLogoAsync(id, request.Logo, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetUsers(Guid id, [AsParameters] OrganizationUserQuery query, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.GetUsersAsync(id, query, ct);
         return result.ToHttpResult();

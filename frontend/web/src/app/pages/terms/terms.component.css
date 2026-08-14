@@ -4,7 +4,7 @@
 
 .page-header {
   padding: 120px 24px 60px;
-  background: linear-gradient(135deg, rgba(13, 124, 102, 0.1) 0%, rgba(65, 201, 180, 0.05) 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, transparent) 0%, color-mix(in srgb, var(--secondary) 5%, transparent) 100%);
   text-align: center;
 }
 

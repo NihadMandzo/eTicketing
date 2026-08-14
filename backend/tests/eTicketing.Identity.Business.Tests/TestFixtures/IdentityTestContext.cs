@@ -1,5 +1,6 @@
 using eTicketing.Contracts.Persistence;
 using eTicketing.Identity.Business.Auth;
+using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data;
 using eTicketing.Identity.Data.Repositories;
@@ -27,6 +28,7 @@ public sealed class IdentityTestContext : IDisposable
     public IUnitOfWork UnitOfWork { get; }
     public IJwtTokenGenerator TokenGenerator { get; }
     public JwtOptions JwtOptions { get; }
+    public FakeBlobStorageService BlobStorage { get; } = new();
     public Mock<IEventPublisher> EventPublisherMock { get; } = new();
 
     public IdentityTestContext()
@@ -61,6 +63,9 @@ public sealed class IdentityTestContext : IDisposable
     public IAuthService CreateAuthService() => new AuthService(
         UserRepository, RefreshTokenRepository, UnitOfWork, TokenGenerator,
         EventPublisherMock.Object, Options.Create(JwtOptions));
+
+    public IOrganizationService CreateOrganizationService() => new OrganizationService(
+        OrganizationRepository, UserRepository, UnitOfWork, BlobStorage);
 
     public void Dispose()
     {

@@ -27,23 +27,25 @@ class OrganizationInsertRequest {
     this.adminPhoneNumber,
   });
 
-  Map<String, String> toFields() => {
+  // Plain JSON body now — Logo moved to the dedicated POST /organizations/{id}/logo
+  // endpoint, so this request is no longer sent as multipart/form-data. AdminRole
+  // is deliberately omitted: the backend's CreateOrganizationRequest.AdminRole
+  // record property keeps its OrganizationSuperAdmin init default when the JSON
+  // body doesn't include the key at all — "the first organizer created alongside
+  // a new organization" is always an org super admin.
+  Map<String, dynamic> toJson() => {
         'Name': name,
         'Description': description,
         'Address': address,
         'PhoneNumber': phoneNumber,
         'Email': email,
-        if (website != null && website!.isNotEmpty) 'Website': website!,
+        'Website': (website == null || website!.isEmpty) ? null : website,
         'AdminFirstName': adminFirstName,
         'AdminLastName': adminLastName,
         'AdminEmail': adminEmail,
         'AdminUsername': adminUsername,
-        if (adminPhoneNumber != null && adminPhoneNumber!.isNotEmpty)
-          'AdminPhoneNumber': adminPhoneNumber!,
-      };
-
-  Map<String, String> toAuthFields() => {
-        ...toFields(),
         'AdminPassword': adminPassword,
+        if (adminPhoneNumber != null && adminPhoneNumber!.isNotEmpty)
+          'AdminPhoneNumber': adminPhoneNumber,
       };
 }

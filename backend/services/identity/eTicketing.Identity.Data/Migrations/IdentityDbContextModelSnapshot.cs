@@ -49,8 +49,9 @@ namespace eTicketing.Identity.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("LogoUrl")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<string>("LogoBlobName")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -72,6 +73,33 @@ namespace eTicketing.Identity.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Organizations");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            Address = "Ferhadija 12, Sarajevo",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Organizator koncerata i festivala u Sarajevu.",
+                            Email = "info@sarajevo-events.ba",
+                            IsActive = true,
+                            Name = "Sarajevo Events",
+                            PhoneNumber = "+387 33 123 456",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Website = "https://sarajevo-events.ba"
+                        },
+                        new
+                        {
+                            Id = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
+                            Address = "Kralja Tomislava 5, Mostar",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Organizacija sportskih događaja u Mostaru i regiji.",
+                            Email = "kontakt@mostar-sport.ba",
+                            IsActive = true,
+                            Name = "Mostar Sport Arena",
+                            PhoneNumber = "+387 36 987 654",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("eTicketing.Identity.Data.Entities.RefreshToken", b =>
@@ -188,6 +216,75 @@ namespace eTicketing.Identity.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("b2b2b2b2-0000-0000-0000-000000000001"),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "superadmin@eticketing.local",
+                            FirstName = "Amina",
+                            IsActive = true,
+                            IsEmailVerified = true,
+                            IsFirstLogin = false,
+                            LastName = "Hodžić",
+                            PasswordHash = "Vo2N5mMKKV5riRxNcu+xYv2AxWVVkmJLATTjr04SU3I=",
+                            PasswordSalt = "AdVMNBExbubfvQWaHVw5Vg==",
+                            Role = 1,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "superadmin"
+                        },
+                        new
+                        {
+                            Id = new Guid("b2b2b2b2-0000-0000-0000-000000000002"),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "emir@sarajevo-events.ba",
+                            FirstName = "Emir",
+                            IsActive = true,
+                            IsEmailVerified = true,
+                            IsFirstLogin = false,
+                            LastName = "Kovačević",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            PasswordHash = "A6rZYgmOEHLfpoLnHEiPWOFfkAH3yQUaWv1PqvOzC18=",
+                            PasswordSalt = "ucX6FvDXRYs6cWtGnpOc9Q==",
+                            Role = 3,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "emir.kovacevic"
+                        },
+                        new
+                        {
+                            Id = new Guid("b2b2b2b2-0000-0000-0000-000000000003"),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "lejla@sarajevo-events.ba",
+                            FirstName = "Lejla",
+                            IsActive = true,
+                            IsEmailVerified = true,
+                            IsFirstLogin = false,
+                            LastName = "Begić",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
+                            PasswordHash = "vU//j3TsZkELntInV9wUpCwUYVJmcjrLGGEXgLPNZwE=",
+                            PasswordSalt = "iObaAcHaXVq51zJOd1k4eA==",
+                            Role = 4,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "lejla.begic"
+                        },
+                        new
+                        {
+                            Id = new Guid("b2b2b2b2-0000-0000-0000-000000000004"),
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "ivan@mostar-sport.ba",
+                            FirstName = "Ivan",
+                            IsActive = true,
+                            IsEmailVerified = true,
+                            IsFirstLogin = false,
+                            LastName = "Marić",
+                            OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
+                            PasswordHash = "ryZEw8BVHyXvX87Bj+QeMKsmzx8PRSNnufi76DdKgu0=",
+                            PasswordSalt = "G5uos2iJ7Kw0wnkMhLwivQ==",
+                            Role = 3,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "ivan.maric"
+                        });
                 });
 
             modelBuilder.Entity("eTicketing.Identity.Data.Entities.RefreshToken", b =>

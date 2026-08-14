@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/responses/organization_response.dart';
-import '../models/search_objects/base_search_object.dart';
+import '../models/search_objects/organization_search_object.dart';
+import '../providers/event_provider.dart';
 import '../providers/organization_provider.dart';
 import '../theme/app_colors.dart';
+import 'organization_detail_screen.dart';
+import 'widgets/category_multi_select_filter.dart';
+import 'widgets/entity_avatar.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import '../main.dart';
@@ -24,10 +28,16 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
 
   List<OrganizationResponse> _organizations = [];
   bool _isLoading = true;
+  List<int> _selectedCategoryIds = [];
 
   int _currentPage = 0;
   int _totalCount = 0;
   static const int _pageSize = 9;
+
+  // Bumped at the start of every _loadData() call — a response is only applied if its captured
+  // token still matches this field, so a stale (superseded) request can't overwrite the results
+  // of a newer one that started after it (e.g. rapid category-filter toggling).
+  int _requestToken = 0;
 
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
 
@@ -45,20 +55,69 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     });
   }
 
+  void _onCategoryFilterChanged(List<int> categoryIds) {
+    setState(() {
+      _selectedCategoryIds = categoryIds;
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
   Future<void> _loadData() async {
+    final requestToken = ++_requestToken;
     setState(() => _isLoading = true);
     try {
-      final searchObject = BaseSearchObject(
+      // Organizations and Events/Categories live in separate microservices/
+      // databases — the category filter can't be applied as a server-side
+      // join here, so it's resolved client-side in two steps: first ask
+      // Catalog which organizations have events in the selected categories,
+      // then filter the organizations list by that id list.
+      List<String>? organizationIds;
+      if (_selectedCategoryIds.isNotEmpty) {
+        organizationIds = await EventOrganizationIdsProvider()
+            .getOrganizationIds(categoryIds: _selectedCategoryIds);
+
+        // A newer _loadData() call started while we were awaiting above —
+        // its result (or the one after it) is what should win, not this one.
+        if (requestToken != _requestToken) return;
+
+        if (organizationIds.isEmpty) {
+          // No organization has events in the selected categories. An empty
+          // (but non-null) list can't be sent as a real "match nothing"
+          // filter here — Dio's list-query encoding produces zero repeated
+          // keys for an empty list, so on the wire this would be
+          // indistinguishable from omitting OrganizationIds entirely, which
+          // the backend (correctly, for the "no filter" case) treats as "no
+          // filter" rather than "match nothing" — see
+          // OrganizationRepository.SearchAsync's null-or-empty check. Render
+          // the empty result directly instead of making a request that
+          // would silently come back as "all organizations".
+          if (mounted) {
+            setState(() {
+              _organizations = [];
+              _totalCount = 0;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+      }
+
+      final searchObject = OrganizationSearchObject(
         page: _currentPage,
         pageSize: _pageSize,
         fts: _searchController.text.trim().isEmpty
             ? null
             : _searchController.text.trim(),
+        organizationIds: organizationIds,
       );
       final result = await _provider.getAll(
         searchObject: searchObject,
         fromJson: OrganizationResponse.fromJson,
       );
+
+      if (requestToken != _requestToken) return; // superseded by a newer request
+
       if (mounted) {
         setState(() {
           _organizations = result.items;
@@ -67,6 +126,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
         });
       }
     } catch (e) {
+      if (requestToken != _requestToken) return;
       if (mounted) {
         setState(() => _isLoading = false);
         handleApiError(e);
@@ -267,28 +327,39 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
 
           const SizedBox(height: 24),
 
-          // ── Search ────────────────────────────────────────────────
-          Container(
-            height: 44,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : Colors.white,
-              border: Border.all(
-                  color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Pretražite organizacije...',
-                hintStyle: TextStyle(color: textTertiary),
-                prefixIcon: Icon(LucideIcons.search,
-                    color: placeholderColor, size: 18),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          // ── Search + category filter ─────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : Colors.white,
+                    border: Border.all(
+                        color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    decoration: InputDecoration(
+                      hintText: 'Pretražite organizacije...',
+                      hintStyle: TextStyle(color: textTertiary),
+                      prefixIcon: Icon(LucideIcons.search,
+                          color: placeholderColor, size: 18),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    style: TextStyle(color: textPrimary),
+                  ),
+                ),
               ),
-              style: TextStyle(color: textPrimary),
-            ),
+              const SizedBox(width: 12),
+              CategoryMultiSelectFilter(
+                selectedCategoryIds: _selectedCategoryIds,
+                onChanged: _onCategoryFilterChanged,
+              ),
+            ],
           ),
 
           const SizedBox(height: 12),
@@ -351,6 +422,18 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                               final org = _organizations[index];
                               return _OrganizationCard(
                                 organization: org,
+                                onView: () async {
+                                  // The detail screen can edit its local organization (e.g. add
+                                  // logo, rename) — await the route so this list reloads and
+                                  // picks up any change instead of showing a stale card.
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => OrganizationDetailScreen(organization: org),
+                                    ),
+                                  );
+                                  if (mounted) _loadData();
+                                },
                                 onEdit: () =>
                                     _openDialog(organization: org),
                                 onDelete: () =>
@@ -382,11 +465,13 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
 // ─────────────────────────────────────────────────────────────
 class _OrganizationCard extends StatefulWidget {
   final OrganizationResponse organization;
+  final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _OrganizationCard({
     required this.organization,
+    required this.onView,
     required this.onEdit,
     required this.onDelete,
   });
@@ -436,19 +521,7 @@ class _OrganizationCardState extends State<_OrganizationCard> {
             children: [
               // ── Logo ──
               Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: (org.logoUrl != null && org.logoUrl!.isNotEmpty)
-                      ? Image.network(
-                          org.logoUrl!,
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _LogoFallback(name: org.name, size: 100),
-                        )
-                      : _LogoFallback(name: org.name, size: 100),
-                ),
+                child: EntityAvatar(name: org.name, logoUrl: org.logoUrl, size: 100),
               ),
 
               const SizedBox(height: 16),
@@ -516,11 +589,17 @@ class _OrganizationCardState extends State<_OrganizationCard> {
                 children: [
                   Expanded(
                     child: _ActionButton(
-                      icon: LucideIcons.pencil,
-                      label: 'Pregled i izmjene',
+                      icon: LucideIcons.eye,
+                      label: 'Pregled',
                       isPrimary: true,
-                      onTap: widget.onEdit,
+                      onTap: widget.onView,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  _IconOnlyButton(
+                    icon: LucideIcons.pencil,
+                    tooltip: 'Uredi organizaciju',
+                    onTap: widget.onEdit,
                   ),
                   const SizedBox(width: 8),
                   _ActionButton(
@@ -639,41 +718,38 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ─── Logo fallback ─────────────────────────────────────────────────────────────────────────────────
+// ─── Icon-only button (edit, next to the primary "Pregled" action) ────────────
 
-class _LogoFallback extends StatelessWidget {
-  final String name;
-  final double size;
+class _IconOnlyButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
 
-  const _LogoFallback({required this.name, required this.size});
+  const _IconOnlyButton({required this.icon, required this.onTap, required this.tooltip});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final initials = name.isNotEmpty
-        ? name.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join()
-        : '?';
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [AppColors.secondary, AppColors.primary]
-              : [AppColors.primary, AppColors.primaryDark],
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: TextStyle(
-          color: isDark ? AppColors.darkBackground : Colors.white,
-          fontSize: size * 0.34,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1,
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            ),
+            child: Icon(icon,
+                size: 16,
+                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+          ),
         ),
       ),
     );

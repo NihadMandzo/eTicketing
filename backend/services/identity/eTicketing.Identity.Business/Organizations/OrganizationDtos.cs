@@ -1,5 +1,6 @@
 using eTicketing.Contracts.Pagination;
 using eTicketing.Identity.Data.Enums;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Identity.Business.Organizations;
 
@@ -46,6 +47,10 @@ public record AddOrganizationUserRequest
     public RoleType Role { get; init; } = RoleType.OrganizationAdmin;
 }
 
+/// <summary>LogoUrl is null until a logo has been uploaded via the dedicated
+/// POST/PUT /organizations/{id}/logo endpoints — organizations no longer carry logo bytes at
+/// all (see Organization.LogoBlobName); it's derived from Azure Blob Storage, not a stored
+/// column.</summary>
 public record OrganizationResponse(
     Guid Id,
     string Name,
@@ -59,4 +64,31 @@ public record OrganizationResponse(
     int UserCount,
     DateTime CreatedAt);
 
-public sealed record OrganizationQuery : BaseSearchObject;
+/// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].
+/// Shared shape for both POST (create) and PUT (replace) /organizations/{id}/logo.</summary>
+public class OrganizationLogoUploadRequest
+{
+    public IFormFile Logo { get; set; } = null!;
+}
+
+public sealed record OrganizationQuery : BaseSearchObject
+{
+    /// <summary>Set only when the desktop app has pre-resolved organization ids from the
+    /// category multiselect filter (via Catalog's GET /events/organization-ids) — Organizations
+    /// and Events/Categories live in separate microservices/databases, so this filter can't be
+    /// applied as a join here, only as an explicit id list supplied by the caller.
+    /// Guid[] (not List&lt;Guid&gt;) is required — minimal APIs' query-string binder only
+    /// special-cases arrays of parsable types for multi-value query params
+    /// (?OrganizationIds=x&amp;OrganizationIds=y); List&lt;Guid&gt; has no TryParse and crashes
+    /// the app at startup ("must have a valid TryParse method").</summary>
+    public Guid[]? OrganizationIds { get; init; }
+}
+
+/// <summary>Query for GET /organizations/{id}/users. Was previously a plain BaseSearchObject
+/// (see GetUsers/GetUsersAsync/SearchByOrganizationAsync) — that meant FTS silently had no
+/// effect (SearchByOrganizationAsync never read it) and there was no way to narrow by role, so
+/// the admins/superadmins sub-lists on the organization detail screen couldn't be told apart.</summary>
+public sealed record OrganizationUserQuery : BaseSearchObject
+{
+    public RoleType? Role { get; init; }
+}

@@ -1,3 +1,4 @@
+using eTicketing.Catalog.Data.Entities;
 using eTicketing.Contracts.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,7 +8,8 @@ public class CatalogDbContext : DbContext, IUnitOfWork
 {
     public CatalogDbContext(DbContextOptions<CatalogDbContext> options) : base(options) { }
 
-    // DbSet<Category>, DbSet<Event> dolaze u Sprintu 2 (US-2.1, US-2.2) — vidi SPRINTS/SPRINT_2.md
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Event> Events => Set<Event>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

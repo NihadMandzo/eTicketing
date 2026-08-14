@@ -76,6 +76,9 @@ services:
       Jwt__AccessTokenMinutes: "${JWT_ACCESS_TOKEN_MINUTES:-15}"
       Jwt__RefreshTokenDays: "${JWT_REFRESH_TOKEN_DAYS:-14}"
       RabbitMq__Host: "rabbitmq"
+      # Organization logos live in Azure Blob Storage now (not proxied through this API), so
+      # LogoUrl is a direct Azure URL — no Gateway-relative PublicBaseUrl needed here anymore.
+      BlobStorage__ConnectionString: "${AZURE_STORAGE_CONNECTION_STRING:?Set AZURE_STORAGE_CONNECTION_STRING in .env}"
     depends_on:
       sqlserver: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
@@ -90,6 +93,9 @@ services:
     environment:
       ConnectionStrings__CatalogDb: "Server=sqlserver,1433;Database=CatalogDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
       Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
+      # Category icons live in Azure Blob Storage now (not proxied through this API), so IconUrl
+      # is a direct Azure URL — no Gateway-relative PublicBaseUrl needed here anymore.
+      BlobStorage__ConnectionString: "${AZURE_STORAGE_CONNECTION_STRING:?Set AZURE_STORAGE_CONNECTION_STRING in .env}"
     depends_on:
       sqlserver: { condition: service_healthy }
     networks: [eticketing-network]

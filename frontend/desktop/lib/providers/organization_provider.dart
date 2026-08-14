@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -26,18 +26,10 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
 
   bool _isSuccess(int? code) => code != null && code >= 200 && code < 300;
 
-  /// POST /api/organizations (multipart – logo is optional)
-  Future<OrganizationResponse> insertOrganization(
-    OrganizationInsertRequest request, {
-    File? logoFile,
-  }) async {
-    final formData = FormData.fromMap({
-      ...request.toFields(),
-      'AdminPassword': request.adminPassword,
-      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
-    });
-
-    final response = await apiClient.post('organizations', data: formData);
+  /// POST /api/organizations — plain JSON, metadata only. The logo (if any) is
+  /// uploaded separately afterwards via [createLogo].
+  Future<OrganizationResponse> insertOrganization(OrganizationInsertRequest request) async {
+    final response = await apiClient.post('organizations', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -48,24 +40,54 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
     return getById(id, fromJson: OrganizationResponse.fromJson);
   }
 
-  /// Updates the organization using multipart/form-data so a logo file can
-  /// be attached alongside the regular text fields.
-  Future<OrganizationResponse> updateOrganization(
-    String id,
-    OrganizationUpdateRequest request, {
-    File? logoFile,
-    bool removeLogo = false,
-  }) async {
-    final formData = FormData.fromMap({
-      ...request.toFields(),
-      'RemoveLogo': removeLogo.toString(),
-      if (logoFile != null) 'Logo': await MultipartFile.fromFile(logoFile.path),
-    });
-
-    final response = await apiClient.put('organizations/$id', data: formData);
+  /// PUT /api/organizations/:id — plain JSON, metadata only. Never touches the logo.
+  Future<OrganizationResponse> updateOrganization(String id, OrganizationUpdateRequest request) async {
+    final response = await apiClient.put('organizations/$id', data: request.toJson());
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// POST /api/organizations/:id/logo (multipart) — first-time logo upload. Fails
+  /// with a conflict if the organization already has one; use [replaceLogo] then.
+  Future<OrganizationResponse> createLogo(String id, Uint8List logoBytes) async {
+    final formData = FormData.fromMap({
+      'Logo': MultipartFile.fromBytes(logoBytes,
+          filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
+    });
+
+    final response = await apiClient.post('organizations/$id/logo', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/organizations/:id/logo (multipart) — replaces an existing logo in place.
+  Future<OrganizationResponse> replaceLogo(String id, Uint8List logoBytes) async {
+    final formData = FormData.fromMap({
+      'Logo': MultipartFile.fromBytes(logoBytes,
+          filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
+    });
+
+    final response = await apiClient.put('organizations/$id/logo', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Organization logos allow PNG or JPEG (unlike category icons, PNG-only). The cropped bytes
+  /// no longer carry a file path/extension (ImageCropDialog hands back raw pixels, not a File),
+  /// so the format is sniffed from the actual PNG magic number instead — mirrors the backend's
+  /// own approach of never trusting client-supplied metadata
+  /// (OrganizationLogoValidation.HasAllowedFormatAsync).
+  bool _isPng(Uint8List bytes) =>
+      bytes.length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+
+  DioMediaType _contentTypeFor(Uint8List bytes) =>
+      _isPng(bytes) ? DioMediaType('image', 'png') : DioMediaType('image', 'jpeg');
+
+  String _extensionFor(Uint8List bytes) => _isPng(bytes) ? 'png' : 'jpg';
 }
