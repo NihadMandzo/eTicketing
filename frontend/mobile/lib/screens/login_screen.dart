@@ -5,6 +5,7 @@ import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -92,7 +93,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   validator: (v) => (v == null || v.isEmpty) ? 'Unesite lozinku' : null,
                 ),
-                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                    ),
+                    child: const Text('Zaboravili ste lozinku?'),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 FilledButton(
                   style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _isLoading ? null : _submit,

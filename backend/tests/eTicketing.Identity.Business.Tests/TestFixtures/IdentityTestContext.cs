@@ -1,4 +1,5 @@
 using eTicketing.Contracts.Persistence;
+using eTicketing.Identity.Business.Admins;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Security;
@@ -25,6 +26,7 @@ public sealed class IdentityTestContext : IDisposable
     public IUserRepository UserRepository { get; }
     public IOrganizationRepository OrganizationRepository { get; }
     public IRefreshTokenRepository RefreshTokenRepository { get; }
+    public IPasswordResetTokenRepository PasswordResetTokenRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public IJwtTokenGenerator TokenGenerator { get; }
     public JwtOptions JwtOptions { get; }
@@ -47,6 +49,7 @@ public sealed class IdentityTestContext : IDisposable
         UserRepository = new UserRepository(DbContext);
         OrganizationRepository = new OrganizationRepository(DbContext);
         RefreshTokenRepository = new RefreshTokenRepository(DbContext);
+        PasswordResetTokenRepository = new PasswordResetTokenRepository(DbContext);
         UnitOfWork = DbContext;
 
         JwtOptions = new JwtOptions
@@ -61,11 +64,14 @@ public sealed class IdentityTestContext : IDisposable
     }
 
     public IAuthService CreateAuthService() => new AuthService(
-        UserRepository, RefreshTokenRepository, UnitOfWork, TokenGenerator,
+        UserRepository, RefreshTokenRepository, PasswordResetTokenRepository, UnitOfWork, TokenGenerator,
         EventPublisherMock.Object, Options.Create(JwtOptions));
 
     public IOrganizationService CreateOrganizationService() => new OrganizationService(
-        OrganizationRepository, UserRepository, UnitOfWork, BlobStorage);
+        OrganizationRepository, UserRepository, UnitOfWork, BlobStorage, EventPublisherMock.Object);
+
+    public IAdminService CreateAdminService() => new AdminService(
+        UserRepository, RefreshTokenRepository, UnitOfWork, EventPublisherMock.Object);
 
     public void Dispose()
     {

@@ -1,9 +1,11 @@
+using eTicketing.Contracts.Events;
 using eTicketing.Identity.Business.Admins;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Business.Tests.TestFixtures;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
 using FluentAssertions;
+using Moq;
 
 namespace eTicketing.Identity.Business.Tests.Admins;
 
@@ -14,7 +16,7 @@ public class AdminServiceTests : IDisposable
 
     public AdminServiceTests()
     {
-        _sut = new AdminService(_fixture.UserRepository, _fixture.UnitOfWork);
+        _sut = _fixture.CreateAdminService();
     }
 
     private async Task<User> SeedUserAsync(RoleType role, string email)
@@ -262,7 +264,7 @@ public class AdminServiceTests : IDisposable
             Password = "SuperSecret123"
         });
 
-        var deleteResult = await _sut.DeleteAsync(created.Value!.Id);
+        var deleteResult = await _sut.DeleteAsync(created.Value!.Id, new DeleteAdminRequest());
         deleteResult.IsSuccess.Should().BeTrue();
 
         var afterDelete = await _sut.GetByIdAsync(created.Value.Id);
@@ -274,20 +276,142 @@ public class AdminServiceTests : IDisposable
     {
         var orgSuperAdmin = await SeedUserAsync(RoleType.OrganizationSuperAdmin, "cantdelete@example.com");
 
-        var result = await _sut.DeleteAsync(orgSuperAdmin.Id);
+        var result = await _sut.DeleteAsync(orgSuperAdmin.Id, new DeleteAdminRequest());
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("organization.super_admin_required");
     }
 
     [Fact]
-    public async Task DeleteAsync_ForOrganizationAdmin_Succeeds()
+    public async Task DeleteAsync_OrganizationAdminWithReason_PublishesOrganizationAdminDeletedEvent()
     {
-        var orgAdmin = await SeedUserAsync(RoleType.OrganizationAdmin, "candelete@example.com");
+        var org = await SeedOrganizationAsync("Acme Events");
+        var orgAdmin = await SeedUserAsync(RoleType.OrganizationAdmin, "candelete@example.com", org.Id);
 
-        var result = await _sut.DeleteAsync(orgAdmin.Id);
+        var result = await _sut.DeleteAsync(orgAdmin.Id, new DeleteAdminRequest
+        {
+            Reason = "Kršenje internih pravila organizacije.",
+            RecipientEmail = "kontakt@acme.example"
+        });
 
         result.IsSuccess.Should().BeTrue();
+        _fixture.EventPublisherMock.Verify(p => p.PublishAsync(
+            EventNames.OrganizationAdminDeleted,
+            It.Is<OrganizationAdminDeletedNotification>(n =>
+                n.OrganizationId == org.Id
+                && n.OrganizationName == "Acme Events"
+                && n.RecipientEmail == "kontakt@acme.example"
+                && n.Reason == "Kršenje internih pravila organizacije."
+                && n.DeletedAdminFullName == $"{orgAdmin.FirstName} {orgAdmin.LastName}"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null, "kontakt@acme.example")]
+    [InlineData("Razlog", null)]
+    [InlineData("", "")]
+    public async Task DeleteAsync_OrganizationAdminWithoutReasonOrEmail_ReturnsValidationError(string? reason, string? recipientEmail)
+    {
+        var org = await SeedOrganizationAsync("Missing Fields Org");
+        var orgAdmin = await SeedUserAsync(RoleType.OrganizationAdmin, "incomplete@example.com", org.Id);
+
+        var result = await _sut.DeleteAsync(orgAdmin.Id, new DeleteAdminRequest { Reason = reason, RecipientEmail = recipientEmail });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("admin.delete_reason_required");
+        // PublishAsync<T> is generic — It.IsAny<object>() would only match a PublishAsync<object>
+        // call (a different closed generic method from whatever concrete T the real code uses),
+        // so "never called with any T" is asserted via the mock's raw invocation list instead of
+        // a (silently-wrong) Verify() against one specific closed generic signature.
+        _fixture.EventPublisherMock.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_PlatformStaffTarget_DeletesWithoutPublishingEvent()
+    {
+        var admin = await SeedUserAsync(RoleType.Admin, "platformstaff@example.com");
+
+        var result = await _sut.DeleteAsync(admin.Id, new DeleteAdminRequest());
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.EventPublisherMock.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SetPasswordAsync_ForOrganizationAdmin_SetsMustChangePasswordAndPublishesEvent()
+    {
+        var orgAdmin = await SeedUserAsync(RoleType.OrganizationAdmin, "setpwd@example.com");
+        var originalHash = orgAdmin.PasswordHash;
+
+        var result = await _sut.SetPasswordAsync(orgAdmin.Id, new SetPasswordRequest
+        {
+            NewPassword = "BrandNewPassword123",
+            ConfirmPassword = "BrandNewPassword123"
+        });
+
+        result.IsSuccess.Should().BeTrue();
+
+        var updated = await _fixture.UserRepository.GetByIdAsync(orgAdmin.Id);
+        updated!.MustChangePassword.Should().BeTrue();
+        updated.PasswordHash.Should().NotBe(originalHash);
+
+        _fixture.EventPublisherMock.Verify(p => p.PublishAsync(
+            EventNames.AdminPasswordChanged,
+            It.Is<AdminPasswordChangedNotification>(n => n.UserId == orgAdmin.Id && n.Email == orgAdmin.Email),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetPasswordAsync_ForUserRole_ReturnsNotFound()
+    {
+        var buyer = await SeedUserAsync(RoleType.User, "buyer.setpwd@example.com");
+
+        var result = await _sut.SetPasswordAsync(buyer.Id, new SetPasswordRequest
+        {
+            NewPassword = "BrandNewPassword123",
+            ConfirmPassword = "BrandNewPassword123"
+        });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("admin.not_found");
+    }
+
+    [Fact]
+    public async Task SetPasswordAsync_ForSuperAdminRole_ReturnsNotFound()
+    {
+        var superAdmin = await SeedUserAsync(RoleType.SuperAdmin, "peer.superadmin@example.com");
+
+        var result = await _sut.SetPasswordAsync(superAdmin.Id, new SetPasswordRequest
+        {
+            NewPassword = "BrandNewPassword123",
+            ConfirmPassword = "BrandNewPassword123"
+        });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("admin.not_found");
+    }
+
+    private async Task<Organization> SeedOrganizationAsync(string name)
+    {
+        var organization = new Organization
+        {
+            Name = name,
+            Description = "Test organization",
+            Address = "Test Address 1",
+            PhoneNumber = "+387 61 000 000",
+            Email = $"{name.Replace(" ", "").ToLowerInvariant()}@example.com"
+        };
+        await _fixture.OrganizationRepository.AddAsync(organization);
+        await _fixture.UnitOfWork.SaveChangesAsync();
+        return organization;
+    }
+
+    private async Task<User> SeedUserAsync(RoleType role, string email, Guid organizationId)
+    {
+        var user = await SeedUserAsync(role, email);
+        user.OrganizationId = organizationId;
+        await _fixture.UnitOfWork.SaveChangesAsync();
+        return user;
     }
 
     public void Dispose() => _fixture.Dispose();

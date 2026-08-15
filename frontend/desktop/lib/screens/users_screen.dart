@@ -2,15 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../models/requests/delete_admin_request.dart';
 import '../models/responses/admin_user_response.dart';
 import '../models/responses/user_profile.dart';
 import '../models/search_objects/organization_user_search_object.dart';
 import '../models/search_objects/staff_query_search_object.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
+import 'widgets/delete_organization_admin_dialog.dart';
 import 'widgets/organization_admin_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/role_multi_select_filter.dart';
+import 'widgets/set_staff_password_dialog.dart';
 import 'widgets/staff_user_upsert_dialog.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/user_grid_card.dart';
@@ -147,6 +150,18 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  void _openSetPasswordDialog(AdminUserResponse user) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => SetStaffPasswordDialog(
+        userId: user.id,
+        userFullName: user.fullName,
+        onSaved: _loadData,
+      ),
+    );
+  }
+
   void _openAddDialog() {
     showDialog(
       context: context,
@@ -159,45 +174,63 @@ class _UsersScreenState extends State<UsersScreen> {
   }
 
   Future<void> _deleteUser(AdminUserResponse user) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Obriši korisnika',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
-        content: Text(
-            'Da li ste sigurni da želite obrisati korisnika "${user.fullName}"?',
-            style: TextStyle(
-                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Odustani',
-                style: TextStyle(
-                    color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Obriši'),
-          ),
-        ],
-      ),
-    );
+    // SuperAdmin deleting an OrganizationAdmin is the one case the backend
+    // requires a reason + a notification recipient for (see
+    // AdminService.DeleteAsync) — everything else keeps the plain confirm.
+    final requiresReason = _isSuperAdmin && user.roleName == 'OrganizationAdmin';
 
-    if (confirmed != true || !mounted) return;
+    DeleteAdminRequest? deleteRequest;
+    if (requiresReason) {
+      deleteRequest = await showDialog<DeleteAdminRequest>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DeleteOrganizationAdminDialog(userFullName: user.fullName),
+      );
+      if (deleteRequest == null || !mounted) return;
+    } else {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Obriši korisnika',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
+          content: Text(
+              'Da li ste sigurni da želite obrisati korisnika "${user.fullName}"?',
+              style: TextStyle(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Odustani',
+                  style: TextStyle(
+                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.errorDark,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Obriši'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+    }
 
     try {
       if (_isSuperAdmin) {
-        await AdminProvider().delete(user.id);
+        // The backend's DELETE /admins/{id} body is required now (even for
+        // non-OrganizationAdmin targets, where it's just {}) — see
+        // AdminEndpoints.Delete.
+        await AdminProvider().delete(user.id, data: (deleteRequest ?? const DeleteAdminRequest()).toJson());
       } else {
         await OrganizationUsersProvider().delete(widget.currentUser.organizationId!, user.id);
       }
@@ -410,6 +443,10 @@ class _UsersScreenState extends State<UsersScreen> {
               itemBuilder: (context, index) {
                 final user = _users[index];
                 final isSelf = user.id == widget.currentUser.id;
+                // SuperAdmin can set the password of any Admin/Organization*
+                // Admin account except their own and another SuperAdmin's
+                // (see AdminService.SetPasswordAsync's role exclusions).
+                final canSetPassword = _isSuperAdmin && !isSelf && user.roleName != 'SuperAdmin';
                 return UserGridCard(
                   user: user,
                   // A user never edits/deletes their own account from this
@@ -417,6 +454,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   // profile editing already exists via the settings dialog).
                   onEdit: isSelf ? null : () => _openEditDialog(user),
                   onDelete: isSelf ? null : () => _deleteUser(user),
+                  onSetPassword: canSetPassword ? () => _openSetPasswordDialog(user) : null,
                 );
               },
             ),

@@ -42,6 +42,9 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
   final _emailCtrl = TextEditingController();
   final _websiteCtrl = TextEditingController();
 
+  // Notification recipient (insert only)
+  final _notificationEmailCtrl = TextEditingController();
+
   // Admin fields (insert only)
   final _adminFirstNameCtrl = TextEditingController();
   final _adminLastNameCtrl = TextEditingController();
@@ -83,6 +86,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     _websiteCtrl.dispose();
+    _notificationEmailCtrl.dispose();
     _adminFirstNameCtrl.dispose();
     _adminLastNameCtrl.dispose();
     _adminEmailCtrl.dispose();
@@ -166,6 +170,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
             website: _websiteCtrl.text.trim().isEmpty
                 ? null
                 : _websiteCtrl.text.trim(),
+            notificationEmail: _notificationEmailCtrl.text.trim(),
             adminFirstName: _adminFirstNameCtrl.text.trim(),
             adminLastName: _adminLastNameCtrl.text.trim(),
             adminEmail: _adminEmailCtrl.text.trim(),
@@ -278,6 +283,8 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                           if (!_isEditing) ...[
                             const SizedBox(height: 28),
                             _buildAdminSection(textPrimary),
+                            const SizedBox(height: 28),
+                            _buildNotificationSection(textPrimary),
                           ],
                         ],
                       ),
@@ -758,6 +765,47 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  // ── Notification recipient ──────────────────────────────────────────
+
+  Widget _buildNotificationSection(Color textPrimary) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          icon: LucideIcons.bellRing,
+          label: 'Obavještenje o Kreiranju',
+        ),
+        const SizedBox(height: 14),
+        _FieldLabel('Email za Obavještenje *'),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _notificationEmailCtrl,
+          decoration: _inputDecoration(
+                  'npr. kontakt@organizacija.ba',
+                  prefixIcon: LucideIcons.mailCheck)
+              .copyWith(
+            helperText: 'Može biti različit od emaila administratora — na ovu adresu šaljemo obavještenje da je organizacija kreirana.',
+            helperMaxLines: 2,
+          ),
+          style: TextStyle(fontSize: 14, color: textPrimary),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) {
+              return 'Email za obavještenje je obavezan';
+            }
+            if (v.trim().length > 255) {
+              return 'Email može imati maksimalno 255 karaktera';
+            }
+            final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+            if (!emailRegex.hasMatch(v.trim())) {
+              return 'Neispravan format email adrese';
+            }
+            return null;
+          },
         ),
       ],
     );

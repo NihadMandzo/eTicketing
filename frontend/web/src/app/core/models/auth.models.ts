@@ -28,6 +28,20 @@ export interface UserResponse {
   lastLoginAt: string | null;
 }
 
+export interface VerifyEmailRequest {
+  code: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 /** The access/refresh tokens never appear here — the backend writes them
  * straight to httpOnly cookies. This mirrors the backend's actual
  * `LoginResponse { user }` shape. */

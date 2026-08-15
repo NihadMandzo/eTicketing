@@ -5,6 +5,7 @@ import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
+import 'verify_email_screen.dart';
 
 /// Self-registration — always creates a "User"/buyer account on the backend
 /// (the desktop admin console has no equivalent screen by design; admins and
@@ -55,7 +56,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ));
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
+      );
     } on ApiException catch (e) {
       if (mounted) _showError(e.apiError.displayMessage);
     } catch (_) {

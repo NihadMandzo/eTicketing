@@ -42,6 +42,7 @@ public static class IdentityServiceCollectionExtensions
         builder.Services.AddScoped<IUserRepository, UserRepository>();
         builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
         // --- Business sloj ---
         // ValidateOnStart forces this to run during boot (not lazily on the first token issue),

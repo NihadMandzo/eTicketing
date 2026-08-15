@@ -3,6 +3,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
+using eTicketing.Identity.Data.Enums;
 using eTicketing.Identity.Data.Repositories;
 using Mapster;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,7 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
+    private readonly IPasswordResetTokenRepository _passwordResetTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IJwtTokenGenerator _tokenGenerator;
     private readonly IEventPublisher _eventPublisher;
@@ -26,6 +28,7 @@ public class AuthService : IAuthService
     public AuthService(
         IUserRepository userRepository,
         IRefreshTokenRepository refreshTokenRepository,
+        IPasswordResetTokenRepository passwordResetTokenRepository,
         IUnitOfWork unitOfWork,
         IJwtTokenGenerator tokenGenerator,
         IEventPublisher eventPublisher,
@@ -33,6 +36,7 @@ public class AuthService : IAuthService
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _passwordResetTokenRepository = passwordResetTokenRepository;
         _unitOfWork = unitOfWork;
         _tokenGenerator = tokenGenerator;
         _eventPublisher = eventPublisher;
@@ -50,11 +54,16 @@ public class AuthService : IAuthService
         var user = request.Adapt<User>();
         (user.PasswordHash, user.PasswordSalt) = PasswordHasher.Hash(request.Password);
 
+        var verificationCode = GenerateVerificationCode();
+        user.EmailVerificationCode = verificationCode;
+        user.EmailVerificationCodeExpiresAt = DateTime.UtcNow.AddHours(24);
+
         await _userRepository.AddAsync(user, ct);
 
+        // IssueTokensAsync does the one SaveChangesAsync for this method — the verification
+        // code set above is persisted in that same call, no extra DB round trip.
         var loginResult = await IssueTokensAsync(user, ct);
 
-        var verificationCode = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         await _eventPublisher.PublishAsync(
             EventNames.VerificationEmailRequested,
             new VerificationEmailRequested(user.Id, user.Email, user.FirstName, verificationCode),
@@ -62,6 +71,8 @@ public class AuthService : IAuthService
 
         return Result<LoginResult>.Success(loginResult);
     }
+
+    private static string GenerateVerificationCode() => Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
     public async Task<Result<LoginResult>> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
@@ -213,6 +224,167 @@ public class AuthService : IAuthService
 
         await _unitOfWork.SaveChangesAsync(ct);
         return Result<UserResponse>.Success(user.Adapt<UserResponse>());
+    }
+
+    public async Task<Result> VerifyEmailAsync(Guid userId, VerifyEmailRequest request, CancellationToken ct = default)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+        {
+            return Result.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."));
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return Result.Failure(Error.Conflict("auth.email_already_verified", "Email adresa je već potvrđena."));
+        }
+
+        if (string.IsNullOrEmpty(user.EmailVerificationCode) || user.EmailVerificationCodeExpiresAt is null
+            || user.EmailVerificationCodeExpiresAt < DateTime.UtcNow)
+        {
+            return Result.Failure(Error.Validation(
+                "auth.verification_code_expired", "Verifikacioni kod je istekao. Zatražite novi."));
+        }
+
+        if (!string.Equals(user.EmailVerificationCode, request.Code, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure(Error.Validation(
+                "auth.invalid_verification_code", "Verifikacioni kod nije ispravan."));
+        }
+
+        // Cleared, not just flagged verified — this is what makes the code single-use: a repeat
+        // VerifyEmailAsync call with the same code now hits the expired/missing branch above.
+        user.IsEmailVerified = true;
+        user.EmailVerificationCode = null;
+        user.EmailVerificationCodeExpiresAt = null;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
+    public async Task<Result> ResendVerificationEmailAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+        {
+            return Result.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."));
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return Result.Failure(Error.Conflict("auth.email_already_verified", "Email adresa je već potvrđena."));
+        }
+
+        // Overwriting the code/expiry here is what makes the *old* code stop working — a stale
+        // copy of this email sitting in an inbox can no longer verify anything.
+        var verificationCode = GenerateVerificationCode();
+        user.EmailVerificationCode = verificationCode;
+        user.EmailVerificationCodeExpiresAt = DateTime.UtcNow.AddHours(24);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishAsync(
+            EventNames.VerificationEmailRequested,
+            new VerificationEmailRequested(user.Id, user.Email, user.FirstName, verificationCode),
+            ct);
+
+        return Result.Success();
+    }
+
+    public async Task<Result> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default)
+    {
+        var user = await _userRepository.GetByEmailAsync(request.Email, ct);
+
+        // Unknown email: succeed anyway, without sending anything — this is deliberate
+        // anti-enumeration for the "no such account" case (see the staff-role branch below for
+        // the one case where this plan intentionally trades that away).
+        if (user is null)
+        {
+            return Result.Success();
+        }
+
+        // Only buyers (User role) may self-service a password reset — staff/organization
+        // accounts can only have their password set directly by SuperAdmin (see
+        // AdminService.SetPasswordAsync). Unlike the unknown-email case above, this is a named,
+        // visible error on purpose: a staff member deserves to know why nothing arrived rather
+        // than staring at a silent no-op forever.
+        if (user.Role != RoleType.User)
+        {
+            return Result.Failure(Error.Validation(
+                "auth.forgot_password_staff_not_allowed",
+                "Za ovaj tip naloga lozinku može promijeniti samo SuperAdmin. Kontaktirajte administratora platforme."));
+        }
+
+        // Any older still-valid reset link becomes unusable the moment a new one is requested —
+        // otherwise both links would work simultaneously, which is surprising and marginally
+        // less secure (a leaked earlier link would stay live).
+        await _passwordResetTokenRepository.InvalidateAllActiveForUserAsync(user.Id, ct);
+
+        var rawToken = RefreshTokenGenerator.GenerateRaw();
+        await _passwordResetTokenRepository.AddAsync(new PasswordResetToken
+        {
+            UserId = user.Id,
+            TokenHash = RefreshTokenGenerator.Hash(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
+        }, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishAsync(
+            EventNames.PasswordResetRequested,
+            new PasswordResetRequested(user.Id, user.Email, user.FirstName, rawToken),
+            ct);
+
+        return Result.Success();
+    }
+
+    public async Task<Result> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
+    {
+        var tokenHash = RefreshTokenGenerator.Hash(request.Token);
+        var storedToken = await _passwordResetTokenRepository.GetByTokenHashAsync(tokenHash, ct);
+
+        if (storedToken is null || !storedToken.IsValid)
+        {
+            return Result.Failure(Error.Unauthorized(
+                "auth.invalid_reset_token", "Link za resetovanje lozinke nije validan ili je istekao."));
+        }
+
+        var user = storedToken.User;
+        var (hash, salt) = PasswordHasher.Hash(request.NewPassword);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+
+        // Single-use: marking it here means a second ResetPasswordAsync call with the same raw
+        // token fails the IsValid check above instead of silently succeeding again.
+        storedToken.UsedAt = DateTime.UtcNow;
+
+        // Same reasoning as ChangePasswordAsync — a password reset must invalidate any refresh
+        // token already in play, attacker-held or not.
+        await _refreshTokenRepository.RevokeAllActiveForUserAsync(user.Id, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
+    public async Task<Result> SetNewPasswordAsync(Guid userId, SetNewPasswordRequest request, CancellationToken ct = default)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+        {
+            return Result.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."));
+        }
+
+        var (hash, salt) = PasswordHasher.Hash(request.NewPassword);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+        user.MustChangePassword = false;
+
+        // The caller is currently authenticated off the SuperAdmin-assigned password — revoking
+        // every active refresh token here (the endpoint also clears the auth cookies, see
+        // AuthEndpoints.SetNewPassword) forces a clean re-login with the password they just chose
+        // themselves, rather than silently continuing the old session.
+        await _refreshTokenRepository.RevokeAllActiveForUserAsync(user.Id, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Result.Success();
     }
 
     private async Task<LoginResult> IssueTokensAsync(User user, CancellationToken ct)

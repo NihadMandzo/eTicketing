@@ -26,6 +26,25 @@ public sealed record UpdateStaffUserRequest : IStaffProfileRequest
     public string? PhoneNumber { get; init; }
 }
 
+/// <summary>Body for DELETE /admins/{id}. Reason/RecipientEmail are only required when the
+/// target is an OrganizationAdmin (enforced in AdminService.DeleteAsync, which is the only place
+/// that knows the target's role) — always send this body, even empty, since the route no longer
+/// accepts a bare DELETE.</summary>
+public sealed record DeleteAdminRequest
+{
+    public string? Reason { get; init; }
+    public string? RecipientEmail { get; init; }
+}
+
+/// <summary>SuperAdmin directly sets a staff/organization account's password (no current
+/// password needed — see AdminService.SetPasswordAsync). Deliberately excludes User and
+/// SuperAdmin targets.</summary>
+public sealed record SetPasswordRequest
+{
+    public string NewPassword { get; init; } = string.Empty;
+    public string ConfirmPassword { get; init; } = string.Empty;
+}
+
 /// <summary>Despite the "Admin" name (kept for route/backwards compatibility — see
 /// AdminEndpoints), this now spans every non-buyer role: SuperAdmin, Admin,
 /// OrganizationSuperAdmin, OrganizationAdmin. RoleFilters narrows to any subset of those (the

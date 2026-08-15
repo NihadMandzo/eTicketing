@@ -8,6 +8,7 @@ class UserProfile {
   final bool isActive;
   final bool isEmailVerified;
   final bool isFirstLogin;
+  final bool mustChangePassword;
   final String roleName;
   final String? organizationId;
   final String? organizationName;
@@ -24,6 +25,7 @@ class UserProfile {
     required this.isActive,
     required this.isEmailVerified,
     required this.isFirstLogin,
+    this.mustChangePassword = false,
     required this.roleName,
     this.organizationId,
     this.organizationName,
@@ -56,6 +58,7 @@ class UserProfile {
       isActive: json['isActive'] as bool? ?? false,
       isEmailVerified: json['isEmailVerified'] as bool? ?? false,
       isFirstLogin: json['isFirstLogin'] as bool? ?? false,
+      mustChangePassword: json['mustChangePassword'] as bool? ?? false,
       roleName: json['roleName'] as String,
       organizationId: json['organizationId'] as String?,
       organizationName: json['organizationName'] as String?,

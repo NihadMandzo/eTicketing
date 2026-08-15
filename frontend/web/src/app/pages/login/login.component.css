@@ -107,6 +107,22 @@
   padding: 4px 8px;
 }
 
+.auth-forgot {
+  text-align: right;
+  font-size: 13px;
+  margin-top: -8px;
+}
+
+.auth-forgot a {
+  color: var(--primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.auth-forgot a:hover {
+  text-decoration: underline;
+}
+
 .submit-btn {
   width: 100%;
   margin-top: 8px;

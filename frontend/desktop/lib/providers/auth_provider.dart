@@ -4,6 +4,7 @@ import '../core/api_client.dart';
 import '../models/api_error.dart';
 import '../models/requests/change_password_request.dart';
 import '../models/requests/login_request.dart';
+import '../models/requests/set_new_password_request.dart';
 import '../models/requests/update_user_request.dart';
 import '../models/responses/login_response.dart';
 import '../models/responses/user_profile.dart';
@@ -93,5 +94,15 @@ class AuthProvider {
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
     return UserProfile.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Closes the forced-password-change loop (MustChangePassword was true —
+  /// see ForceChangePasswordScreen). The backend clears the session cookies
+  /// on success, so the caller must navigate to LoginScreen afterwards
+  /// rather than MainShell.
+  Future<void> setNewPassword(SetNewPasswordRequest request) async {
+    final response = await apiClient.post('$_endpoint/set-new-password', data: request.toJson());
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
   }
 }

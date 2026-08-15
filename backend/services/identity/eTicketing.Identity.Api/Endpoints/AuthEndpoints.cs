@@ -19,6 +19,11 @@ public static class AuthEndpoints
         group.MapGet("/me", Me).RequireAuthorization();
         group.MapPost("/change-password", ChangePassword).RequireAuthorization().WithValidation<ChangePasswordRequest>();
         group.MapPut("/update-user", UpdateUser).RequireAuthorization().WithValidation<UpdateUserRequest>();
+        group.MapPost("/verify-email", VerifyEmail).RequireAuthorization().WithValidation<VerifyEmailRequest>();
+        group.MapPost("/resend-verification-email", ResendVerificationEmail).RequireAuthorization();
+        group.MapPost("/forgot-password", ForgotPassword).AllowAnonymous().WithValidation<ForgotPasswordRequest>();
+        group.MapPost("/reset-password", ResetPassword).AllowAnonymous().WithValidation<ResetPasswordRequest>();
+        group.MapPost("/set-new-password", SetNewPassword).RequireAuthorization().WithValidation<SetNewPasswordRequest>();
     }
 
     private static async Task<IResult> Register(
@@ -89,5 +94,49 @@ public static class AuthEndpoints
     {
         var result = await service.UpdateUserAsync(http.User.GetUserId(), request, ct);
         return result.ToHttpResult();
+    }
+
+    // Deliberately no UserId/target-identifier field on VerifyEmailRequest — the target is
+    // always the authenticated caller, read from their own token claim. This is what makes it
+    // structurally impossible for a user to verify (or resend a verification for) anyone else's
+    // email, not just a convention.
+    private static async Task<IResult> VerifyEmail(
+        VerifyEmailRequest request, IAuthService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.VerifyEmailAsync(http.User.GetUserId(), request, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> ResendVerificationEmail(IAuthService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.ResendVerificationEmailAsync(http.User.GetUserId(), ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> ForgotPassword(
+        ForgotPasswordRequest request, IAuthService service, CancellationToken ct)
+    {
+        var result = await service.ForgotPasswordAsync(request, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> ResetPassword(
+        ResetPasswordRequest request, IAuthService service, CancellationToken ct)
+    {
+        var result = await service.ResetPasswordAsync(request, ct);
+        return result.ToHttpResult();
+    }
+
+    // Closes the SuperAdmin-forced-password-change loop: on success, clears the session cookies
+    // so the caller must re-authenticate with the password they just chose themselves, rather
+    // than silently continuing under the SuperAdmin-assigned one.
+    private static async Task<IResult> SetNewPassword(
+        SetNewPasswordRequest request, IAuthService service, IAuthCookieService cookies, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.SetNewPasswordAsync(http.User.GetUserId(), request, ct);
+        if (result.IsFailure) return result.ToHttpResult();
+
+        cookies.ClearAuthCookies(http);
+        return Results.NoContent();
     }
 }

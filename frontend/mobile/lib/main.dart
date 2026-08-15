@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'core/api_client.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/verify_email_screen.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
@@ -49,6 +51,8 @@ class MyApp extends StatelessWidget {
             '/login': (_) => const LoginScreen(),
             '/register': (_) => const RegisterScreen(),
             '/settings': (_) => const SettingsScreen(),
+            '/verify-email': (_) => const VerifyEmailScreen(),
+            '/forgot-password': (_) => const ForgotPasswordScreen(),
           },
         );
       },

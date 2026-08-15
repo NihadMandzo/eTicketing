@@ -11,6 +11,7 @@ public class CreateOrganizationRequestValidator : AbstractValidator<CreateOrgani
         RuleFor(x => x.Address).MaximumLength(500);
         RuleFor(x => x.PhoneNumber).NotEmpty();
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(255);
+        RuleFor(x => x.NotificationEmail).NotEmpty().EmailAddress().MaximumLength(255);
         RuleFor(x => x.Website).Must(BeAValidUrl)
             .When(x => !string.IsNullOrWhiteSpace(x.Website))
             .WithMessage("Website nije validan URL.");

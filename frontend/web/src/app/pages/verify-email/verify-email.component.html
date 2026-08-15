@@ -1,0 +1,47 @@
+<div class="auth-page">
+  <section class="page-header">
+    <div class="container">
+      <h1>Potvrda email adrese</h1>
+      <p class="page-subtitle">Poslali smo vam kod na email prilikom registracije</p>
+    </div>
+  </section>
+
+  <section class="content-section">
+    <div class="container">
+      <form class="auth-card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        @if (errorMessage()) {
+          <div class="alert alert-error" role="alert">{{ errorMessage() }}</div>
+        }
+        @if (resendMessage()) {
+          <div class="alert alert-success">{{ resendMessage() }}</div>
+        }
+
+        <label class="field">
+          <span class="field-label">Verifikacioni kod</span>
+          <input
+            type="text"
+            formControlName="code"
+            maxlength="6"
+            autocomplete="one-time-code"
+            class="field-input code-input"
+            [class.field-input-invalid]="form.controls.code.invalid && form.controls.code.touched"
+          />
+          @if (form.controls.code.invalid && form.controls.code.touched) {
+            <span class="field-error">Unesite 6-karakterni kod iz emaila.</span>
+          }
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-lg submit-btn" [disabled]="isLoading()">
+          {{ isLoading() ? 'Provjera u toku…' : 'Potvrdi' }}
+        </button>
+
+        <p class="auth-switch">
+          Niste dobili kod?
+          <button type="button" class="link-btn" (click)="resendCode()" [disabled]="isResending()">
+            {{ isResending() ? 'Slanje u toku…' : 'Pošalji kod ponovo' }}
+          </button>
+        </p>
+      </form>
+    </div>
+  </section>
+</div>
