@@ -31,14 +31,6 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
     public Task<User?> GetByIdWithOrganizationAsync(Guid id, CancellationToken ct = default)
         => Query().Include(u => u.Organization).FirstOrDefaultAsync(u => u.Id == id, ct);
 
-    public Task<PagedResult<User>> SearchByRoleAsync(RoleType role, BaseSearchObject query, CancellationToken ct = default)
-        => Query()
-            .Where(u => u.Role == role)
-            .Where(u => string.IsNullOrEmpty(query.FTS)
-                || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
-            .OrderBy(u => u.LastName)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
-
     public Task<PagedResult<User>> SearchStaffAsync(IReadOnlyList<RoleType>? roleFilters, BaseSearchObject query, CancellationToken ct = default)
         => Query()
             .Include(u => u.Organization)

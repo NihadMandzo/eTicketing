@@ -6,6 +6,7 @@ import '../../models/requests/staff_user_update_request.dart';
 import '../../models/responses/admin_user_response.dart';
 import '../../providers/user_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/validators.dart';
 
 /// Edit-only dialog for a SuperAdmin editing any staff account (SuperAdmin,
 /// Admin, OrganizationSuperAdmin or OrganizationAdmin) from the platform
@@ -212,12 +213,7 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                             controller: _phoneCtrl,
                             decoration: _inputDecoration('+387 61 123 4567', prefixIcon: LucideIcons.phone),
                             style: TextStyle(fontSize: 14, color: textPrimary),
-                            validator: (v) {
-                              if (v != null && v.trim().isNotEmpty && v.trim().length > 20) {
-                                return 'Broj telefona može imati maksimalno 20 karaktera';
-                              }
-                              return null;
-                            },
+                            validator: Validators.phoneNumber,
                           ),
                         ],
                       ),

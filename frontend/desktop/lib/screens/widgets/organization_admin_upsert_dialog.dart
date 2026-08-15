@@ -7,6 +7,7 @@ import '../../models/requests/organization_user_update_request.dart';
 import '../../models/responses/admin_user_response.dart';
 import '../../providers/user_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/validators.dart';
 
 /// Add/edit dialog for an OrganizationSuperAdmin self-servicing OrganizationAdmin
 /// accounts in their own organization (org Users tab). Create mode collects a
@@ -271,12 +272,7 @@ class _OrganizationAdminUpsertDialogState extends State<OrganizationAdminUpsertD
                             controller: _phoneCtrl,
                             decoration: _inputDecoration('+387 61 123 4567', prefixIcon: LucideIcons.phone),
                             style: TextStyle(fontSize: 14, color: textPrimary),
-                            validator: (v) {
-                              if (v != null && v.trim().isNotEmpty && v.trim().length > 20) {
-                                return 'Broj telefona može imati maksimalno 20 karaktera';
-                              }
-                              return null;
-                            },
+                            validator: Validators.phoneNumber,
                           ),
                         ],
                       ),

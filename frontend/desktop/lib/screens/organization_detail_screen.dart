@@ -211,7 +211,15 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
           const SizedBox(width: 12),
         ],
       ),
-      body: Padding(
+      // The whole page is one SingleChildScrollView (not header/stats/tabbar-
+      // fixed + internally-scrolling tab body) — scrolling moves the org
+      // header, stat cards, and tab selector out of view along with
+      // everything else, matching Categories/Organizations/Users. This is
+      // why TabBarView (a PageView under the hood, which needs a bounded
+      // height) is gone — TabController + TabBar stay only as the visual
+      // tab-selector strip, driving which single tab's content is rendered
+      // inline below it, no swipe gesture needed on a desktop app.
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,20 +248,16 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
               labelColor: primary,
               unselectedLabelColor: textTertiary,
               indicatorColor: primary,
+              onTap: (_) => setState(() {}),
               tabs: const [
                 Tab(text: 'Događaji'),
                 Tab(text: 'Korisnici'),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildEventsTab(isDark, textPrimary, textTertiary),
-                  _buildUsersTab(isDark, textPrimary, textTertiary),
-                ],
-              ),
-            ),
+            const SizedBox(height: 16),
+            _tabController.index == 0
+                ? _buildEventsTab(isDark, textPrimary, textTertiary)
+                : _buildUsersTab(isDark, textPrimary, textTertiary),
           ],
         ),
       ),
@@ -324,87 +328,80 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     );
   }
 
+  // Not wrapped in its own SingleChildScrollView/Expanded — this tab's content
+  // is rendered directly inline in the outer page's single SingleChildScrollView
+  // (see build()), so it just needs to be a plain, naturally-sized Column.
   Widget _buildEventsTab(bool isDark, Color textPrimary, Color textTertiary) {
-    // The whole tab is one SingleChildScrollView (not search-fixed +
-    // internally-scrolling grid) — scrolling moves the search field out of
-    // view along with everything else, so the pagination bar is always
-    // reachable by scrolling the same way as the rest of the tab's content.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _searchField(_eventsState, _loadEvents, 'Pretražite događaje...', isDark, textPrimary, textTertiary),
-          const SizedBox(height: 16),
-          if (_eventsState.isLoading)
-            SizedBox(
-              height: 300,
-              child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
-            )
-          else if (_eventsState.items.isEmpty)
-            SizedBox(height: 300, child: _emptyState(LucideIcons.calendarX, 'Nema događaja', isDark, textTertiary))
-          else
-            _cardGrid(
-              itemCount: _eventsState.items.length,
-              maxCrossAxisExtent: 260,
-              mainAxisExtent: 230,
-              itemBuilder: (context, index) =>
-                  _EventGridCard(event: _eventsState.items[index], isDark: isDark),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _eventsState.currentPage,
-              totalPages: _eventsState.totalPages,
-              onPageChanged: (page) => _goToPage(_eventsState, page, _loadEvents),
-              pageSize: _eventsState.pageSize,
-              onPageSizeChanged: (size) => _onPageSizeChanged(_eventsState, size, _loadEvents),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _searchField(_eventsState, _loadEvents, 'Pretražite događaje...', isDark, textPrimary, textTertiary),
+        const SizedBox(height: 16),
+        if (_eventsState.isLoading)
+          SizedBox(
+            height: 300,
+            child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
+          )
+        else if (_eventsState.items.isEmpty)
+          SizedBox(height: 300, child: _emptyState(LucideIcons.calendarX, 'Nema događaja', isDark, textTertiary))
+        else
+          _cardGrid(
+            itemCount: _eventsState.items.length,
+            maxCrossAxisExtent: 260,
+            mainAxisExtent: 230,
+            itemBuilder: (context, index) =>
+                _EventGridCard(event: _eventsState.items[index], isDark: isDark),
           ),
-        ],
-      ),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: PaginationBar(
+            currentPage: _eventsState.currentPage,
+            totalPages: _eventsState.totalPages,
+            onPageChanged: (page) => _goToPage(_eventsState, page, _loadEvents),
+            pageSize: _eventsState.pageSize,
+            onPageSizeChanged: (size) => _onPageSizeChanged(_eventsState, size, _loadEvents),
+          ),
+        ),
+      ],
     );
   }
 
+  // Same shape as _buildEventsTab — see its comment.
   Widget _buildUsersTab(bool isDark, Color textPrimary, Color textTertiary) {
-    // Same single-scroll shape as _buildEventsTab — see its comment.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _searchField(_usersState, _loadUsers, 'Pretražite po imenu ili emailu...', isDark, textPrimary, textTertiary),
-          const SizedBox(height: 16),
-          if (_usersState.isLoading)
-            SizedBox(
-              height: 300,
-              child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
-            )
-          else if (_usersState.items.isEmpty)
-            SizedBox(height: 300, child: _emptyState(LucideIcons.userX, 'Nema korisnika', isDark, textTertiary))
-          else
-            _cardGrid(
-              itemCount: _usersState.items.length,
-              maxCrossAxisExtent: 260,
-              mainAxisExtent: 380,
-              // Read-only here — this is the platform-staff view of "who's in
-              // this org"; editing/deleting org users lives on the desktop app's
-              // own self-service Users screen (OrganizationSuperAdmin) and the
-              // SuperAdmin platform Users screen, not this detail view.
-              itemBuilder: (context, index) => UserGridCard(user: _usersState.items[index]),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _usersState.currentPage,
-              totalPages: _usersState.totalPages,
-              onPageChanged: (page) => _goToPage(_usersState, page, _loadUsers),
-              pageSize: _usersState.pageSize,
-              onPageSizeChanged: (size) => _onPageSizeChanged(_usersState, size, _loadUsers),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _searchField(_usersState, _loadUsers, 'Pretražite po imenu ili emailu...', isDark, textPrimary, textTertiary),
+        const SizedBox(height: 16),
+        if (_usersState.isLoading)
+          SizedBox(
+            height: 300,
+            child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
+          )
+        else if (_usersState.items.isEmpty)
+          SizedBox(height: 300, child: _emptyState(LucideIcons.userX, 'Nema korisnika', isDark, textTertiary))
+        else
+          _cardGrid(
+            itemCount: _usersState.items.length,
+            maxCrossAxisExtent: 260,
+            mainAxisExtent: 380,
+            // Read-only here — this is the platform-staff view of "who's in
+            // this org"; editing/deleting org users lives on the desktop app's
+            // own self-service Users screen (OrganizationSuperAdmin) and the
+            // SuperAdmin platform Users screen, not this detail view.
+            itemBuilder: (context, index) => UserGridCard(user: _usersState.items[index]),
           ),
-        ],
-      ),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: PaginationBar(
+            currentPage: _usersState.currentPage,
+            totalPages: _usersState.totalPages,
+            onPageChanged: (page) => _goToPage(_usersState, page, _loadUsers),
+            pageSize: _usersState.pageSize,
+            onPageSizeChanged: (size) => _onPageSizeChanged(_usersState, size, _loadUsers),
+          ),
+        ),
+      ],
     );
   }
 

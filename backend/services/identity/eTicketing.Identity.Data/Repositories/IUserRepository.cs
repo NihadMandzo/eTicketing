@@ -30,10 +30,6 @@ public interface IUserRepository : IRepository<User, Guid>
     /// (the base lookup uses DbSet.FindAsync, which never includes navigation properties).</summary>
     Task<User?> GetByIdWithOrganizationAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Paged, FTS-filtered (first name/last name/email) search over users with a given
-    /// role — backs AdminService.GetAsync.</summary>
-    Task<PagedResult<User>> SearchByRoleAsync(RoleType role, BaseSearchObject query, CancellationToken ct = default);
-
     /// <summary>Paged, FTS-filtered (first name/last name/email) search over every non-buyer
     /// (Role != User) account — platform staff + organization accounts — optionally narrowed to
     /// any subset of roles (multiselect). Backs AdminService.GetAsync (the SuperAdmin-facing

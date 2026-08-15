@@ -1,3 +1,5 @@
+import '../enums/role_type.dart';
+
 /// Adds a new OrganizationAdmin to an organization — used by an
 /// OrganizationSuperAdmin self-servicing their own org's staff (POST
 /// /api/organizations/{organizationId}/users). The role is always
@@ -5,10 +7,6 @@
 /// self-servicing OrganizationSuperAdmin can only ever create that role (see
 /// OrganizationService.AddUserAsync), so there is nothing for this screen to
 /// let the caller choose.
-///
-/// Role is sent as the backend's raw eTicketing.Identity.Data.Enums.RoleType
-/// numeric value (System.Text.Json's default enum (de)serialization, no
-/// JsonStringEnumConverter registered) — 4 = OrganizationAdmin.
 class OrganizationUserInsertRequest {
   final String firstName;
   final String lastName;
@@ -32,7 +30,7 @@ class OrganizationUserInsertRequest {
         'Email': email,
         'Username': username,
         'Password': password,
-        'Role': 4, // RoleType.OrganizationAdmin
+        'Role': RoleType.organizationAdmin.value,
         if (phoneNumber != null && phoneNumber!.isNotEmpty) 'PhoneNumber': phoneNumber,
       };
 }
