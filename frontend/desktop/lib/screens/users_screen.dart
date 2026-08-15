@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/responses/admin_user_response.dart';
 import '../models/responses/user_profile.dart';
-import '../models/search_objects/base_search_object.dart';
+import '../models/search_objects/organization_user_search_object.dart';
+import '../models/search_objects/staff_query_search_object.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
-import '../theme/role_badge.dart';
+import 'widgets/organization_admin_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/role_multi_select_filter.dart';
+import 'widgets/staff_user_upsert_dialog.dart';
 import 'widgets/stat_card.dart';
+import 'widgets/user_grid_card.dart';
 import '../main.dart';
 
 class UsersScreen extends StatefulWidget {
@@ -30,7 +34,15 @@ class _UsersScreenState extends State<UsersScreen> {
 
   int _currentPage = 0;
   int _totalCount = 0;
-  static const int _pageSize = 10;
+  int _pageSize = 10;
+
+  /// SuperAdmin-only role filter — a set of RoleType enum member names, empty = every role.
+  List<String> _selectedRoles = [];
+
+  /// The org self-service Users tab always scopes to this role server-side, so
+  /// the caller (an OrganizationSuperAdmin) never sees themselves or any other
+  /// organization's staff in the list.
+  static const String _organizationAdminRole = 'OrganizationAdmin';
 
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
 
@@ -50,27 +62,47 @@ class _UsersScreenState extends State<UsersScreen> {
     });
   }
 
+  void _onRolesFilterChanged(List<String> roles) {
+    setState(() {
+      _selectedRoles = roles;
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
+  void _onPageSizeChanged(int size) {
+    setState(() {
+      _pageSize = size;
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final searchObject = BaseSearchObject(
-        page: _currentPage,
-        pageSize: _pageSize,
-        fts: _searchController.text.trim().isEmpty
-            ? null
-            : _searchController.text.trim(),
-      );
+      final fts = _searchController.text.trim().isEmpty ? null : _searchController.text.trim();
 
-      // SuperAdmin    → GET /api/admins
-      // OrgSuperAdmin → GET /api/organizations/{organizationId}/users
+      // SuperAdmin    → GET /api/admins (all non-User roles, optional multi-role filter)
+      // OrgSuperAdmin → GET /api/organizations/{organizationId}/users (Role=OrganizationAdmin only)
       final result = _isSuperAdmin
           ? await AdminProvider().getAll(
-              searchObject: searchObject,
+              searchObject: StaffQuerySearchObject(
+                page: _currentPage,
+                pageSize: _pageSize,
+                fts: fts,
+                roleFilters: _selectedRoles,
+              ),
               fromJson: AdminUserResponse.fromJson,
             )
           : await OrganizationUsersProvider().getAll(
               organizationId: widget.currentUser.organizationId!,
-              searchObject: searchObject,
+              searchObject: OrganizationUserSearchObject(
+                page: _currentPage,
+                pageSize: _pageSize,
+                fts: fts,
+                role: _organizationAdminRole,
+              ),
               fromJson: AdminUserResponse.fromJson,
             );
 
@@ -95,33 +127,115 @@ class _UsersScreenState extends State<UsersScreen> {
     _loadData();
   }
 
+  void _openEditDialog(AdminUserResponse user) {
+    if (_isSuperAdmin) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => StaffUserUpsertDialog(user: user, onSaved: _loadData),
+      );
+    } else {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => OrganizationAdminUpsertDialog(
+          organizationId: widget.currentUser.organizationId!,
+          user: user,
+          onSaved: _loadData,
+        ),
+      );
+    }
+  }
+
+  void _openAddDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => OrganizationAdminUpsertDialog(
+        organizationId: widget.currentUser.organizationId!,
+        onSaved: _loadData,
+      ),
+    );
+  }
+
+  Future<void> _deleteUser(AdminUserResponse user) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Obriši korisnika',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
+        content: Text(
+            'Da li ste sigurni da želite obrisati korisnika "${user.fullName}"?',
+            style: TextStyle(
+                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Odustani',
+                style: TextStyle(
+                    color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorDark,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Obriši'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      if (_isSuperAdmin) {
+        await AdminProvider().delete(user.id);
+      } else {
+        await OrganizationUsersProvider().delete(widget.currentUser.organizationId!, user.id);
+      }
+      if (!mounted) return;
+
+      if (_users.length == 1 && _currentPage > 0) {
+        setState(() => _currentPage--);
+      }
+      await _loadData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Korisnik "${user.fullName}" je uspješno obrisan')),
+              ],
+            ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) handleApiError(e);
+    }
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return '—';
-    final d = date.toLocal();
-    final months = [
-      '', 'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
-    ];
-    return '${d.day}. ${months[d.month]} ${d.year}.';
-  }
-
-  String _formatDateShort(DateTime? date) {
-    if (date == null) return '—';
-    final d = date.toLocal();
-    final months = [
-      '', 'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
-    ];
-    return '${d.day}. ${months[d.month]}';
   }
 
   int get _activeCount => _users.where((u) => u.isActive).length;
@@ -132,33 +246,48 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
+    // The whole page is one SingleChildScrollView (not header-fixed +
+    // internally-scrolling grid) — scrolling moves the title/stats/search out
+    // of view along with everything else, so the pagination bar is always
+    // reachable by scrolling the same way as the rest of the content.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────
-          Column(
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Korisnici Organizacije',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-                  height: 1.2,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isSuperAdmin ? 'Korisnici Platforme' : 'Korisnici Organizacije',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _isSuperAdmin
+                          ? 'Upravljajte korisnicima kroz sve organizacije'
+                          : 'Upravljajte administratorima u ${widget.currentUser.organizationName ?? 'vašoj organizaciji'}',
+                      style: TextStyle(
+                          fontSize: 16,
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _isSuperAdmin
-                    ? 'Upravljajte korisnicima kroz sve organizacije'
-                    : 'Upravljajte korisnicima u ${widget.currentUser.organizationName ?? 'vašoj organizaciji'}',
-                style: TextStyle(
-                    fontSize: 16,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
-              ),
+              if (!_isSuperAdmin) ...[
+                const SizedBox(width: 16),
+                _AddAdminButton(onTap: _openAddDialog),
+              ],
             ],
           ),
 
@@ -218,52 +347,79 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
           ),
 
+          // ── Role multiselect filter (SuperAdmin only) ─────────────
+          if (_isSuperAdmin) ...[
+            const SizedBox(height: 12),
+            RoleMultiSelectFilter(selectedRoles: _selectedRoles, onChanged: _onRolesFilterChanged),
+          ],
+
           const SizedBox(height: 16),
 
-          // ── User Cards ─────────────────────────────────────────────
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(
-                        color: isDark ? AppColors.secondary : AppColors.primary),
-                  )
-                : _users.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(LucideIcons.userX,
-                                size: 48,
-                                color: isDark
-                                    ? AppColors.darkBorderInput
-                                    : AppColors.lightBorderInput),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Nema korisnika',
-                              style: TextStyle(
-                                  color: isDark
-                                      ? AppColors.darkTextTertiary
-                                      : AppColors.lightTextTertiary,
-                                  fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: _users.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          return _UserCard(
-                            user: _users[index],
-                            roleBadgeText: roleBadgeText,
-                            roleBadgeColor: (role) => roleBadgeColor(role, isDark),
-                            formatDate: _formatDate,
-                            formatDateShort: _formatDateShort,
-                          );
-                        },
-                      ),
-          ),
+          // ── User Cards ── not wrapped in Expanded (the page is one scroll
+          // view, not header-fixed + internally-scrolling grid) — loading/empty
+          // states get an explicit height since there's no ambient Expanded to
+          // size them anymore.
+          if (_isLoading)
+            SizedBox(
+              height: 300,
+              child: Center(
+                child: CircularProgressIndicator(
+                    color: isDark ? AppColors.secondary : AppColors.primary),
+              ),
+            )
+          else if (_users.isEmpty)
+            SizedBox(
+              height: 300,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.userX,
+                        size: 48,
+                        color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nema korisnika',
+                      style: TextStyle(
+                          color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+                          fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            GridView.builder(
+              // MaxCrossAxisExtent (not a breakpoint-driven fixed count) caps how
+              // wide/tall any single card can get — a fixed crossAxisCount let a
+              // card grow arbitrarily large on a wide monitor with few results,
+              // which looked broken even though nothing overflowed. This way more
+              // columns appear as the window widens instead of existing cards
+              // stretching. mainAxisExtent (a fixed pixel height, not an aspect
+              // ratio) is generous enough for the avatar, name, up to 3 badges,
+              // 3 contact lines and 2 action buttons, so it can never overflow.
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 260,
+                mainAxisExtent: 380,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              itemCount: _users.length,
+              itemBuilder: (context, index) {
+                final user = _users[index];
+                final isSelf = user.id == widget.currentUser.id;
+                return UserGridCard(
+                  user: user,
+                  // A user never edits/deletes their own account from this
+                  // screen — avoids an accidental self-lockout (self-service
+                  // profile editing already exists via the settings dialog).
+                  onEdit: isSelf ? null : () => _openEditDialog(user),
+                  onDelete: isSelf ? null : () => _deleteUser(user),
+                );
+              },
+            ),
 
           // ── Pagination ───────────────────────────────────────────
           Padding(
@@ -272,6 +428,8 @@ class _UsersScreenState extends State<UsersScreen> {
               currentPage: _currentPage,
               totalPages: _totalPages,
               onPageChanged: _goToPage,
+              pageSize: _pageSize,
+              onPageSizeChanged: _onPageSizeChanged,
             ),
           ),
         ],
@@ -281,414 +439,50 @@ class _UsersScreenState extends State<UsersScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  User Card
+//  Add administrator button (org self-service view only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _UserCard extends StatefulWidget {
-  final AdminUserResponse user;
-  final String Function(String) roleBadgeText;
-  final Color Function(String) roleBadgeColor;
-  final String Function(DateTime?) formatDate;
-  final String Function(DateTime?) formatDateShort;
+class _AddAdminButton extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _UserCard({
-    required this.user,
-    required this.roleBadgeText,
-    required this.roleBadgeColor,
-    required this.formatDate,
-    required this.formatDateShort,
-  });
-
-  @override
-  State<_UserCard> createState() => _UserCardState();
-}
-
-class _UserCardState extends State<_UserCard> {
-  bool _isHovering = false;
+  const _AddAdminButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final u = widget.user;
-    final roleColor = widget.roleBadgeColor(u.roleName);
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+    final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
+    final onPrimaryColor = isDark ? AppColors.darkBackground : Colors.white;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovering = true),
-      onExit: (_) => setState(() => _isHovering = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _isHovering
-                ? (isDark ? AppColors.secondary : AppColors.primary)
-                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [primary, primaryDark]),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: primary.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.userPlus, color: onPrimaryColor, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Dodaj Administratora',
+                  style: TextStyle(color: onPrimaryColor, fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ],
+            ),
           ),
-          boxShadow: isDark
-              ? null
-              : (_isHovering
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ]),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Avatar ──
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? [AppColors.secondary, AppColors.primary]
-                      : [AppColors.primary, AppColors.primaryDark],
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                _initials(u.fullName),
-                style: TextStyle(
-                  color: isDark ? AppColors.darkBackground : Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 20),
-
-            // ── Info ──
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Name row + badges
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              u.fullName,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: isDark
-                                    ? AppColors.darkTextPrimary
-                                    : AppColors.lightTextPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: [
-                                // Role badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: roleColor.withValues(
-                                        alpha: isDark ? 0.18 : 0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: roleColor
-                                            .withValues(alpha: 0.35)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(LucideIcons.shield,
-                                          size: 12, color: roleColor),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        widget.roleBadgeText(u.roleName),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: roleColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Status badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: (u.isActive
-                                            ? AppColors.success
-                                            : AppColors.error)
-                                        .withValues(alpha: isDark ? 0.18 : 0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    u.isActive ? 'Aktivan' : 'Neaktivan',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: u.isActive
-                                          ? AppColors.successDark
-                                          : AppColors.errorDark,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ── Detail row ──
-                  Row(
-                    children: [
-                      // Email
-                      Expanded(
-                        flex: 3,
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.mail,
-                                size: 15,
-                                color: isDark
-                                    ? AppColors.darkTextDisabled
-                                    : AppColors.lightTextDisabled),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                u.email,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? AppColors.darkTextTertiary
-                                      : AppColors.lightTextTertiary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Phone
-                      if (u.phoneNumber != null &&
-                          u.phoneNumber!.isNotEmpty)
-                        Expanded(
-                          flex: 2,
-                          child: Row(
-                            children: [
-                              Icon(LucideIcons.phone,
-                                  size: 15,
-                                  color: isDark
-                                      ? AppColors.darkTextDisabled
-                                      : AppColors.lightTextDisabled),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  u.phoneNumber!,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: isDark
-                                        ? AppColors.darkTextTertiary
-                                        : AppColors.lightTextTertiary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      // Created date
-                      Expanded(
-                        flex: 2,
-                        child: RichText(
-                          text: TextSpan(
-                            style: const TextStyle(fontSize: 13),
-                            children: [
-                              TextSpan(
-                                text: 'Pridružen: ',
-                                style: TextStyle(
-                                    color: isDark
-                                        ? AppColors.darkTextDisabled
-                                        : AppColors.lightTextDisabled),
-                              ),
-                              TextSpan(
-                                text: widget.formatDate(u.createdAt),
-                                style: TextStyle(
-                                    color: isDark
-                                        ? AppColors.darkTextTertiary
-                                        : AppColors.lightTextTertiary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Last login
-                      Expanded(
-                        flex: 2,
-                        child: RichText(
-                          text: TextSpan(
-                            style: const TextStyle(fontSize: 13),
-                            children: [
-                              TextSpan(
-                                text: 'Posljednja Aktivnost: ',
-                                style: TextStyle(
-                                    color: isDark
-                                        ? AppColors.darkTextDisabled
-                                        : AppColors.lightTextDisabled),
-                              ),
-                              TextSpan(
-                                text: widget.formatDateShort(u.lastLoginAt),
-                                style: TextStyle(
-                                    color: isDark
-                                        ? AppColors.darkTextTertiary
-                                        : AppColors.lightTextTertiary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ── Bottom separator + email verified ──
-                  Container(
-                    padding: const EdgeInsets.only(top: 16),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                            color: isDark
-                                ? AppColors.darkBorder
-                                : AppColors.lightSurfaceMuted),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        // Email verification status
-                        Row(
-                          children: [
-                            Icon(
-                              u.isEmailVerified
-                                  ? LucideIcons.badgeCheck
-                                  : LucideIcons.badgeX,
-                              size: 16,
-                              color: u.isEmailVerified
-                                  ? (isDark ? AppColors.secondary : AppColors.primary)
-                                  : AppColors.error,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              u.isEmailVerified
-                                  ? 'Email verifikovan'
-                                  : 'Email nije verifikovan',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: u.isEmailVerified
-                                    ? (isDark ? AppColors.secondary : AppColors.primary)
-                                    : AppColors.error,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        if (u.isFirstLogin) ...[
-                          const SizedBox(width: 16),
-                          Row(
-                            children: [
-                              const Icon(LucideIcons.logIn,
-                                  size: 16, color: AppColors.warning),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'Prva prijava',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.warning,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        const Spacer(),
-
-                        // Username chip
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.darkSurfaceMuted
-                                : AppColors.lightSurfaceMuted,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(LucideIcons.atSign,
-                                  size: 12,
-                                  color: isDark
-                                      ? AppColors.darkTextTertiary
-                                      : AppColors.lightTextTertiary),
-                              const SizedBox(width: 4),
-                              Text(
-                                u.username,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? AppColors.darkTextSecondary
-                                      : AppColors.lightTextSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
-  }
-
-  String _initials(String name) {
-    if (name.trim().isEmpty) return '?';
-    return name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .take(2)
-        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
-        .join();
   }
 }

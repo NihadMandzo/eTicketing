@@ -12,26 +12,29 @@ import '../providers/organization_events_provider.dart';
 import '../providers/organization_provider.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
-import '../theme/role_badge.dart';
 import 'widgets/entity_avatar.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/stat_card.dart';
+import 'widgets/user_grid_card.dart';
 import '../main.dart';
 
 /// Per-tab paginated/searchable list state — instantiated once per tab
-/// (Events / Admins / SuperAdmins) so each tab paginates and searches fully
-/// independently, mirroring the single-list state shape used by
-/// UsersScreen/OrganizationsScreen but generic over 3 simultaneous lists.
+/// (Events / Users) so each tab paginates and searches fully independently,
+/// mirroring the single-list state shape used by UsersScreen/
+/// OrganizationsScreen but generic over 2 simultaneous lists. pageSize is
+/// per-tab (not a single screen-wide constant) so each tab's card grid can
+/// have its own "cards per page" independently.
 class _TabState<T> {
   List<T> items = [];
   int totalCount = 0;
   int currentPage = 0;
+  int pageSize = 10;
   bool isLoading = true;
   final searchController = TextEditingController();
   Timer? debounce;
 
-  int totalPages(int pageSize) => (totalCount / pageSize).ceil().clamp(1, 99999);
+  int get totalPages => (totalCount / pageSize).ceil().clamp(1, 99999);
 
   void dispose() {
     debounce?.cancel();
@@ -39,8 +42,10 @@ class _TabState<T> {
   }
 }
 
-/// Superadmin-facing organization detail screen: header + event/admin/
-/// superadmin counts + independently paginated/searchable sub-lists.
+/// Superadmin-facing organization detail screen: header + event/user counts
+/// + independently paginated/searchable Events and Users tabs (Users spans
+/// both OrganizationSuperAdmin and OrganizationAdmin accounts — there's no
+/// role split here, unlike the desktop app's own self-service Users screen).
 /// Reached only via the org card's "Pregled" action on OrganizationsScreen —
 /// there's no named-route table anywhere in this app, so this is pushed via
 /// `Navigator.push(MaterialPageRoute(...))`, not a sidebar destination.
@@ -55,14 +60,11 @@ class OrganizationDetailScreen extends StatefulWidget {
 
 class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     with SingleTickerProviderStateMixin {
-  static const int _pageSize = 10;
-
   late TabController _tabController;
   late OrganizationResponse _organization;
 
   final _eventsState = _TabState<EventResponse>();
-  final _adminsState = _TabState<AdminUserResponse>();
-  final _superAdminsState = _TabState<AdminUserResponse>();
+  final _usersState = _TabState<AdminUserResponse>();
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
 
@@ -70,16 +72,15 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
   void initState() {
     super.initState();
     _organization = widget.organization;
-    _tabController = TabController(length: 3, vsync: this);
-    Future.wait([_loadEvents(), _loadAdmins(), _loadSuperAdmins()]);
+    _tabController = TabController(length: 2, vsync: this);
+    Future.wait([_loadEvents(), _loadUsers()]);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _eventsState.dispose();
-    _adminsState.dispose();
-    _superAdminsState.dispose();
+    _usersState.dispose();
     super.dispose();
   }
 
@@ -90,7 +91,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     try {
       final searchObject = BaseSearchObject(
         page: _eventsState.currentPage,
-        pageSize: _pageSize,
+        pageSize: _eventsState.pageSize,
         fts: _eventsState.searchController.text.trim().isEmpty
             ? null
             : _eventsState.searchController.text.trim(),
@@ -115,20 +116,19 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     }
   }
 
-  Future<void> _loadAdmins() => _loadOrgUsers(_adminsState, 'OrganizationAdmin');
-
-  Future<void> _loadSuperAdmins() => _loadOrgUsers(_superAdminsState, 'OrganizationSuperAdmin');
-
-  Future<void> _loadOrgUsers(_TabState<AdminUserResponse> state, String role) async {
-    setState(() => state.isLoading = true);
+  /// All of the organization's users (both OrganizationSuperAdmin and
+  /// OrganizationAdmin) — no role filter, unlike the self-service Users
+  /// screen's org view (which is deliberately scoped to OrganizationAdmin
+  /// only). This is the platform-staff read view of "who's in this org".
+  Future<void> _loadUsers() async {
+    setState(() => _usersState.isLoading = true);
     try {
       final searchObject = OrganizationUserSearchObject(
-        page: state.currentPage,
-        pageSize: _pageSize,
-        fts: state.searchController.text.trim().isEmpty
+        page: _usersState.currentPage,
+        pageSize: _usersState.pageSize,
+        fts: _usersState.searchController.text.trim().isEmpty
             ? null
-            : state.searchController.text.trim(),
-        role: role,
+            : _usersState.searchController.text.trim(),
       );
       final result = await OrganizationUsersProvider().getAll(
         organizationId: _organization.id,
@@ -137,14 +137,14 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
       );
       if (mounted) {
         setState(() {
-          state.items = result.items;
-          state.totalCount = result.totalCount;
-          state.isLoading = false;
+          _usersState.items = result.items;
+          _usersState.totalCount = result.totalCount;
+          _usersState.isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => state.isLoading = false);
+        setState(() => _usersState.isLoading = false);
         handleApiError(e);
       }
     }
@@ -159,8 +159,16 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
   }
 
   void _goToPage(_TabState<dynamic> state, int page, Future<void> Function() reload) {
-    if (page < 0 || page >= state.totalPages(_pageSize)) return;
+    if (page < 0 || page >= state.totalPages) return;
     setState(() => state.currentPage = page);
+    reload();
+  }
+
+  void _onPageSizeChanged(_TabState<dynamic> state, int size, Future<void> Function() reload) {
+    setState(() {
+      state.pageSize = size;
+      state.currentPage = 0;
+    });
     reload();
   }
 
@@ -203,7 +211,15 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
           const SizedBox(width: 12),
         ],
       ),
-      body: Padding(
+      // The whole page is one SingleChildScrollView (not header/stats/tabbar-
+      // fixed + internally-scrolling tab body) — scrolling moves the org
+      // header, stat cards, and tab selector out of view along with
+      // everything else, matching Categories/Organizations/Users. This is
+      // why TabBarView (a PageView under the hood, which needs a bounded
+      // height) is gone — TabController + TabBar stay only as the visual
+      // tab-selector strip, driving which single tab's content is rendered
+      // inline below it, no swipe gesture needed on a desktop app.
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,15 +235,9 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
                 ),
                 const SizedBox(width: 16),
                 StatCard(
-                  label: 'Broj Administratora',
-                  value: '${_adminsState.totalCount}',
+                  label: 'Broj Korisnika',
+                  value: '${_usersState.totalCount}',
                   valueColor: primary,
-                ),
-                const SizedBox(width: 16),
-                StatCard(
-                  label: 'Broj Super Administratora',
-                  value: '${_superAdminsState.totalCount}',
-                  valueColor: AppColors.rolePurple,
                 ),
               ],
             ),
@@ -238,23 +248,16 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
               labelColor: primary,
               unselectedLabelColor: textTertiary,
               indicatorColor: primary,
+              onTap: (_) => setState(() {}),
               tabs: const [
                 Tab(text: 'Događaji'),
-                Tab(text: 'Administratori'),
-                Tab(text: 'Super Administratori'),
+                Tab(text: 'Korisnici'),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildEventsTab(isDark, textPrimary, textTertiary),
-                  _buildAdminsTab(_adminsState, _loadAdmins, isDark, textPrimary, textTertiary),
-                  _buildAdminsTab(
-                      _superAdminsState, _loadSuperAdmins, isDark, textPrimary, textTertiary),
-                ],
-              ),
-            ),
+            const SizedBox(height: 16),
+            _tabController.index == 0
+                ? _buildEventsTab(isDark, textPrimary, textTertiary)
+                : _buildUsersTab(isDark, textPrimary, textTertiary),
           ],
         ),
       ),
@@ -280,9 +283,13 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
               children: [
                 Row(
                   children: [
-                    Text(
-                      _organization.name,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary),
+                    Flexible(
+                      child: Text(
+                        _organization.name,
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Container(
@@ -321,70 +328,110 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     );
   }
 
+  // Not wrapped in its own SingleChildScrollView/Expanded — this tab's content
+  // is rendered directly inline in the outer page's single SingleChildScrollView
+  // (see build()), so it just needs to be a plain, naturally-sized Column.
   Widget _buildEventsTab(bool isDark, Color textPrimary, Color textTertiary) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _searchField(_eventsState, _loadEvents, 'Pretražite događaje...', isDark, textPrimary, textTertiary),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _eventsState.isLoading
-                ? Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary))
-                : _eventsState.items.isEmpty
-                    ? _emptyState(LucideIcons.calendarX, 'Nema događaja', isDark, textTertiary)
-                    : ListView.separated(
-                        itemCount: _eventsState.items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) =>
-                            _EventCard(event: _eventsState.items[index], isDark: isDark),
-                      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _searchField(_eventsState, _loadEvents, 'Pretražite događaje...', isDark, textPrimary, textTertiary),
+        const SizedBox(height: 16),
+        if (_eventsState.isLoading)
+          SizedBox(
+            height: 300,
+            child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
+          )
+        else if (_eventsState.items.isEmpty)
+          SizedBox(height: 300, child: _emptyState(LucideIcons.calendarX, 'Nema događaja', isDark, textTertiary))
+        else
+          _cardGrid(
+            itemCount: _eventsState.items.length,
+            maxCrossAxisExtent: 260,
+            mainAxisExtent: 230,
+            itemBuilder: (context, index) =>
+                _EventGridCard(event: _eventsState.items[index], isDark: isDark),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _eventsState.currentPage,
-              totalPages: _eventsState.totalPages(_pageSize),
-              onPageChanged: (page) => _goToPage(_eventsState, page, _loadEvents),
-            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: PaginationBar(
+            currentPage: _eventsState.currentPage,
+            totalPages: _eventsState.totalPages,
+            onPageChanged: (page) => _goToPage(_eventsState, page, _loadEvents),
+            pageSize: _eventsState.pageSize,
+            onPageSizeChanged: (size) => _onPageSizeChanged(_eventsState, size, _loadEvents),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildAdminsTab(_TabState<AdminUserResponse> state, Future<void> Function() reload,
-      bool isDark, Color textPrimary, Color textTertiary) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _searchField(state, reload, 'Pretražite po imenu ili emailu...', isDark, textPrimary, textTertiary),
-          const SizedBox(height: 16),
-          Expanded(
-            child: state.isLoading
-                ? Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary))
-                : state.items.isEmpty
-                    ? _emptyState(LucideIcons.userX, 'Nema korisnika', isDark, textTertiary)
-                    : ListView.separated(
-                        itemCount: state.items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) =>
-                            _AdminRow(user: state.items[index], isDark: isDark),
-                      ),
+  // Same shape as _buildEventsTab — see its comment.
+  Widget _buildUsersTab(bool isDark, Color textPrimary, Color textTertiary) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _searchField(_usersState, _loadUsers, 'Pretražite po imenu ili emailu...', isDark, textPrimary, textTertiary),
+        const SizedBox(height: 16),
+        if (_usersState.isLoading)
+          SizedBox(
+            height: 300,
+            child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
+          )
+        else if (_usersState.items.isEmpty)
+          SizedBox(height: 300, child: _emptyState(LucideIcons.userX, 'Nema korisnika', isDark, textTertiary))
+        else
+          _cardGrid(
+            itemCount: _usersState.items.length,
+            maxCrossAxisExtent: 260,
+            mainAxisExtent: 380,
+            // Read-only here — this is the platform-staff view of "who's in
+            // this org"; editing/deleting org users lives on the desktop app's
+            // own self-service Users screen (OrganizationSuperAdmin) and the
+            // SuperAdmin platform Users screen, not this detail view.
+            itemBuilder: (context, index) => UserGridCard(user: _usersState.items[index]),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: state.currentPage,
-              totalPages: state.totalPages(_pageSize),
-              onPageChanged: (page) => _goToPage(state, page, reload),
-            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: PaginationBar(
+            currentPage: _usersState.currentPage,
+            totalPages: _usersState.totalPages,
+            onPageChanged: (page) => _goToPage(_usersState, page, _loadUsers),
+            pageSize: _usersState.pageSize,
+            onPageSizeChanged: (size) => _onPageSizeChanged(_usersState, size, _loadUsers),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  // MaxCrossAxisExtent (not a breakpoint-driven fixed count) caps how wide/tall
+  // any single card can get — a fixed crossAxisCount let a card grow
+  // arbitrarily large on a wide monitor with few results, which looked broken
+  // even though nothing overflowed. This way more columns appear as the
+  // window widens instead of existing cards stretching. mainAxisExtent (a
+  // fixed pixel height per caller, not a shared aspect ratio) lets the Events
+  // and Users tabs each size their own card correctly. shrinkWrap +
+  // NeverScrollableScrollPhysics because the grid now lives inside the tab's
+  // own SingleChildScrollView, not a bounded Expanded — the outer scroll view
+  // owns scrolling, the grid just lays out at its natural (full) height.
+  Widget _cardGrid({
+    required int itemCount,
+    required double maxCrossAxisExtent,
+    required double mainAxisExtent,
+    required Widget Function(BuildContext, int) itemBuilder,
+  }) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: maxCrossAxisExtent,
+        mainAxisExtent: mainAxisExtent,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
       ),
+      itemCount: itemCount,
+      itemBuilder: itemBuilder,
     );
   }
 
@@ -449,13 +496,13 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// ─── Event card ─────────────────────────────────────────────────────────────
+// ─── Event grid card ────────────────────────────────────────────────────────
 
-class _EventCard extends StatelessWidget {
+class _EventGridCard extends StatelessWidget {
   final EventResponse event;
   final bool isDark;
 
-  const _EventCard({required this.event, required this.isDark});
+  const _EventGridCard({required this.event, required this.isDark});
 
   String _formatDate(DateTime date) {
     final d = date.toLocal();
@@ -471,154 +518,67 @@ class _EventCard extends StatelessWidget {
     final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final statusColor = event.isPublished ? AppColors.success : AppColors.warning;
+    final statusColorDark = event.isPublished ? AppColors.successDark : AppColors.warningDark;
+    final primary = isDark ? AppColors.secondary : AppColors.primary;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(event.name,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
-                const SizedBox(height: 4),
-                Text(_formatDate(event.date), style: TextStyle(fontSize: 13, color: textTertiary)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: (isDark ? AppColors.secondary : AppColors.primary).withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              event.categoryName,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppColors.secondary : AppColors.primary,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              event.isPublished ? 'Objavljen' : 'Nacrt',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: event.isPublished ? AppColors.successDark : AppColors.warningDark,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Admin/superadmin row ───────────────────────────────────────────────────
-
-class _AdminRow extends StatelessWidget {
-  final AdminUserResponse user;
-  final bool isDark;
-
-  const _AdminRow({required this.user, required this.isDark});
-
-  String _initials(String name) {
-    if (name.trim().isEmpty) return '?';
-    return name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .take(2)
-        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
-        .join();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final roleColor = roleBadgeColor(user.roleName, isDark);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-      ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [AppColors.secondary, AppColors.primary]
-                    : [AppColors.primary, AppColors.primaryDark],
-              ),
+              color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            alignment: Alignment.center,
-            child: Text(
-              _initials(user.fullName),
-              style: TextStyle(
-                color: isDark ? AppColors.darkBackground : Colors.white,
-                fontWeight: FontWeight.w700,
+            child: Icon(LucideIcons.calendarDays, color: primary, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            event.name,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(_formatDate(event.date), style: TextStyle(fontSize: 12, color: textTertiary)),
+          const Spacer(),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  event.categoryName,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user.fullName,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
-                const SizedBox(height: 2),
-                Text(user.email, style: TextStyle(fontSize: 13, color: textTertiary)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: roleColor.withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              roleBadgeText(user.roleName),
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: roleColor),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: (user.isActive ? AppColors.success : AppColors.error)
-                  .withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              user.isActive ? 'Aktivan' : 'Neaktivan',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: user.isActive ? AppColors.successDark : AppColors.errorDark,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  event.isPublished ? 'Objavljen' : 'Nacrt',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColorDark),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

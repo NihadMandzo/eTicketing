@@ -1,4 +1,3 @@
-using eTicketing.Identity.Data.Enums;
 using FluentValidation;
 
 namespace eTicketing.Identity.Business.Organizations.Validators;
@@ -21,9 +20,6 @@ public class CreateOrganizationRequestValidator : AbstractValidator<CreateOrgani
         RuleFor(x => x.AdminEmail).NotEmpty().EmailAddress().MaximumLength(255);
         RuleFor(x => x.AdminUsername).NotEmpty().Length(3, 50);
         RuleFor(x => x.AdminPassword).NotEmpty().MinimumLength(8).MaximumLength(100);
-        RuleFor(x => x.AdminRole).IsInEnum()
-            .Must(r => r is RoleType.OrganizationSuperAdmin or RoleType.OrganizationAdmin)
-            .WithMessage("Uloga administratora organizacije mora biti OrganizationSuperAdmin ili OrganizationAdmin.");
     }
 
     private static bool BeAValidUrl(string? url) =>

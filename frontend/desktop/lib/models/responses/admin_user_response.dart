@@ -9,6 +9,8 @@ class AdminUserResponse {
   final bool isEmailVerified;
   final bool isFirstLogin;
   final String roleName;
+  final String? organizationId;
+  final String? organizationName;
   final DateTime? lastLoginAt;
   final DateTime createdAt;
 
@@ -23,6 +25,8 @@ class AdminUserResponse {
     required this.isEmailVerified,
     required this.isFirstLogin,
     required this.roleName,
+    this.organizationId,
+    this.organizationName,
     this.lastLoginAt,
     required this.createdAt,
   });
@@ -48,6 +52,8 @@ class AdminUserResponse {
       isEmailVerified: json['isEmailVerified'] as bool? ?? false,
       isFirstLogin: json['isFirstLogin'] as bool? ?? false,
       roleName: json['roleName'] as String? ?? '',
+      organizationId: json['organizationId'] as String?,
+      organizationName: json['organizationName'] as String?,
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.tryParse(json['lastLoginAt'] as String)
           : null,

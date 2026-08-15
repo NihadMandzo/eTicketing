@@ -27,7 +27,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   int _currentPage = 0;
   int _totalCount = 0;
-  static const int _pageSize = 8;
+  int _pageSize = 10;
 
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
 
@@ -171,6 +171,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     _loadData();
   }
 
+  void _onPageSizeChanged(int size) {
+    setState(() {
+      _pageSize = size;
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -183,7 +191,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final isDark = _isDark;
     final primary = isDark ? AppColors.secondary : AppColors.primary;
     final primaryDark = isDark ? AppColors.primary : AppColors.primaryDark;
-    return Padding(
+    // The whole page is one SingleChildScrollView (not header-fixed +
+    // internally-scrolling grid) — scrolling moves the title/search/count out
+    // of view along with everything else, so the pagination bar is always
+    // reachable by scrolling the same way as the rest of the content.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,66 +327,64 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               ),
             ),
 
-          // ── Grid ──────────────────────────────────────────────────
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(color: primary),
-                  )
-                : _categories.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(LucideIcons.layoutGrid,
-                                size: 48,
-                                color: isDark
-                                    ? AppColors.darkBorderInput
-                                    : AppColors.lightBorderInput),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Nema kategorija',
-                              style: TextStyle(
-                                  color: isDark
-                                      ? AppColors.darkTextTertiary
-                                      : AppColors.lightTextTertiary,
-                                  fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          int crossAxisCount = 4;
-                          if (constraints.maxWidth >= 1400) {
-                            crossAxisCount = 8;
-                          } else if (constraints.maxWidth >= 1100) {
-                            crossAxisCount = 6;
-                          } else if (constraints.maxWidth >= 800) {
-                            crossAxisCount = 5;
-                          }
-
-                          return GridView.builder(
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.9,
-                            ),
-                            itemCount: _categories.length,
-                            itemBuilder: (context, index) {
-                              final cat = _categories[index];
-                              return _CategoryCard(
-                                category: cat,
-                                onEdit: () => _openDialog(category: cat),
-                                onDelete: () => _deleteCategory(cat),
-                              );
-                            },
-                          );
-                        },
-                      ),
-          ),
+          // ── Grid ── not wrapped in Expanded (the page is one scroll view,
+          // not header-fixed + internally-scrolling grid) — loading/empty
+          // states get an explicit height since there's no ambient Expanded
+          // to size them anymore.
+          if (_isLoading)
+            SizedBox(
+              height: 300,
+              child: Center(child: CircularProgressIndicator(color: primary)),
+            )
+          else if (_categories.isEmpty)
+            SizedBox(
+              height: 300,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.layoutGrid,
+                        size: 48,
+                        color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nema kategorija',
+                      style: TextStyle(
+                          color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+                          fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            GridView.builder(
+              // MaxCrossAxisExtent (not a breakpoint-driven fixed count) caps how
+              // wide/tall any single card can get — a fixed crossAxisCount let a
+              // card grow arbitrarily large on a wide monitor with few results,
+              // which looked broken even though nothing overflowed. This way more
+              // columns appear as the window widens instead of existing cards
+              // stretching. mainAxisExtent (a fixed pixel height, not an aspect
+              // ratio) is generous enough for the icon + name + 2-line description,
+              // so it can never overflow either.
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                mainAxisExtent: 240,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                final cat = _categories[index];
+                return _CategoryCard(
+                  category: cat,
+                  onEdit: () => _openDialog(category: cat),
+                  onDelete: () => _deleteCategory(cat),
+                );
+              },
+            ),
 
           // ── Pagination ───────────────────────────────────────────
           Padding(
@@ -383,6 +393,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               currentPage: _currentPage,
               totalPages: _totalPages,
               onPageChanged: _goToPage,
+              pageSize: _pageSize,
+              onPageSizeChanged: _onPageSizeChanged,
             ),
           ),
         ],
@@ -505,19 +517,23 @@ class _CategoryCardState extends State<_CategoryCard> {
                   ),
                   const SizedBox(height: 6),
 
-                  // Description
-                  Text(
-                    widget.category.description,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppColors.darkTextTertiary
-                          : AppColors.lightTextTertiary,
-                      height: 1.4,
+                  // Description — Flexible (not a bare Text) so it shrinks/clips
+                  // gracefully instead of overflowing the card's fixed
+                  // aspect-ratio height at narrower breakpoints (more columns).
+                  Flexible(
+                    child: Text(
+                      widget.category.description,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.darkTextTertiary
+                            : AppColors.lightTextTertiary,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

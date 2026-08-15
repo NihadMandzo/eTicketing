@@ -13,7 +13,8 @@ public class RefreshTokenRepository : Repository<RefreshToken, int>, IRefreshTok
         // ExecuteUpdateAsync, which bypasses the change tracker entirely. A tracked result here
         // would let a later call on the same DbContext see a stale, pre-revoke RevokedAt/
         // ReplacedByTokenHash instead of what TryRevokeAsync actually wrote.
-        => Query().AsNoTracking().Include(t => t.User).FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
+        => Query().AsNoTracking().Include(t => t.User).ThenInclude(u => u.Organization)
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
 
     public async Task RevokeAllActiveForUserAsync(Guid userId, CancellationToken ct = default)
     {
