@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'core/api_client.dart';
+import 'screens/change_password_screen.dart';
+import 'screens/edit_profile_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/verify_email_screen.dart';
@@ -53,6 +56,9 @@ class MyApp extends StatelessWidget {
             '/settings': (_) => const SettingsScreen(),
             '/verify-email': (_) => const VerifyEmailScreen(),
             '/forgot-password': (_) => const ForgotPasswordScreen(),
+            '/profile': (_) => const ProfileScreen(),
+            '/edit-profile': (_) => const EditProfileScreen(),
+            '/change-password': (_) => const ChangePasswordScreen(),
           },
         );
       },

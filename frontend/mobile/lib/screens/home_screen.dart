@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../core/session.dart';
-import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'register_screen.dart';
 import 'settings_screen.dart';
 
@@ -33,10 +33,15 @@ class HomeScreen extends StatelessWidget {
             valueListenable: Session.currentUser,
             builder: (context, user, _) {
               if (user == null) return const SizedBox.shrink();
+              // Logout now lives on ProfileScreen (matches the design
+              // mockup's "Profil" screen) rather than a standalone app-bar
+              // icon.
               return IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                tooltip: 'Odjavi se',
-                onPressed: () => _confirmLogout(context),
+                icon: const Icon(Icons.account_circle_outlined),
+                tooltip: 'Profil',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                ),
               );
             },
           ),
@@ -114,23 +119,6 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Odjava'),
-        content: const Text('Da li se želite odjaviti?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Odustani')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Odjavi se')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    await AuthService().logout();
-  }
 }
 
 class _SignedInCard extends StatelessWidget {
@@ -144,21 +132,37 @@ class _SignedInCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurfaceTint : AppColors.lightSurfaceTint,
+    return Material(
+      color: isDark ? AppColors.darkSurfaceTint : AppColors.lightSurfaceTint,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primary.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Prijavljeni ste kao', style: TextStyle(fontSize: 12, color: tertiaryText)),
-          const SizedBox(height: 4),
-          Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          Text(email, style: TextStyle(fontSize: 13, color: tertiaryText)),
-        ],
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: primary.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Prijavljeni ste kao', style: TextStyle(fontSize: 12, color: tertiaryText)),
+                    const SizedBox(height: 4),
+                    Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text(email, style: TextStyle(fontSize: 13, color: tertiaryText)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: tertiaryText),
+            ],
+          ),
+        ),
       ),
     );
   }
