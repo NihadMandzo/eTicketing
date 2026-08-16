@@ -77,6 +77,10 @@ class AppTheme {
         backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         foregroundColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
         elevation: 0,
+        // Matches the design mockup's sub-screen headers (Detalji događaja,
+        // Ulaznica, Plaćanje) — a back chevron with a centered title, not
+        // Android's default left-aligned AppBar title.
+        centerTitle: true,
       ),
     );
   }

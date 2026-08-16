@@ -5,102 +5,114 @@ import '../models/responses/user_response.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_controller.dart';
+import '../widgets/coming_soon_screen.dart';
+import '../widgets/initials_avatar.dart';
 import '../widgets/responsive_page.dart';
 import 'change_password_screen.dart';
 import 'edit_profile_screen.dart';
+import 'login_screen.dart';
 
-/// Reachable from the avatar button on [HomeScreen]'s app bar, only when
-/// signed in. Holds the account summary + personal-info/change-password
-/// entry points + the light/dark toggle + logout — mirrors the "Profil"
-/// screen in the design mockup referenced in the mobile frontend rules.
+/// The "Profil" tab body inside [MainShell] — account summary + personal
+/// info/change-password/order-history entry points, the light/dark toggle,
+/// and logout. No `Scaffold`/`AppBar` of its own: [MainShell] supplies both
+/// so the bottom nav bar and app bar stay consistent across tabs.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profil')),
-      body: SafeArea(
-        child: ValueListenableBuilder<UserResponse?>(
-          valueListenable: Session.currentUser,
-          builder: (context, user, _) {
-            // Guarded by the caller (only navigated to when signed in), but
-            // fall back gracefully rather than crash if the session drops
-            // while this screen is open (e.g. token revoked elsewhere).
-            if (user == null) {
-              return const Center(child: Text('Niste prijavljeni.'));
-            }
-            return SingleChildScrollView(
-              child: ResponsivePage(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Column(
-                        children: [
-                          _InitialsAvatar(name: user.fullName, radius: 36),
-                          const SizedBox(height: 12),
-                          Text(user.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 2),
-                          Text(
-                            user.email,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context).brightness == Brightness.dark
-                                  ? AppColors.darkTextTertiary
-                                  : AppColors.lightTextTertiary,
-                            ),
-                          ),
-                        ],
+    return ValueListenableBuilder<UserResponse?>(
+      valueListenable: Session.currentUser,
+      builder: (context, user, _) {
+        // MainShell only exists once signed in, but fall back gracefully
+        // rather than crash if the session drops while this tab is visible
+        // (e.g. token revoked elsewhere).
+        if (user == null) {
+          return const Center(child: Text('Niste prijavljeni.'));
+        }
+        return SingleChildScrollView(
+          child: ResponsivePage(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 16),
+                Center(
+                  child: Column(
+                    children: [
+                      InitialsAvatar(name: user.fullName, radius: 36),
+                      const SizedBox(height: 12),
+                      Text(user.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(
+                        user.email,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.darkTextTertiary
+                              : AppColors.lightTextTertiary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: Column(
-                        children: [
-                          _ProfileRow(
-                            icon: Icons.person_outline_rounded,
-                            label: 'Lični podaci',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-                            ),
-                          ),
-                          const Divider(height: 1),
-                          _ProfileRow(
-                            icon: Icons.lock_outline_rounded,
-                            label: 'Promijeni lozinku',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: _DarkModeRow(),
-                    ),
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      onPressed: () => _confirmLogout(context),
-                      icon: const Icon(Icons.logout_rounded, color: AppColors.errorDark),
-                      label: const Text('Odjava', style: TextStyle(color: AppColors.errorDark, fontWeight: FontWeight.w700)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.errorDark, width: 2),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-      ),
+                const SizedBox(height: 28),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      _ProfileRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Lični podaci',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.lock_outline_rounded,
+                        label: 'Promijeni lozinku',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.receipt_long_outlined,
+                        label: 'Historija narudžbi',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ComingSoonScreen(
+                              title: 'Historija narudžbi',
+                              icon: Icons.receipt_long_outlined,
+                              message: 'Historija vaših narudžbi će uskoro biti dostupna ovdje.',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: _DarkModeRow(),
+                ),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  onPressed: () => _confirmLogout(context),
+                  icon: const Icon(Icons.logout_rounded, color: AppColors.errorDark),
+                  label: const Text('Odjava', style: TextStyle(color: AppColors.errorDark, fontWeight: FontWeight.w700)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.errorDark, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -119,7 +131,14 @@ class ProfileScreen extends StatelessWidget {
     if (confirmed != true) return;
 
     await AuthService().logout();
-    if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    if (!context.mounted) return;
+    // The app is login-gated (see LoginScreen/MainShell) — signing out
+    // always lands back on the login screen, replacing the whole stack
+    // rather than popping (this tab can be several pushes deep).
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 }
 
@@ -168,36 +187,6 @@ class _DarkModeRow extends StatelessWidget {
             onChanged: (v) => ThemeController.setMode(v ? ThemeMode.dark : ThemeMode.light),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Circular initials avatar — used both on this screen and (smaller) in
-/// [HomeScreen]'s app bar, matching the design mockup's avatar treatment.
-class _InitialsAvatar extends StatelessWidget {
-  final String name;
-  final double radius;
-
-  const _InitialsAvatar({required this.name, this.radius = 18});
-
-  String get _initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    final first = parts.first[0];
-    final last = parts.length > 1 ? parts.last[0] : '';
-    return (first + last).toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: primary,
-      child: Text(
-        _initials,
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: radius * 0.6),
       ),
     );
   }

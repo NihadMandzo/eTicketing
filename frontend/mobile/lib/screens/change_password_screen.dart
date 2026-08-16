@@ -6,11 +6,12 @@ import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
+import 'login_screen.dart';
 
 /// Mirrors `ChangePasswordRequestValidator` on the backend field-for-field.
 /// On success the backend revokes every active refresh token for this
 /// account (see AuthService.ChangePasswordAsync), so this screen signs the
-/// user out and returns to the guest-accessible home screen rather than
+/// user out and returns to the (login-gated) login screen rather than
 /// pretending the current session is still good.
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -56,7 +57,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (!mounted) return;
       await AuthService().logout();
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Lozinka je promijenjena. Prijavite se ponovo.'),

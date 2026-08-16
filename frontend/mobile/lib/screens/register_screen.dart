@@ -81,8 +81,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
+    // No AppBar — matches Login's chrome-less presentation; the footer link
+    // below is the only (and sufficient) way back to Login.
     return Scaffold(
-      appBar: AppBar(title: const Text('Registracija')),
       body: SafeArea(
         child: SingleChildScrollView(
           child: ResponsivePage(
@@ -91,7 +92,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 24),
                   Text(
                     'Kreirajte nalog',
                     style: TextStyle(

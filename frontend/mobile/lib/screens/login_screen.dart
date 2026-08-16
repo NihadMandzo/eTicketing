@@ -7,8 +7,13 @@ import '../theme/app_colors.dart';
 import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
 import 'forgot_password_screen.dart';
+import 'main_shell.dart';
 import 'register_screen.dart';
 
+/// The app's landing page — login-gated by explicit product decision (see
+/// the "Design reference" note in `.claude/rules/22-frontend-mobile.md`):
+/// there is no guest-browsable home screen, this is always the first thing
+/// shown to a signed-out user.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -40,7 +45,10 @@ class _LoginScreenState extends State<LoginScreen> {
       ));
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
     } on ApiException catch (e) {
       if (mounted) _showError(e.apiError.displayMessage);
     } catch (_) {
@@ -62,8 +70,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
+    // No AppBar — the mockup's login screen has no header of any kind, just
+    // the status bar, then straight into the logo/form (see the "Design
+    // reference" note in `.claude/rules/22-frontend-mobile.md`).
     return Scaffold(
-      appBar: AppBar(title: const Text('Prijava')),
       body: SafeArea(
         child: SingleChildScrollView(
           child: ResponsivePage(
@@ -72,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 32),
                   Center(
                     child: Column(
                       children: [
