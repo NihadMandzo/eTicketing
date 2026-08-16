@@ -13,6 +13,27 @@ import 'base_provider.dart';
 /// note).
 class AdminProvider extends BaseProvider<AdminUserResponse, String> {
   AdminProvider() : super('admins');
+
+  Never _handleError(dynamic response) {
+    ApiError apiError;
+    try {
+      final body = response.data;
+      apiError = body is Map<String, dynamic> ? ApiError.fromJson(body) : ApiError(message: body?.toString());
+    } catch (_) {
+      apiError = ApiError(message: response.data?.toString());
+    }
+    throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
+  }
+
+  bool _isSuccess(int? statusCode) => statusCode != null && statusCode >= 200 && statusCode < 300;
+
+  /// SuperAdmin directly sets an Admin/OrganizationSuperAdmin/
+  /// OrganizationAdmin account's password — doesn't fit BaseProvider.update(),
+  /// which PUTs the full profile shape to a different route.
+  Future<void> setPassword(String id, dynamic request) async {
+    final response = await apiClient.post('admins/$id/set-password', data: request);
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
 }
 
 /// Provider for the nested /api/organizations/{organizationId}/users

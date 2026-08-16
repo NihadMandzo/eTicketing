@@ -141,6 +141,10 @@ services:
     container_name: eticketing-notifications
     environment:
       RabbitMq__Host: "rabbitmq"
+      Brevo__ApiKey: "${BREVO_API_KEY:?Set BREVO_API_KEY in .env}"
+      Brevo__SenderEmail: "${BREVO_SENDER_EMAIL:?Set BREVO_SENDER_EMAIL in .env}"
+      Brevo__SenderName: "${BREVO_SENDER_NAME:-eKarta}"
+      Frontend__WebBaseUrl: "${CORS_ALLOWED_ORIGIN:-http://localhost:4200}"
     depends_on:
       rabbitmq: { condition: service_healthy }
     networks: [eticketing-network]

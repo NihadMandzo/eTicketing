@@ -51,6 +51,10 @@
           }
         </label>
 
+        <p class="auth-forgot">
+          <a routerLink="/zaboravljena-lozinka">Zaboravili ste lozinku?</a>
+        </p>
+
         <button type="submit" class="btn btn-primary btn-lg submit-btn" [disabled]="isLoading()">
           {{ isLoading() ? 'Prijava u toku…' : 'Prijavite se' }}
         </button>

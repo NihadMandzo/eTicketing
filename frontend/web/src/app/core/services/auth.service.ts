@@ -5,11 +5,14 @@ import { catchError, map, Observable, of, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ChangePasswordRequest,
+  ForgotPasswordRequest,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
+  ResetPasswordRequest,
   UpdateUserRequest,
   UserResponse,
+  VerifyEmailRequest,
 } from '../models/auth.models';
 
 /**
@@ -75,6 +78,28 @@ export class AuthService {
     return this.http
       .put<UserResponse>(`${this.baseUrl}/update-user`, request)
       .pipe(tap((user) => this.currentUser.set(user)));
+  }
+
+  /** Confirms the 6-char code emailed on registration — requires the caller to already be
+   * authenticated (Register itself signs the buyer in), so the target is always the caller's
+   * own account, never one supplied in the request. */
+  verifyEmail(request: VerifyEmailRequest): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/verify-email`, request);
+  }
+
+  resendVerificationEmail(): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/resend-verification-email`, {});
+  }
+
+  /** Always resolves — the backend returns 200 for both "email sent" and "no such account"
+   * (anti-enumeration), so the component shows the same generic message either way. The one
+   * exception (a staff/org account) surfaces as a real error with a specific message. */
+  forgotPassword(request: ForgotPasswordRequest): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/forgot-password`, request);
+  }
+
+  resetPassword(request: ResetPasswordRequest): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/reset-password`, request);
   }
 
   logout(): Observable<void> {

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'core/api_client.dart';
-import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
-import 'screens/settings_screen.dart';
+import 'screens/main_shell.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
@@ -19,19 +17,22 @@ Future<void> main() async {
   // Restore the persisted light/dark preference before first paint.
   await ThemeController.init();
 
-  // Attempt to silently restore a persisted session (guest browsing works
-  // either way — this only pre-fills Session.currentUser if one exists).
+  // Attempt to silently restore a persisted session so a returning user
+  // lands straight in the app shell instead of the login screen.
+  var startSignedIn = false;
   try {
-    await AuthService().me();
+    startSignedIn = await AuthService().me() != null;
   } catch (_) {
-    // No session, expired, or revoked — the app just starts in guest mode.
+    // No session, expired, or revoked — start signed out.
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(startSignedIn: startSignedIn));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool startSignedIn;
+
+  const MyApp({super.key, this.startSignedIn = false});
 
   @override
   Widget build(BuildContext context) {
@@ -43,13 +44,9 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: mode,
-          initialRoute: '/',
-          routes: {
-            '/': (_) => const HomeScreen(),
-            '/login': (_) => const LoginScreen(),
-            '/register': (_) => const RegisterScreen(),
-            '/settings': (_) => const SettingsScreen(),
-          },
+          // Login-gated app (see LoginScreen) — no guest-browsable landing
+          // page. A restored session skips straight to the app shell.
+          home: startSignedIn ? const MainShell() : const LoginScreen(),
         );
       },
     );

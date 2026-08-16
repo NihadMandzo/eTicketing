@@ -14,6 +14,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Email).HasMaxLength(255).IsRequired();
         builder.Property(u => u.Username).HasMaxLength(50).IsRequired();
         builder.Property(u => u.PhoneNumber).HasMaxLength(20);
+        builder.Property(u => u.EmailVerificationCode).HasMaxLength(10);
 
         // Role is a plain int-backed enum column (RoleType) — not a relationship, no FK.
         builder.Property(u => u.Role).HasConversion<int>();

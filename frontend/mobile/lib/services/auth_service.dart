@@ -3,8 +3,12 @@ import 'package:dio/dio.dart';
 import '../core/api_client.dart';
 import '../core/session.dart';
 import '../models/api_error.dart';
+import '../models/requests/change_password_request.dart';
+import '../models/requests/forgot_password_request.dart';
 import '../models/requests/login_request.dart';
 import '../models/requests/register_request.dart';
+import '../models/requests/update_user_request.dart';
+import '../models/requests/verify_email_request.dart';
 import '../models/responses/login_response.dart';
 import '../models/responses/user_response.dart';
 import 'api_exception.dart';
@@ -74,5 +78,50 @@ class AuthService {
     } finally {
       Session.currentUser.value = null;
     }
+  }
+
+  /// Confirms the 6-char code emailed on registration. Authenticated —
+  /// register() already signs the buyer in, so the target is always the
+  /// caller's own account, never one supplied in the request.
+  Future<void> verifyEmail(VerifyEmailRequest request) async {
+    final response = await apiClient.post('$_endpoint/verify-email', data: request.toJson());
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
+
+  Future<void> resendVerificationEmail() async {
+    final response = await apiClient.post('$_endpoint/resend-verification-email');
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
+
+  /// Always resolves on a 2xx — the backend returns 200 both when an
+  /// account exists and when it doesn't (anti-enumeration), so the screen
+  /// shows the same generic message either way. The one exception (a
+  /// staff/org account) surfaces as a real ApiException with a specific
+  /// message.
+  Future<void> forgotPassword(ForgotPasswordRequest request) async {
+    final response = await apiClient.post('$_endpoint/forgot-password', data: request.toJson());
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
+
+  /// Updates the caller's own personal info (name/username/phone). Refreshes
+  /// [Session.currentUser] with the server's response on success.
+  Future<UserResponse> updateUser(UpdateUserRequest request) async {
+    final response = await apiClient.put('$_endpoint/update-user', data: request.toJson());
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    final user = UserResponse.fromJson(response.data as Map<String, dynamic>);
+    Session.currentUser.value = user;
+    return user;
+  }
+
+  /// Changes the caller's own password. The backend revokes every active
+  /// refresh token for this account on success (see AuthService.ChangePasswordAsync
+  /// server-side), so the caller must sign in again afterwards — callers of
+  /// this method should follow up with [logout] and route back to the login
+  /// screen rather than assuming the session stays valid.
+  Future<void> changePassword(ChangePasswordRequest request) async {
+    final response = await apiClient.post('$_endpoint/change-password', data: request.toJson());
+    if (!_isSuccess(response.statusCode)) _handleError(response);
   }
 }

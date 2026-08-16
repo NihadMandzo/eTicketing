@@ -14,8 +14,15 @@ class UserGridCard extends StatefulWidget {
   final AdminUserResponse user;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onSetPassword;
 
-  const UserGridCard({super.key, required this.user, this.onEdit, this.onDelete});
+  const UserGridCard({
+    super.key,
+    required this.user,
+    this.onEdit,
+    this.onDelete,
+    this.onSetPassword,
+  });
 
   @override
   State<UserGridCard> createState() => _UserGridCardState();
@@ -227,6 +234,17 @@ class _UserGridCardState extends State<UserGridCard> {
                         ),
                       ),
                   ],
+                ),
+              ],
+              // Stacked below Edit/Delete, not crammed into the same row —
+              // three narrow buttons wouldn't fit this card's width cleanly.
+              if (widget.onSetPassword != null) ...[
+                const SizedBox(height: 8),
+                _CardActionButton(
+                  icon: LucideIcons.keyRound,
+                  label: 'Promijeni Lozinku',
+                  isDestructive: false,
+                  onTap: widget.onSetPassword!,
                 ),
               ],
             ],

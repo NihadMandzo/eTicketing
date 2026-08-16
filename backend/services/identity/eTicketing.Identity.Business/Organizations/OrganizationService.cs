@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
@@ -22,17 +23,20 @@ public class OrganizationService : IOrganizationService
     private readonly IUserRepository _userRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
+    private readonly IEventPublisher _eventPublisher;
 
     public OrganizationService(
         IOrganizationRepository organizationRepository,
         IUserRepository userRepository,
         IUnitOfWork unitOfWork,
-        IBlobStorageService blobStorageService)
+        IBlobStorageService blobStorageService,
+        IEventPublisher eventPublisher)
     {
         _organizationRepository = organizationRepository;
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<Result<PagedResult<OrganizationResponse>>> GetAsync(OrganizationQuery query, CancellationToken ct = default)
@@ -76,6 +80,11 @@ public class OrganizationService : IOrganizationService
 
         // Jedan SaveChangesAsync poziv — organizacija i prvi organizator se upisuju u istoj transakciji.
         await _unitOfWork.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishAsync(
+            EventNames.OrganizationCreated,
+            new OrganizationCreatedNotification(organization.Id, organization.Name, request.NotificationEmail),
+            ct);
 
         // EF's change-tracker fixup already put adminUser into organization.Users once both
         // entities were tracked (set via the Organization nav property above), so the mapped

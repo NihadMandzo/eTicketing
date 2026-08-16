@@ -4,6 +4,7 @@ import 'core/api_client.dart';
 import 'models/responses/user_profile.dart';
 import 'providers/api_exception.dart';
 import 'providers/auth_provider.dart';
+import 'screens/force_change_password_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/widgets/main_shell.dart';
 import 'theme/app_theme.dart';
@@ -106,7 +107,13 @@ class _SessionGateState extends State<_SessionGate> {
           );
         }
         final profile = snapshot.data;
-        return profile != null ? MainShell(user: profile) : const LoginScreen();
+        if (profile == null) return const LoginScreen();
+        // A persisted session can still belong to an account SuperAdmin set
+        // a password for after this session was issued but before it was
+        // revoked (e.g. the forced-change screen was closed without
+        // completing it) — re-check on every app restart, not just at login.
+        if (profile.mustChangePassword) return const ForceChangePasswordScreen();
+        return MainShell(user: profile);
       },
     );
   }

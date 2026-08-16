@@ -1,7 +1,8 @@
-using eTicketing.Notifications;
+using eTicketing.Notifications.Infrastructure;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
+
+builder.AddNotificationsInfrastructure();
 
 var host = builder.Build();
-host.Run();
+await host.RunAsync();

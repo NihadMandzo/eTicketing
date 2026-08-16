@@ -5,6 +5,13 @@ class OrganizationInsertRequest {
   final String phoneNumber;
   final String email;
   final String? website;
+
+  /// Manually typed by SuperAdmin — the recipient of the "organization
+  /// created" notification email. Deliberately independent of [adminEmail]:
+  /// the account being created (the org's first OrganizationSuperAdmin) is
+  /// not necessarily who SuperAdmin wants to notify.
+  final String notificationEmail;
+
   final String adminFirstName;
   final String adminLastName;
   final String adminEmail;
@@ -19,6 +26,7 @@ class OrganizationInsertRequest {
     required this.phoneNumber,
     required this.email,
     this.website,
+    required this.notificationEmail,
     required this.adminFirstName,
     required this.adminLastName,
     required this.adminEmail,
@@ -40,6 +48,7 @@ class OrganizationInsertRequest {
         'PhoneNumber': phoneNumber,
         'Email': email,
         'Website': (website == null || website!.isEmpty) ? null : website,
+        'NotificationEmail': notificationEmail,
         'AdminFirstName': adminFirstName,
         'AdminLastName': adminLastName,
         'AdminEmail': adminEmail,

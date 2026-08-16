@@ -5,6 +5,7 @@ import '../models/requests/login_request.dart';
 import '../providers/api_exception.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
+import 'force_change_password_screen.dart';
 import 'widgets/main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -88,6 +89,17 @@ class _LoginScreenState extends State<LoginScreen>
         await _authProvider.logout();
         if (!mounted) return;
         handleApiError("Pristup odbijen. Ovaj portal je namijenjen samo za administratore i organizatore.");
+        return;
+      }
+      // ──────────────────────────────────────────────────────────────────
+
+      // ── Forced password change (SuperAdmin set this account's password
+      // directly — see AdminService.SetPasswordAsync) ────────────────────
+      if (profile.mustChangePassword) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ForceChangePasswordScreen()),
+          (_) => false,
+        );
         return;
       }
       // ──────────────────────────────────────────────────────────────────

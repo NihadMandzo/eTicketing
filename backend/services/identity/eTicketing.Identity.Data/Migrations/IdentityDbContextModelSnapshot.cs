@@ -102,6 +102,44 @@ namespace eTicketing.Identity.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("eTicketing.Identity.Data.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PasswordResetTokens");
+                });
+
             modelBuilder.Entity("eTicketing.Identity.Data.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -157,6 +195,13 @@ namespace eTicketing.Identity.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<string>("EmailVerificationCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTime?>("EmailVerificationCodeExpiresAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -178,6 +223,9 @@ namespace eTicketing.Identity.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
@@ -228,6 +276,7 @@ namespace eTicketing.Identity.Data.Migrations
                             IsEmailVerified = true,
                             IsFirstLogin = false,
                             LastName = "Hodžić",
+                            MustChangePassword = false,
                             PasswordHash = "Vo2N5mMKKV5riRxNcu+xYv2AxWVVkmJLATTjr04SU3I=",
                             PasswordSalt = "AdVMNBExbubfvQWaHVw5Vg==",
                             Role = 1,
@@ -244,6 +293,7 @@ namespace eTicketing.Identity.Data.Migrations
                             IsEmailVerified = true,
                             IsFirstLogin = false,
                             LastName = "Kovačević",
+                            MustChangePassword = false,
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
                             PasswordHash = "A6rZYgmOEHLfpoLnHEiPWOFfkAH3yQUaWv1PqvOzC18=",
                             PasswordSalt = "ucX6FvDXRYs6cWtGnpOc9Q==",
@@ -261,6 +311,7 @@ namespace eTicketing.Identity.Data.Migrations
                             IsEmailVerified = true,
                             IsFirstLogin = false,
                             LastName = "Begić",
+                            MustChangePassword = false,
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
                             PasswordHash = "vU//j3TsZkELntInV9wUpCwUYVJmcjrLGGEXgLPNZwE=",
                             PasswordSalt = "iObaAcHaXVq51zJOd1k4eA==",
@@ -278,6 +329,7 @@ namespace eTicketing.Identity.Data.Migrations
                             IsEmailVerified = true,
                             IsFirstLogin = false,
                             LastName = "Marić",
+                            MustChangePassword = false,
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
                             PasswordHash = "ryZEw8BVHyXvX87Bj+QeMKsmzx8PRSNnufi76DdKgu0=",
                             PasswordSalt = "G5uos2iJ7Kw0wnkMhLwivQ==",
@@ -285,6 +337,17 @@ namespace eTicketing.Identity.Data.Migrations
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Username = "ivan.maric"
                         });
+                });
+
+            modelBuilder.Entity("eTicketing.Identity.Data.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("eTicketing.Identity.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("eTicketing.Identity.Data.Entities.RefreshToken", b =>

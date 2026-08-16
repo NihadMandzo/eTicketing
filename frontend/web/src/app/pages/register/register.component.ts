@@ -58,7 +58,7 @@ export class RegisterComponent {
     this.authService
       .register({ ...rest, phoneNumber: phoneNumber || null })
       .subscribe({
-        next: () => this.router.navigateByUrl('/'),
+        next: () => this.router.navigateByUrl('/potvrda-emaila'),
         error: (error: unknown) => {
           this.isLoading.set(false);
           this.errorMessage.set(this.extractErrorMessage(error));

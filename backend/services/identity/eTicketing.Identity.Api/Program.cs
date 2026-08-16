@@ -30,6 +30,7 @@ using (var scope = app.Services.CreateScope())
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapAuthEndpoints();
 app.MapOrganizationEndpoints();

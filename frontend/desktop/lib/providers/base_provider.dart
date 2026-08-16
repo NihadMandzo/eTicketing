@@ -104,8 +104,12 @@ class BaseProvider<T, TId> {
     return fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<void> delete(TId id) async {
-    final response = await _send(() => apiClient.delete('$_extension/$id'));
+  /// [data], when given, is sent as the DELETE request body — e.g.
+  /// AdminProvider's delete now always sends a DeleteAdminRequest body (see
+  /// AdminEndpoints.Delete on the backend). Purely additive: every other
+  /// caller keeps compiling unchanged since this defaults to null.
+  Future<void> delete(TId id, {dynamic data}) async {
+    final response = await _send(() => apiClient.delete('$_extension/$id', data: data));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }

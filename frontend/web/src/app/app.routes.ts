@@ -39,6 +39,18 @@ export const routes: Routes = [
         loadChildren: () => import('./pages/register/register.routes').then(m => m.REGISTER_ROUTES)
       },
       {
+        path: 'potvrda-emaila',
+        loadChildren: () => import('./pages/verify-email/verify-email.routes').then(m => m.VERIFY_EMAIL_ROUTES)
+      },
+      {
+        path: 'zaboravljena-lozinka',
+        loadChildren: () => import('./pages/forgot-password/forgot-password.routes').then(m => m.FORGOT_PASSWORD_ROUTES)
+      },
+      {
+        path: 'resetovanje-lozinke',
+        loadChildren: () => import('./pages/reset-password/reset-password.routes').then(m => m.RESET_PASSWORD_ROUTES)
+      },
+      {
         path: 'profil',
         loadChildren: () => import('./pages/profile/profile.routes').then(m => m.PROFILE_ROUTES)
       },

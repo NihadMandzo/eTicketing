@@ -23,5 +23,15 @@ public class User : BaseEntity
     public bool IsEmailVerified { get; set; }
     public bool IsFirstLogin { get; set; } = true;
 
+    /// <summary>Set when SuperAdmin directly sets this account's password (staff/org accounts
+    /// only — see AdminService.SetPasswordAsync). Forces a password change on next login instead
+    /// of trusting the SuperAdmin-assigned password indefinitely.</summary>
+    public bool MustChangePassword { get; set; }
+
+    /// <summary>6-char code emailed on registration/resend, cleared once <see cref="IsEmailVerified"/>
+    /// is set — so a code can never be reused after a successful verification.</summary>
+    public string? EmailVerificationCode { get; set; }
+    public DateTime? EmailVerificationCodeExpiresAt { get; set; }
+
     public DateTime? LastLoginAt { get; set; }
 }
