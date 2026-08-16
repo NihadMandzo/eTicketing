@@ -3,6 +3,7 @@ using eTicketing.Contracts.Validation;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Shared.Auth;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace eTicketing.Identity.Api.Endpoints;
 
@@ -20,8 +21,11 @@ public static class AuthEndpoints
         group.MapPost("/change-password", ChangePassword).RequireAuthorization().WithValidation<ChangePasswordRequest>();
         group.MapPut("/update-user", UpdateUser).RequireAuthorization().WithValidation<UpdateUserRequest>();
         group.MapPost("/verify-email", VerifyEmail).RequireAuthorization().WithValidation<VerifyEmailRequest>();
-        group.MapPost("/resend-verification-email", ResendVerificationEmail).RequireAuthorization();
-        group.MapPost("/forgot-password", ForgotPassword).AllowAnonymous().WithValidation<ForgotPasswordRequest>();
+        // Both send an outbound email with no other cooldown — rate-limited (see
+        // IdentityServiceCollectionExtensions' "email-sending" policy) so a script can't flood a
+        // victim's inbox or burn through the platform's email-send quota.
+        group.MapPost("/resend-verification-email", ResendVerificationEmail).RequireAuthorization().RequireRateLimiting("email-sending");
+        group.MapPost("/forgot-password", ForgotPassword).AllowAnonymous().WithValidation<ForgotPasswordRequest>().RequireRateLimiting("email-sending");
         group.MapPost("/reset-password", ResetPassword).AllowAnonymous().WithValidation<ResetPasswordRequest>();
         group.MapPost("/set-new-password", SetNewPassword).RequireAuthorization().WithValidation<SetNewPasswordRequest>();
     }

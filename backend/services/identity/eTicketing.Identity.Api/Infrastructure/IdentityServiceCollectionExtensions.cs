@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Identity.Business;
@@ -10,6 +11,7 @@ using eTicketing.Identity.Data;
 using eTicketing.Identity.Data.Repositories;
 using eTicketing.Shared.Storage;
 using FluentValidation;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace eTicketing.Identity.Api.Infrastructure;
@@ -73,6 +75,26 @@ public static class IdentityServiceCollectionExtensions
 
         // --- Messaging ---
         builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+
+        // --- Rate limiting ---
+        // Applied to /auth/forgot-password and /auth/resend-verification-email (see
+        // AuthEndpoints) — both trigger an outbound email with no other cooldown, so without
+        // this a script can flood a victim's inbox or burn through the platform's email-send
+        // quota. Partitioned by caller IP for both routes (kept to one policy/one partition
+        // scheme rather than adding a second, user-id-keyed policy just for the authenticated
+        // resend-verification-email route).
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy("email-sending", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = 3,
+                    QueueLimit = 0
+                }));
+        });
 
         return builder;
     }

@@ -373,6 +373,17 @@ public class AuthService : IAuthService
             return Result.Failure(Error.NotFound("user.not_found", "Korisnik nije pronađen."));
         }
 
+        // This flow exists only to close the SuperAdmin-forced-password-change loop (see the
+        // class doc on SetNewPasswordRequest) — it deliberately skips the current-password check
+        // ChangePasswordAsync enforces. Without this guard, any authenticated caller could set an
+        // arbitrary new password with no proof of the old one, a full account-takeover path for
+        // anyone holding a live session (stolen cookie, unlocked device, etc.).
+        if (!user.MustChangePassword)
+        {
+            return Result.Failure(Error.Unauthorized(
+                "auth.password_change_not_required", "Promjena lozinke nije potrebna za ovaj nalog."));
+        }
+
         var (hash, salt) = PasswordHasher.Hash(request.NewPassword);
         user.PasswordHash = hash;
         user.PasswordSalt = salt;

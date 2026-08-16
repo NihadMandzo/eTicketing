@@ -93,6 +93,18 @@ public sealed class RabbitMqConsumerService : BackgroundService
             await RepublishAsync(channel, RetryQueueNames.DeadLetter, delivery.Body, retryCount: null, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
+        // EmailMessageBuilder.WithTemplate documents itself as throwing exactly these two types
+        // for a wrong template/data pairing or an unrecognized template enum value — both are
+        // programming bugs, never something a retry can fix. Without this, they'd fall into the
+        // generic catch below and retry forever on the same 30-minute steady-state tier as a
+        // genuine transient Brevo outage, silently masking a real defect behind log-warning spam
+        // instead of surfacing it in the dead-letter queue.
+        catch (Exception ex) when (ex is InvalidCastException or ArgumentOutOfRangeException)
+        {
+            _logger.LogError(ex, "Poruka za '{RoutingKey}' se ne može obraditi (trajna greška) — premještam u dead-letter red.", routingKey);
+            await RepublishAsync(channel, RetryQueueNames.DeadLetter, delivery.Body, retryCount: null, ct);
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+        }
         catch (Exception ex)
         {
             var retryCount = ReadRetryCount(delivery) + 1;

@@ -546,6 +546,28 @@ public class AuthServiceTests : IDisposable
         login.IsSuccess.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task SetNewPasswordAsync_WhenMustChangePasswordIsFalse_ReturnsFailure()
+    {
+        // A normal self-registered user has MustChangePassword = false — this flow exists only
+        // to close the SuperAdmin-forced-password-change loop, and must not double as a way to
+        // set an arbitrary new password without ever proving the current one.
+        var register = await _sut.RegisterAsync(ValidRegisterRequest());
+
+        var result = await _sut.SetNewPasswordAsync(register.Value!.User.Id, new SetNewPasswordRequest
+        {
+            NewPassword = "AttackerChosenPassword123",
+            ConfirmPassword = "AttackerChosenPassword123"
+        });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("auth.password_change_not_required");
+
+        // The original password must still work — the account was never actually touched.
+        var login = await _sut.LoginAsync(new LoginRequest { EmailOrUsername = "janedoe", Password = "SuperSecret123" });
+        login.IsSuccess.Should().BeTrue();
+    }
+
     private async Task<User> SeedStaffUserAsync(RoleType role, string email)
     {
         var (hash, salt) = PasswordHasher.Hash("SomePassword123");

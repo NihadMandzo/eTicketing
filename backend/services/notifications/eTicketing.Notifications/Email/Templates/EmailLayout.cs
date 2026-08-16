@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace eTicketing.Notifications.Email.Templates;
 
 /// <summary>Shared inline-CSS HTML shell every template wraps its body content in — keeps the
@@ -9,7 +11,10 @@ internal static class EmailLayout
     public static string Wrap(string title, string bodyHtml) => $$"""
         <!doctype html>
         <html lang="bs">
-        <head><meta charset="utf-8"><title>{{title}}</title></head>
+        <!-- title is also used verbatim as the real email Subject header by callers (see each
+             *Template.Render) — only this <title> tag occurrence is HTML-encoded, not the value
+             callers return, so the actual Subject header never picks up literal &amp;-entities. -->
+        <head><meta charset="utf-8"><title>{{WebUtility.HtmlEncode(title)}}</title></head>
         <body style="margin:0;padding:0;background-color:#f4f4f7;font-family:Segoe UI,Arial,sans-serif;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;padding:32px 0;">
             <tr>
