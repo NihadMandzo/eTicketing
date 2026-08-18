@@ -53,6 +53,9 @@ namespace eTicketing.Catalog.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("TicketingMode")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -69,6 +72,7 @@ namespace eTicketing.Catalog.Data.Migrations
                             DisplayOrder = 1,
                             IsActive = true,
                             Name = "Muzika",
+                            TicketingMode = 0,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -79,6 +83,7 @@ namespace eTicketing.Catalog.Data.Migrations
                             DisplayOrder = 2,
                             IsActive = true,
                             Name = "Sport",
+                            TicketingMode = 0,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -89,11 +94,12 @@ namespace eTicketing.Catalog.Data.Migrations
                             DisplayOrder = 3,
                             IsActive = true,
                             Name = "Tehnologija",
+                            TicketingMode = 0,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
-            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Event", b =>
+            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Product", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -105,7 +111,7 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("Date")
+                    b.Property<DateTime?>("Date")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
@@ -136,7 +142,7 @@ namespace eTicketing.Catalog.Data.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.ToTable("Events");
+                    b.ToTable("Products");
 
                     b.HasData(
                         new
@@ -213,10 +219,10 @@ namespace eTicketing.Catalog.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Event", b =>
+            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Product", b =>
                 {
                     b.HasOne("eTicketing.Catalog.Data.Entities.Category", "Category")
-                        .WithMany("Events")
+                        .WithMany("Products")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -226,7 +232,7 @@ namespace eTicketing.Catalog.Data.Migrations
 
             modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Category", b =>
                 {
-                    b.Navigation("Events");
+                    b.Navigation("Products");
                 });
 #pragma warning restore 612, 618
         }

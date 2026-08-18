@@ -119,16 +119,16 @@ public class CategoryServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteAsync_ForCategoryReferencedByEvent_ReturnsConflict()
+    public async Task DeleteAsync_ForCategoryReferencedByProduct_ReturnsConflict()
     {
         // Regression test for the fix this task made: deleting an in-use category used to throw
-        // a raw DbUpdateException (FK Restrict on Event.CategoryId) surfaced as a 500, instead of
-        // a normal domain conflict.
+        // a raw DbUpdateException (FK Restrict on Product.CategoryId) surfaced as a 500, instead
+        // of a normal domain conflict.
         var created = await _sut.CreateAsync(ValidCreateRequest());
-        await _fixture.EventRepository.AddAsync(new Event
+        await _fixture.ProductRepository.AddAsync(new Product
         {
             Id = Guid.NewGuid(),
-            Name = "Test Event",
+            Name = "Test Product",
             OrganizationId = Guid.NewGuid(),
             CategoryId = created.Value!.Id,
             Date = DateTime.UtcNow.AddDays(5),
@@ -240,6 +240,42 @@ public class CategoryServiceTests : IDisposable
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("category.not_found");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithExplicitTicketingMode_PersistsIt()
+    {
+        var result = await _sut.CreateAsync(ValidCreateRequest() with { TicketingMode = TicketingMode.DailyEntry });
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TicketingMode.Should().Be(TicketingMode.DailyEntry);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithoutExplicitTicketingMode_DefaultsToSingleOccurrence()
+    {
+        var result = await _sut.CreateAsync(ValidCreateRequest());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TicketingMode.Should().Be(TicketingMode.SingleOccurrence);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_CanChangeTicketingMode()
+    {
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+
+        var updated = await _sut.UpdateAsync(created.Value!.Id, new UpdateCategoryRequest
+        {
+            Name = created.Value.Name,
+            Description = created.Value.Description,
+            IsActive = true,
+            DisplayOrder = created.Value.DisplayOrder,
+            TicketingMode = TicketingMode.RecurringReservation,
+        });
+
+        updated.IsSuccess.Should().BeTrue();
+        updated.Value!.TicketingMode.Should().Be(TicketingMode.RecurringReservation);
     }
 
     [Fact]

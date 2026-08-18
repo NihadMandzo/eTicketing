@@ -11,6 +11,7 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
     {
         builder.Property(c => c.Name).HasMaxLength(100).IsRequired();
         builder.Property(c => c.Description).HasMaxLength(500);
+        builder.Property(c => c.TicketingMode).IsRequired();
         builder.Property(c => c.IconBlobName).HasMaxLength(300);
 
         builder.HasData(CategorySeeder.GetSeedData());

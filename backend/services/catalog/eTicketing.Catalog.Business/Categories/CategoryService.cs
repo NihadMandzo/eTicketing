@@ -14,18 +14,18 @@ public class CategoryService : ICategoryService
     private const string ContainerName = "category-icons";
 
     private readonly ICategoryRepository _categoryRepository;
-    private readonly IEventRepository _eventRepository;
+    private readonly IProductRepository _productRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
 
     public CategoryService(
         ICategoryRepository categoryRepository,
-        IEventRepository eventRepository,
+        IProductRepository productRepository,
         IUnitOfWork unitOfWork,
         IBlobStorageService blobStorageService)
     {
         _categoryRepository = categoryRepository;
-        _eventRepository = eventRepository;
+        _productRepository = productRepository;
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
     }
@@ -79,15 +79,15 @@ public class CategoryService : ICategoryService
         if (category is null)
             return Result.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
 
-        // Deleting a category still referenced by events would otherwise hit the FK-restrict
-        // constraint (EventConfiguration) and surface as a raw DbUpdateException → 500. This is
+        // Deleting a category still referenced by products would otherwise hit the FK-restrict
+        // constraint (ProductConfiguration) and surface as a raw DbUpdateException → 500. This is
         // an expected conflict, not a bug, so it's checked proactively and returned as a normal
         // domain Result instead.
-        if (await _eventRepository.ExistsForCategoryAsync(id, ct))
+        if (await _productRepository.ExistsForCategoryAsync(id, ct))
         {
             return Result.Failure(Error.Conflict(
                 "category.in_use",
-                "Kategorija se ne može obrisati jer je u upotrebi od strane jednog ili više događaja."));
+                "Kategorija se ne može obrisati jer je u upotrebi od strane jednog ili više proizvoda."));
         }
 
         _categoryRepository.Remove(category);

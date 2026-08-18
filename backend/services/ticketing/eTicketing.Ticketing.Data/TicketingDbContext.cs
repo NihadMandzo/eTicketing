@@ -1,4 +1,5 @@
 using eTicketing.Contracts.Persistence;
+using eTicketing.Ticketing.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace eTicketing.Ticketing.Data;
@@ -7,7 +8,9 @@ public class TicketingDbContext : DbContext, IUnitOfWork
 {
     public TicketingDbContext(DbContextOptions<TicketingDbContext> options) : base(options) { }
 
-    // DbSet<EventSector>, DbSet<Ticket> dolaze u Sprintu 2/3 — vidi SPRINTS/SPRINT_2.md, SPRINT_3.md
+    public DbSet<Sector> Sectors => Set<Sector>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<Ticket> Tickets => Set<Ticket>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
