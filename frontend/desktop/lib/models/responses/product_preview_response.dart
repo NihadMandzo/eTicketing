@@ -1,7 +1,9 @@
 import '../enums/ticketing_mode.dart';
 
 /// Mirrors the backend's ProductPreviewResponse — returned by POST /products/preview, never
-/// persisted. Shown to the organizer read-only before they confirm "Sačuvaj kao nacrt".
+/// persisted. Shown to the organizer read-only before they confirm "Sačuvaj kao nacrt". Images
+/// are deliberately absent: a previewed product has no Id yet to attach an uploaded image to
+/// (same reasoning as Category, whose icon can only be uploaded once the category exists).
 class ProductPreviewResponse {
   final String name;
   final String description;
@@ -9,7 +11,6 @@ class ProductPreviewResponse {
   final int categoryId;
   final String categoryName;
   final TicketingMode ticketingMode;
-  final String? imageUrl;
 
   const ProductPreviewResponse({
     required this.name,
@@ -18,7 +19,6 @@ class ProductPreviewResponse {
     required this.categoryId,
     required this.categoryName,
     required this.ticketingMode,
-    this.imageUrl,
   });
 
   factory ProductPreviewResponse.fromJson(Map<String, dynamic> json) => ProductPreviewResponse(
@@ -28,6 +28,5 @@ class ProductPreviewResponse {
         categoryId: json['categoryId'] as int? ?? 0,
         categoryName: json['categoryName'] as String? ?? '',
         ticketingMode: TicketingMode.fromValue(json['ticketingMode'] as int? ?? 0),
-        imageUrl: json['imageUrl'] as String?,
       );
 }

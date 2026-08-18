@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import '../core/api_client.dart';
@@ -55,6 +57,34 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
   /// POST /api/products/{id}/publish — Draft → Published.
   Future<ProductResponse> publish(String id) async {
     final response = await apiClient.post('products/$id/publish');
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return ProductResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// POST /api/products/:id/images (multipart) — adds one gallery photo (up to 5, backend-
+  /// enforced). [imageBytes] must already be PNG or JPEG and ≤2MB (see ProductImageValidation
+  /// on the backend / the mirrored check in product_detail_screen.dart's file picker).
+  Future<ProductResponse> uploadImage(String id, Uint8List imageBytes, {required bool isPng}) async {
+    final formData = FormData.fromMap({
+      'Image': MultipartFile.fromBytes(
+        imageBytes,
+        filename: isPng ? 'image.png' : 'image.jpg',
+        contentType: isPng ? DioMediaType('image', 'png') : DioMediaType('image', 'jpeg'),
+      ),
+    });
+
+    final response = await apiClient.post('products/$id/images', data: formData);
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return ProductResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// DELETE /api/products/:id/images/:imageId.
+  Future<ProductResponse> deleteImage(String id, String imageId) async {
+    final response = await apiClient.delete('products/$id/images/$imageId');
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

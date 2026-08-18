@@ -4,6 +4,9 @@ using eTicketing.Catalog.Business.Tests.TestFixtures;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Contracts.Persistence;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace eTicketing.Catalog.Business.Tests.Products;
 
@@ -82,6 +85,24 @@ public class ProductServiceTests : IDisposable
             Status = PublishStatus.Published,
         });
         await _fixture.UnitOfWork.SaveChangesAsync();
+    }
+
+    private static byte[] CreatePngBytes(int width, int height)
+    {
+        using var image = new Image<Rgba32>(width, height);
+        using var ms = new MemoryStream();
+        image.SaveAsPng(ms);
+        return ms.ToArray();
+    }
+
+    private static IFormFile CreateFormFile(byte[] bytes, string contentType = "image/png", string fileName = "image.png")
+    {
+        var stream = new MemoryStream(bytes);
+        return new FormFile(stream, 0, stream.Length, "Image", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType,
+        };
     }
 
     private static UpsertProductRequest ValidRequest(int categoryId) => new()
@@ -340,6 +361,107 @@ public class ProductServiceTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.TicketingMode.Should().Be(TicketingMode.DailyEntry);
         result.Value.OrganizationId.Should().Be(_orgA);
+    }
+
+    // --- UploadImageAsync / DeleteImageAsync ---
+
+    [Fact]
+    public async Task UploadImageAsync_ForOwnProduct_StoresBlobAndReturnsUrl()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+
+        var result = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(80, 60)), OrgACaller());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Images.Should().ContainSingle();
+        result.Value.Images[0].Url.Should().Contain("product-images");
+    }
+
+    [Fact]
+    public async Task UploadImageAsync_ForAnotherOrganizationsProduct_ReturnsUnauthorized()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+
+        var result = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(80, 60)), OrgBCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.forbidden");
+    }
+
+    [Fact]
+    public async Task UploadImageAsync_ForUnknownId_ReturnsNotFound()
+    {
+        var result = await _sut.UploadImageAsync(Guid.NewGuid(), CreateFormFile(CreatePngBytes(80, 60)), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.not_found");
+    }
+
+    [Fact]
+    public async Task UploadImageAsync_WhenAlreadyAtFiveImages_ReturnsConflict()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        for (var i = 0; i < 5; i++)
+        {
+            await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller());
+        }
+
+        var result = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.images_limit_reached");
+    }
+
+    [Fact]
+    public async Task DeleteImageAsync_ForOwnProduct_RemovesImageAndBlob()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        var uploaded = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(80, 60)), OrgACaller());
+        var imageId = uploaded.Value!.Images[0].Id;
+        var blobName = uploaded.Value.Images[0].Url.Split('/').Last();
+        _fixture.BlobStorage.Exists("product-images", blobName).Should().BeTrue();
+
+        var result = await _sut.DeleteImageAsync(created.Value.Id, imageId, OrgACaller());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Images.Should().BeEmpty();
+        _fixture.BlobStorage.Exists("product-images", blobName).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteImageAsync_ForUnknownImageId_ReturnsNotFound()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+
+        var result = await _sut.DeleteImageAsync(created.Value!.Id, Guid.NewGuid(), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.image_not_found");
+    }
+
+    [Fact]
+    public async Task DeleteImageAsync_ForAnotherOrganizationsProduct_ReturnsUnauthorized()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        var uploaded = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(80, 60)), OrgACaller());
+
+        var result = await _sut.DeleteImageAsync(created.Value.Id, uploaded.Value!.Images[0].Id, OrgBCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.forbidden");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ForProductWithImages_DeletesBlobsToo()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        var uploaded = await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(80, 60)), OrgACaller());
+        var blobName = uploaded.Value!.Images[0].Url.Split('/').Last();
+        _fixture.BlobStorage.Exists("product-images", blobName).Should().BeTrue();
+
+        await _sut.DeleteAsync(created.Value.Id, OrgACaller());
+
+        _fixture.BlobStorage.Exists("product-images", blobName).Should().BeFalse();
     }
 
     public void Dispose() => _fixture.Dispose();

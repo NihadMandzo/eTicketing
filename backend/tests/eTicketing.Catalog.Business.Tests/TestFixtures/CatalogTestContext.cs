@@ -23,6 +23,7 @@ public sealed class CatalogTestContext : IDisposable
     public CatalogDbContext DbContext { get; }
     public ICategoryRepository CategoryRepository { get; }
     public IProductRepository ProductRepository { get; }
+    public IProductImageRepository ProductImageRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public FakeBlobStorageService BlobStorage { get; } = new();
 
@@ -41,13 +42,15 @@ public sealed class CatalogTestContext : IDisposable
 
         CategoryRepository = new CategoryRepository(DbContext);
         ProductRepository = new ProductRepository(DbContext);
+        ProductImageRepository = new ProductImageRepository(DbContext);
         UnitOfWork = DbContext;
     }
 
     public ICategoryService CreateCategoryService() =>
         new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
-    public IProductService CreateProductService() => new ProductService(ProductRepository, CategoryRepository, UnitOfWork, BlobStorage);
+    public IProductService CreateProductService() =>
+        new ProductService(ProductRepository, ProductImageRepository, CategoryRepository, UnitOfWork, BlobStorage);
 
     public void Dispose()
     {

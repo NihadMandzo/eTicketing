@@ -33,7 +33,6 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _imageUrlCtrl = TextEditingController();
   final _provider = ProductProvider();
 
   List<CategoryResponse> _categories = [];
@@ -67,7 +66,6 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
       final p = widget.product!;
       _nameCtrl.text = p.name;
       _descCtrl.text = p.description;
-      _imageUrlCtrl.text = p.imageUrl ?? '';
       _selectedCategoryId = p.categoryId;
       _selectedDate = p.date;
     }
@@ -78,7 +76,6 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
-    _imageUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -142,7 +139,6 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
         description: _descCtrl.text.trim(),
         date: _needsDate ? _selectedDate : null,
         categoryId: _selectedCategoryId!,
-        imageUrl: _imageUrlCtrl.text.trim().isEmpty ? null : _imageUrlCtrl.text.trim(),
       );
 
   Future<void> _doPreview() async {
@@ -373,15 +369,16 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 14),
-                          _FieldLabel('URL Slike (opcionalno)'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _imageUrlCtrl,
-                            decoration: _inputDecoration('https://...', prefixIcon: LucideIcons.image),
-                            style: TextStyle(fontSize: 14, color: textPrimary),
-                            onChanged: (_) => _resetPreview(),
-                          ),
+                          if (_isEditing) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              'Slike proizvoda se dodaju i uklanjaju na stranici proizvoda, nakon spremanja.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
+                            ),
+                          ],
                           if (_hasPreviewed && _preview != null) ...[
                             const SizedBox(height: 20),
                             _PreviewCard(preview: _preview!, isDark: isDark),

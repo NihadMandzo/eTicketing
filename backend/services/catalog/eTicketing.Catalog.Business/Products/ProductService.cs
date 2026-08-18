@@ -17,17 +17,20 @@ public class ProductService : IProductService
     private const string ContainerName = "product-images";
 
     private readonly IProductRepository _productRepository;
+    private readonly IProductImageRepository _productImageRepository;
     private readonly ICategoryRepository _categoryRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
 
     public ProductService(
         IProductRepository productRepository,
+        IProductImageRepository productImageRepository,
         ICategoryRepository categoryRepository,
         IUnitOfWork unitOfWork,
         IBlobStorageService blobStorageService)
     {
         _productRepository = productRepository;
+        _productImageRepository = productImageRepository;
         _categoryRepository = categoryRepository;
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
@@ -166,7 +169,16 @@ public class ProductService : IProductService
         productImage.BlobName = BlobNaming.BuildBlobName(productImage.Id, product.Name, extension);
 
         await _blobStorageService.UploadAsync(ContainerName, productImage.BlobName, image.OpenReadStream(), ContentTypeFor(extension), ct);
-        product.Images.Add(productImage);
+
+        // Goes through IProductImageRepository.AddAsync (DbSet.AddAsync) rather than
+        // product.Images.Add(productImage) — EF Core's change tracker would otherwise mistake
+        // this brand-new row for an update, since ProductImage.Id is a manually-assigned (not
+        // store-generated-and-empty) key discovered via navigation fixup rather than an explicit
+        // Add() call, which EF treats as "probably already exists" and issues an UPDATE that
+        // affects 0 rows. EF's own relationship fixup then appends it into the already-loaded
+        // product.Images collection automatically — adding it there manually too would leave a
+        // duplicate entry in that in-memory list (same tracked instance twice).
+        await _productImageRepository.AddAsync(productImage, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));

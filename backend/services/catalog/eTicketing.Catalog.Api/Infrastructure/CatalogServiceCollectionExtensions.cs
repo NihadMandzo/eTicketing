@@ -21,6 +21,7 @@ public static class CatalogServiceCollectionExtensions
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CatalogDbContext>());
         builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();
+        builder.Services.AddScoped<IProductImageRepository, ProductImageRepository>();
 
         builder.AddAzureBlobStorage();
 

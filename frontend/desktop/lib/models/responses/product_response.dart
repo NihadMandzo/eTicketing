@@ -1,4 +1,5 @@
 import '../enums/ticketing_mode.dart';
+import 'product_image_response.dart';
 
 class ProductResponse {
   final String id;
@@ -10,7 +11,7 @@ class ProductResponse {
   final TicketingMode ticketingMode;
   final String organizationId;
   final int status; // 0 = Draft, 1 = Published (PublishStatus, serialized as a plain int)
-  final String? imageUrl;
+  final List<ProductImageResponse> images;
   final DateTime createdAt;
 
   const ProductResponse({
@@ -23,7 +24,7 @@ class ProductResponse {
     required this.ticketingMode,
     required this.organizationId,
     required this.status,
-    this.imageUrl,
+    this.images = const [],
     required this.createdAt,
   });
 
@@ -45,7 +46,10 @@ class ProductResponse {
       ticketingMode: TicketingMode.fromValue(json['ticketingMode'] as int? ?? 0),
       organizationId: json['organizationId'] as String,
       status: json['status'] as int? ?? 0,
-      imageUrl: json['imageUrl'] as String?,
+      images: (json['images'] as List<dynamic>?)
+              ?.map((i) => ProductImageResponse.fromJson(i as Map<String, dynamic>))
+              .toList() ??
+          const [],
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
