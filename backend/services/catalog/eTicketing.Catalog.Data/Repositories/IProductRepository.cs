@@ -22,7 +22,8 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// CategoryService.DeleteAsync's proactive FK-conflict check.</summary>
     Task<bool> ExistsForCategoryAsync(int categoryId, CancellationToken ct = default);
 
-    /// <summary>Loads a product together with its Category — needed to resolve the owning
-    /// Category's TicketingMode (e.g. for Ticketing's internal ownership/mode lookup).</summary>
+    /// <summary>Loads a product together with its Category and Images — Category resolves the
+    /// owning TicketingMode (e.g. for Ticketing's internal ownership/mode lookup), Images backs
+    /// ProductService.ToResponse's ImageUrls and the image upload/delete/product-delete paths.</summary>
     Task<Product?> GetByIdWithCategoryAsync(Guid id, CancellationToken ct = default);
 }

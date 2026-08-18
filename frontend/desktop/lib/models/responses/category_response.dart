@@ -1,3 +1,5 @@
+import '../enums/ticketing_mode.dart';
+
 class CategoryResponse {
   final int id;
   final String name;
@@ -5,6 +7,7 @@ class CategoryResponse {
   final String? iconUrl;
   final bool isActive;
   final int displayOrder;
+  final TicketingMode ticketingMode;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -15,6 +18,7 @@ class CategoryResponse {
     required this.iconUrl,
     required this.isActive,
     required this.displayOrder,
+    required this.ticketingMode,
     required this.createdAt,
     this.updatedAt,
   });
@@ -38,6 +42,7 @@ class CategoryResponse {
       iconUrl: json['iconUrl'] as String?,
       isActive: json['isActive'] as bool? ?? false,
       displayOrder: json['displayOrder'] as int? ?? 0,
+      ticketingMode: TicketingMode.fromValue(json['ticketingMode'] as int? ?? 0),
       createdAt: parsedCreatedAt,
       updatedAt: json['updatedAt'] != null 
           ? DateTime.parse(json['updatedAt'] as String) 
@@ -53,6 +58,7 @@ class CategoryResponse {
       'iconUrl': iconUrl,
       'isActive': isActive,
       'displayOrder': displayOrder,
+      'ticketingMode': ticketingMode.value,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };

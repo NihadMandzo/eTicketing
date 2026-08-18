@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Results;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Catalog.Business.Products;
 
@@ -41,4 +42,12 @@ public interface IProductService
     /// <summary>Internal-only, never routed through the Gateway — used by eTicketing.Ticketing to
     /// verify Sector-creation ownership and to read the product's Category.TicketingMode.</summary>
     Task<Result<ProductInternalResponse>> GetInternalAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Uploads one gallery photo (up to 5 per product, see ProductImageValidation.MaxCount)
+    /// to Azure Blob Storage ("product-images" container). Ownership-checked.</summary>
+    Task<Result<ProductResponse>> UploadImageAsync(Guid id, IFormFile image, ClaimsPrincipal user, CancellationToken ct = default);
+
+    /// <summary>Removes one gallery photo — DB row first, then the blob (see ProductService.DeleteImageAsync
+    /// for the ordering rationale, same as DeleteAsync). Ownership-checked.</summary>
+    Task<Result<ProductResponse>> DeleteImageAsync(Guid id, Guid imageId, ClaimsPrincipal user, CancellationToken ct = default);
 }

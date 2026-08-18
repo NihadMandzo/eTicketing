@@ -13,6 +13,7 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
         BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, CancellationToken ct = default)
         => Query()
             .Include(p => p.Category)
+            .Include(p => p.Images)
             .Where(p => string.IsNullOrEmpty(query.FTS) || p.Name.Contains(query.FTS))
             .Where(p => organizationId == null || p.OrganizationId == organizationId)
             .Where(p => categoryId == null || p.CategoryId == categoryId)
@@ -31,5 +32,5 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
         => Query().AnyAsync(p => p.CategoryId == categoryId, ct);
 
     public Task<Product?> GetByIdWithCategoryAsync(Guid id, CancellationToken ct = default)
-        => Query().Include(p => p.Category).FirstOrDefaultAsync(p => p.Id == id, ct);
+        => Query().Include(p => p.Category).Include(p => p.Images).FirstOrDefaultAsync(p => p.Id == id, ct);
 }

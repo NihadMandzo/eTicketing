@@ -2,15 +2,15 @@ import '../core/api_client.dart';
 import '../models/api_error.dart';
 import 'api_exception.dart';
 
-/// GET /api/events/organization-ids?categoryIds=1,2,3 — resolves the
-/// organization ids that have events in the given categories (any status),
+/// GET /api/products/organization-ids?categoryIds=1,2,3 — resolves the
+/// organization ids that have products in the given categories (any status),
 /// backing the organizations list's category multiselect filter. Not a
 /// paged/flat resource, so it's hand-rolled like OrganizationUsersProvider
 /// rather than extending BaseProvider.
-class EventOrganizationIdsProvider {
+class ProductOrganizationIdsProvider {
   Future<List<String>> getOrganizationIds({required List<int> categoryIds}) async {
     final response = await apiClient.get(
-      'events/organization-ids',
+      'products/organization-ids',
       queryParameters: {'categoryIds': categoryIds.join(',')},
     );
 

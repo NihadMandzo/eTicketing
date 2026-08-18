@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/responses/organization_response.dart';
 import '../models/search_objects/organization_search_object.dart';
-import '../providers/event_provider.dart';
+import '../providers/product_organization_ids_provider.dart';
 import '../providers/organization_provider.dart';
 import '../theme/app_colors.dart';
 import 'organization_detail_screen.dart';
@@ -67,14 +67,14 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     final requestToken = ++_requestToken;
     setState(() => _isLoading = true);
     try {
-      // Organizations and Events/Categories live in separate microservices/
+      // Organizations and Products/Categories live in separate microservices/
       // databases — the category filter can't be applied as a server-side
       // join here, so it's resolved client-side in two steps: first ask
-      // Catalog which organizations have events in the selected categories,
+      // Catalog which organizations have products in the selected categories,
       // then filter the organizations list by that id list.
       List<String>? organizationIds;
       if (_selectedCategoryIds.isNotEmpty) {
-        organizationIds = await EventOrganizationIdsProvider()
+        organizationIds = await ProductOrganizationIdsProvider()
             .getOrganizationIds(categoryIds: _selectedCategoryIds);
 
         // A newer _loadData() call started while we were awaiting above —
@@ -82,7 +82,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
         if (requestToken != _requestToken) return;
 
         if (organizationIds.isEmpty) {
-          // No organization has events in the selected categories. An empty
+          // No organization has products in the selected categories. An empty
           // (but non-null) list can't be sent as a real "match nothing"
           // filter here — Dio's list-query encoding produces zero repeated
           // keys for an empty list, so on the wire this would be

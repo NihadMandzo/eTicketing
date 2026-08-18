@@ -47,7 +47,7 @@ public sealed class CatalogTestContext : IDisposable
     public ICategoryService CreateCategoryService() =>
         new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
-    public IProductService CreateProductService() => new ProductService(ProductRepository, CategoryRepository, UnitOfWork);
+    public IProductService CreateProductService() => new ProductService(ProductRepository, CategoryRepository, UnitOfWork, BlobStorage);
 
     public void Dispose()
     {

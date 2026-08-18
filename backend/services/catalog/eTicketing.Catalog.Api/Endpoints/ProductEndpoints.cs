@@ -1,6 +1,7 @@
 using eTicketing.Catalog.Business.Products;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
+using Microsoft.AspNetCore.Mvc;
 
 namespace eTicketing.Catalog.Api.Endpoints;
 
@@ -20,6 +21,12 @@ public static class ProductEndpoints
         group.MapPost("/{id:guid}/publish", Publish).RequireAuthorization("Organizer");
         group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>();
         group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
+
+        // Images are managed exclusively through these two dedicated multipart endpoints, never
+        // bundled into Create/Update above — see Product.Images / ProductService.
+        group.MapPost("/{id:guid}/images", UploadImage).RequireAuthorization("Organizer")
+            .WithValidation<ProductImageUploadRequest>().DisableAntiforgery();
+        group.MapDelete("/{id:guid}/images/{imageId:guid}", DeleteImage).RequireAuthorization("Organizer");
 
         // Not routed through the Gateway — see docs/gateway-tok.md §1. Consumed only by
         // eTicketing.Ticketing's internal Catalog client.
@@ -96,6 +103,18 @@ public static class ProductEndpoints
     private static async Task<IResult> GetInternal(Guid id, IProductService service, CancellationToken ct)
     {
         var result = await service.GetInternalAsync(id, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> UploadImage(Guid id, [FromForm] ProductImageUploadRequest request, IProductService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.UploadImageAsync(id, request.Image, http.User, ct);
+        return result.ToHttpResult(StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> DeleteImage(Guid id, Guid imageId, IProductService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.DeleteImageAsync(id, imageId, http.User, ct);
         return result.ToHttpResult();
     }
 }

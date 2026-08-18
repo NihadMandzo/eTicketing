@@ -12,7 +12,7 @@ export const routes: Routes = [
       },
       {
         path: 'dogadjaji',
-        loadChildren: () => import('./pages/events/events.routes').then(m => m.EVENTS_ROUTES)
+        loadChildren: () => import('./pages/products/products.routes').then(m => m.PRODUCTS_ROUTES)
       },
       {
         path: 'pomoc',

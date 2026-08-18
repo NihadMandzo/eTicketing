@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../main.dart';
+import '../../models/enums/ticketing_mode.dart';
 import '../../models/requests/category_insert_request.dart';
 import '../../models/requests/category_update_request.dart';
 import '../../models/responses/category_response.dart';
@@ -38,6 +39,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   Uint8List? _iconBytes;
   String? _iconFileName;
   bool _isSaving = false;
+  TicketingMode _ticketingMode = TicketingMode.singleOccurrence;
 
   bool get _isEditing => widget.category != null;
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -48,6 +50,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
     if (_isEditing) {
       _nameController.text = widget.category!.name;
       _descController.text = widget.category!.description;
+      _ticketingMode = widget.category!.ticketingMode;
     }
   }
 
@@ -112,6 +115,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
           CategoryUpdateRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
+            ticketingMode: _ticketingMode,
           ),
         );
       } else {
@@ -119,6 +123,7 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
           CategoryInsertRequest(
             name: _nameController.text.trim(),
             description: _descController.text.trim(),
+            ticketingMode: _ticketingMode,
           ),
         );
       }
@@ -279,6 +284,43 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                             }
                             return null;
                           },
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // Ticketing mode — governs how every Product/Sector under this
+                        // category behaves (see .claude/rules/01-domain.md). Free to change
+                        // even when editing; the backend doesn't currently block it.
+                        _Label('Vrsta Ulaznica *'),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<TicketingMode>(
+                          initialValue: _ticketingMode,
+                          decoration: _inputDecoration(''),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _isDark
+                                ? AppColors.darkTextPrimary
+                                : AppColors.lightTextPrimary,
+                          ),
+                          items: TicketingMode.values
+                              .map((mode) => DropdownMenuItem(
+                                    value: mode,
+                                    child: Text(mode.label),
+                                  ))
+                              .toList(),
+                          onChanged: (mode) {
+                            if (mode != null) setState(() => _ticketingMode = mode);
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _ticketingMode.description,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _isDark
+                                ? AppColors.darkTextTertiary
+                                : AppColors.lightTextTertiary,
+                          ),
                         ),
 
                         const SizedBox(height: 14),

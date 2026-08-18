@@ -4,23 +4,25 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../models/responses/admin_user_response.dart';
-import '../models/responses/event_response.dart';
+import '../models/responses/product_response.dart';
 import '../models/responses/organization_response.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../models/search_objects/organization_user_search_object.dart';
-import '../providers/organization_events_provider.dart';
+import '../providers/organization_products_provider.dart';
 import '../providers/organization_provider.dart';
+import '../providers/product_provider.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/entity_avatar.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/product_upsert_dialog.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/user_grid_card.dart';
 import '../main.dart';
 
 /// Per-tab paginated/searchable list state — instantiated once per tab
-/// (Events / Users) so each tab paginates and searches fully independently,
+/// (Products / Users) so each tab paginates and searches fully independently,
 /// mirroring the single-list state shape used by UsersScreen/
 /// OrganizationsScreen but generic over 2 simultaneous lists. pageSize is
 /// per-tab (not a single screen-wide constant) so each tab's card grid can
@@ -42,10 +44,12 @@ class _TabState<T> {
   }
 }
 
-/// Superadmin-facing organization detail screen: header + event/user counts
-/// + independently paginated/searchable Events and Users tabs (Users spans
+/// Superadmin-facing organization detail screen: header + product/user counts
+/// + independently paginated/searchable Products and Users tabs (Users spans
 /// both OrganizationSuperAdmin and OrganizationAdmin accounts — there's no
 /// role split here, unlike the desktop app's own self-service Users screen).
+/// The Products tab is full CRUD (not read-only) — PlatformStaff has
+/// override on every organization's products/sectors, see [[01-domain]].
 /// Reached only via the org card's "Pregled" action on OrganizationsScreen —
 /// there's no named-route table anywhere in this app, so this is pushed via
 /// `Navigator.push(MaterialPageRoute(...))`, not a sidebar destination.
@@ -63,7 +67,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
   late TabController _tabController;
   late OrganizationResponse _organization;
 
-  final _eventsState = _TabState<EventResponse>();
+  final _productsState = _TabState<ProductResponse>();
   final _usersState = _TabState<AdminUserResponse>();
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -73,46 +77,96 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     super.initState();
     _organization = widget.organization;
     _tabController = TabController(length: 2, vsync: this);
-    Future.wait([_loadEvents(), _loadUsers()]);
+    Future.wait([_loadProducts(), _loadUsers()]);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _eventsState.dispose();
+    _productsState.dispose();
     _usersState.dispose();
     super.dispose();
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────
 
-  Future<void> _loadEvents() async {
-    setState(() => _eventsState.isLoading = true);
+  Future<void> _loadProducts() async {
+    setState(() => _productsState.isLoading = true);
     try {
       final searchObject = BaseSearchObject(
-        page: _eventsState.currentPage,
-        pageSize: _eventsState.pageSize,
-        fts: _eventsState.searchController.text.trim().isEmpty
+        page: _productsState.currentPage,
+        pageSize: _productsState.pageSize,
+        fts: _productsState.searchController.text.trim().isEmpty
             ? null
-            : _eventsState.searchController.text.trim(),
+            : _productsState.searchController.text.trim(),
       );
-      final result = await OrganizationEventsProvider().getAll(
+      final result = await OrganizationProductsProvider().getAll(
         organizationId: _organization.id,
         searchObject: searchObject,
-        fromJson: EventResponse.fromJson,
+        fromJson: ProductResponse.fromJson,
       );
       if (mounted) {
         setState(() {
-          _eventsState.items = result.items;
-          _eventsState.totalCount = result.totalCount;
-          _eventsState.isLoading = false;
+          _productsState.items = result.items;
+          _productsState.totalCount = result.totalCount;
+          _productsState.isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _eventsState.isLoading = false);
+        setState(() => _productsState.isLoading = false);
         handleApiError(e);
       }
+    }
+  }
+
+  Future<void> _editProduct(ProductResponse product) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ProductUpsertDialog(product: product, onSaved: _loadProducts),
+    );
+  }
+
+  Future<void> _deleteProduct(ProductResponse product) async {
+    final isDark = _isDark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Obriši proizvod',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
+        content: Text('Da li ste sigurni da želite obrisati proizvod "${product.name}"?',
+            style: TextStyle(color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Odustani',
+                style: TextStyle(color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorDark,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Obriši'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ProductProvider().delete(product.id);
+      if (mounted) await _loadProducts();
+    } catch (e) {
+      if (mounted) handleApiError(e);
     }
   }
 
@@ -229,8 +283,8 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
             Row(
               children: [
                 StatCard(
-                  label: 'Broj Događaja',
-                  value: '${_eventsState.totalCount}',
+                  label: 'Broj Proizvoda',
+                  value: '${_productsState.totalCount}',
                   valueColor: textPrimary,
                 ),
                 const SizedBox(width: 16),
@@ -250,13 +304,13 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
               indicatorColor: primary,
               onTap: (_) => setState(() {}),
               tabs: const [
-                Tab(text: 'Događaji'),
+                Tab(text: 'Proizvodi'),
                 Tab(text: 'Korisnici'),
               ],
             ),
             const SizedBox(height: 16),
             _tabController.index == 0
-                ? _buildEventsTab(isDark, textPrimary, textTertiary)
+                ? _buildProductsTab(isDark, textPrimary, textTertiary)
                 : _buildUsersTab(isDark, textPrimary, textTertiary),
           ],
         ),
@@ -331,42 +385,46 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
   // Not wrapped in its own SingleChildScrollView/Expanded — this tab's content
   // is rendered directly inline in the outer page's single SingleChildScrollView
   // (see build()), so it just needs to be a plain, naturally-sized Column.
-  Widget _buildEventsTab(bool isDark, Color textPrimary, Color textTertiary) {
+  Widget _buildProductsTab(bool isDark, Color textPrimary, Color textTertiary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _searchField(_eventsState, _loadEvents, 'Pretražite događaje...', isDark, textPrimary, textTertiary),
+        _searchField(_productsState, _loadProducts, 'Pretražite proizvode...', isDark, textPrimary, textTertiary),
         const SizedBox(height: 16),
-        if (_eventsState.isLoading)
+        if (_productsState.isLoading)
           SizedBox(
             height: 300,
             child: Center(child: CircularProgressIndicator(color: isDark ? AppColors.secondary : AppColors.primary)),
           )
-        else if (_eventsState.items.isEmpty)
-          SizedBox(height: 300, child: _emptyState(LucideIcons.calendarX, 'Nema događaja', isDark, textTertiary))
+        else if (_productsState.items.isEmpty)
+          SizedBox(height: 300, child: _emptyState(LucideIcons.packageX, 'Nema proizvoda', isDark, textTertiary))
         else
           _cardGrid(
-            itemCount: _eventsState.items.length,
+            itemCount: _productsState.items.length,
             maxCrossAxisExtent: 260,
-            mainAxisExtent: 230,
-            itemBuilder: (context, index) =>
-                _EventGridCard(event: _eventsState.items[index], isDark: isDark),
+            mainAxisExtent: 250,
+            itemBuilder: (context, index) => _ProductGridCard(
+              product: _productsState.items[index],
+              isDark: isDark,
+              onEdit: () => _editProduct(_productsState.items[index]),
+              onDelete: () => _deleteProduct(_productsState.items[index]),
+            ),
           ),
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: PaginationBar(
-            currentPage: _eventsState.currentPage,
-            totalPages: _eventsState.totalPages,
-            onPageChanged: (page) => _goToPage(_eventsState, page, _loadEvents),
-            pageSize: _eventsState.pageSize,
-            onPageSizeChanged: (size) => _onPageSizeChanged(_eventsState, size, _loadEvents),
+            currentPage: _productsState.currentPage,
+            totalPages: _productsState.totalPages,
+            onPageChanged: (page) => _goToPage(_productsState, page, _loadProducts),
+            pageSize: _productsState.pageSize,
+            onPageSizeChanged: (size) => _onPageSizeChanged(_productsState, size, _loadProducts),
           ),
         ),
       ],
     );
   }
 
-  // Same shape as _buildEventsTab — see its comment.
+  // Same shape as _buildProductsTab — see its comment.
   Widget _buildUsersTab(bool isDark, Color textPrimary, Color textTertiary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,13 +554,31 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// ─── Event grid card ────────────────────────────────────────────────────────
+// ─── Product grid card ──────────────────────────────────────────────────────
 
-class _EventGridCard extends StatelessWidget {
-  final EventResponse event;
+/// Unlike the read-only card this replaced, this one is hoverable with
+/// edit/delete actions — PlatformStaff has full override over every
+/// organization's products (see [[01-domain]]), and this screen is only
+/// ever reached by PlatformStaff (via OrganizationsScreen).
+class _ProductGridCard extends StatefulWidget {
+  final ProductResponse product;
   final bool isDark;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _EventGridCard({required this.event, required this.isDark});
+  const _ProductGridCard({
+    required this.product,
+    required this.isDark,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_ProductGridCard> createState() => _ProductGridCardState();
+}
+
+class _ProductGridCardState extends State<_ProductGridCard> {
+  bool _isHovering = false;
 
   String _formatDate(DateTime date) {
     final d = date.toLocal();
@@ -515,72 +591,146 @@ class _EventGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final product = widget.product;
     final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final statusColor = event.isPublished ? AppColors.success : AppColors.warning;
-    final statusColorDark = event.isPublished ? AppColors.successDark : AppColors.warningDark;
+    final statusColor = product.isPublished ? AppColors.success : AppColors.warning;
+    final statusColorDark = product.isPublished ? AppColors.successDark : AppColors.warningDark;
     final primary = isDark ? AppColors.secondary : AppColors.primary;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovering = true),
+      onExit: (_) => setState(() => _isHovering = false),
+      child: Stack(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(12),
+          Positioned.fill(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: _isHovering ? primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(LucideIcons.package, color: primary, size: 22),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    product.name,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    product.date != null ? _formatDate(product.date!) : product.ticketingMode.label,
+                    style: TextStyle(fontSize: 12, color: textTertiary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Spacer(),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          product.categoryName,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: primary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          product.isPublished ? 'Objavljen' : 'Nacrt',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColorDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            child: Icon(LucideIcons.calendarDays, color: primary, size: 22),
           ),
-          const SizedBox(height: 12),
-          Text(
-            event.name,
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(_formatDate(event.date), style: TextStyle(fontSize: 12, color: textTertiary)),
-          const Spacer(),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  event.categoryName,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: primary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Positioned(
+            top: 8,
+            right: 8,
+            child: AnimatedOpacity(
+              opacity: _isHovering ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: !_isHovering,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _CardActionBtn(icon: LucideIcons.pencil, onTap: widget.onEdit, isDark: isDark),
+                    const SizedBox(width: 4),
+                    _CardActionBtn(icon: LucideIcons.trash2, onTap: widget.onDelete, isDark: isDark, isDestructive: true),
+                  ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  event.isPublished ? 'Objavljen' : 'Nacrt',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColorDark),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CardActionBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isDark;
+  final bool isDestructive;
+
+  const _CardActionBtn({
+    required this.icon,
+    required this.onTap,
+    required this.isDark,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isDark ? AppColors.darkSurface : Colors.white,
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        onTap: onTap,
+        hoverColor: isDestructive
+            ? (isDark ? AppColors.errorBgDarkMode : AppColors.errorBg)
+            : (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(
+            icon,
+            size: 14,
+            color: isDestructive ? AppColors.error : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
+          ),
+        ),
       ),
     );
   }

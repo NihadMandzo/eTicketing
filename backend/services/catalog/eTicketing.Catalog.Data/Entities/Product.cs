@@ -28,5 +28,10 @@ public class Product : BaseEntity
     public Guid OrganizationId { get; set; }
 
     public PublishStatus Status { get; set; } = PublishStatus.Draft;
-    public string? ImageUrl { get; set; }
+
+    // Gallery photos live in Azure Blob Storage ("product-images" container), not as a column
+    // here — see ProductImage. Managed exclusively through the dedicated POST/DELETE
+    // /products/{id}/images endpoints, never bundled into Create/Update (same convention as
+    // Category.IconBlobName / Organization.LogoBlobName).
+    public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
 }

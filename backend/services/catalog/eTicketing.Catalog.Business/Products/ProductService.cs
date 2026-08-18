@@ -1,28 +1,36 @@
 using System.Security.Claims;
+using eTicketing.Catalog.Business.Products.Validators;
 using eTicketing.Catalog.Business.Security;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using eTicketing.Shared.Storage;
 using Mapster;
+using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Catalog.Business.Products;
 
 public class ProductService : IProductService
 {
+    private const string ContainerName = "product-images";
+
     private readonly IProductRepository _productRepository;
     private readonly ICategoryRepository _categoryRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IBlobStorageService _blobStorageService;
 
     public ProductService(
         IProductRepository productRepository,
         ICategoryRepository categoryRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IBlobStorageService blobStorageService)
     {
         _productRepository = productRepository;
         _categoryRepository = categoryRepository;
         _unitOfWork = unitOfWork;
+        _blobStorageService = blobStorageService;
     }
 
     public async Task<Result<ProductPreviewResponse>> PreviewAsync(UpsertProductRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -33,7 +41,7 @@ public class ProductService : IProductService
 
         var category = validation.Value!;
         return Result<ProductPreviewResponse>.Success(new ProductPreviewResponse(
-            request.Name, request.Description, request.Date, category.Id, category.Name, category.TicketingMode, request.ImageUrl));
+            request.Name, request.Description, request.Date, category.Id, category.Name, category.TicketingMode));
     }
 
     public async Task<Result<ProductResponse>> CreateAsync(UpsertProductRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -55,7 +63,6 @@ public class ProductService : IProductService
             CategoryId = request.CategoryId,
             OrganizationId = organizationId.Value,
             Status = PublishStatus.Draft,
-            ImageUrl = request.ImageUrl,
         };
 
         await _productRepository.AddAsync(product, ct);
@@ -100,7 +107,6 @@ public class ProductService : IProductService
         product.Description = request.Description;
         product.Date = request.Date;
         product.CategoryId = request.CategoryId;
-        product.ImageUrl = request.ImageUrl;
         product.Category = validation.Value;
 
         await _unitOfWork.SaveChangesAsync(ct);
@@ -110,7 +116,8 @@ public class ProductService : IProductService
 
     public async Task<Result> DeleteAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var product = await _productRepository.GetByIdAsync(id, ct);
+        // GetByIdWithCategoryAsync also Includes Images — needed below to delete their blobs.
+        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
         if (product is null)
             return Result.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
@@ -118,10 +125,73 @@ public class ProductService : IProductService
         if (ownershipError is not null)
             return Result.Failure(ownershipError);
 
+        var blobNames = product.Images.Select(i => i.BlobName).ToList();
+
         _productRepository.Remove(product);
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // DB delete first (cascades ProductImage rows too, see ProductImageConfiguration): if
+        // SaveChangesAsync above throws, every blob is left untouched rather than orphaned while
+        // the product row is still alive and pointing at them. If a blob delete below throws
+        // instead (genuine Azure outage) — after the DB commit already succeeded — the product is
+        // gone but that blob lingers; acceptable and recoverable, unlike the reverse. Mirrors
+        // CategoryService.DeleteAsync / OrganizationService.DeleteAsync exactly.
+        foreach (var blobName in blobNames)
+        {
+            await _blobStorageService.DeleteAsync(ContainerName, blobName, ct);
+        }
+
         return Result.Success();
+    }
+
+    public async Task<Result<ProductResponse>> UploadImageAsync(Guid id, IFormFile image, ClaimsPrincipal user, CancellationToken ct = default)
+    {
+        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        if (product is null)
+            return Result<ProductResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
+
+        var ownershipError = AuthorizeOwnership(user, product.OrganizationId);
+        if (ownershipError is not null)
+            return Result<ProductResponse>.Failure(ownershipError);
+
+        if (product.Images.Count >= ProductImageValidation.MaxCount)
+        {
+            return Result<ProductResponse>.Failure(Error.Conflict(
+                "product.images_limit_reached",
+                $"Proizvod već ima maksimalan broj slika ({ProductImageValidation.MaxCount})."));
+        }
+
+        var productImage = new ProductImage { Id = Guid.NewGuid(), ProductId = product.Id, DisplayOrder = product.Images.Count };
+        var extension = await ProductImageValidation.DetectExtensionAsync(image, ct);
+        productImage.BlobName = BlobNaming.BuildBlobName(productImage.Id, product.Name, extension);
+
+        await _blobStorageService.UploadAsync(ContainerName, productImage.BlobName, image.OpenReadStream(), ContentTypeFor(extension), ct);
+        product.Images.Add(productImage);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Result<ProductResponse>.Success(ToResponse(product));
+    }
+
+    public async Task<Result<ProductResponse>> DeleteImageAsync(Guid id, Guid imageId, ClaimsPrincipal user, CancellationToken ct = default)
+    {
+        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        if (product is null)
+            return Result<ProductResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
+
+        var ownershipError = AuthorizeOwnership(user, product.OrganizationId);
+        if (ownershipError is not null)
+            return Result<ProductResponse>.Failure(ownershipError);
+
+        var image = product.Images.FirstOrDefault(i => i.Id == imageId);
+        if (image is null)
+            return Result<ProductResponse>.Failure(Error.NotFound("product.image_not_found", "Slika nije pronađena."));
+
+        // Same DB-first-then-blob ordering as DeleteAsync above.
+        product.Images.Remove(image);
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _blobStorageService.DeleteAsync(ContainerName, image.BlobName, ct);
+
+        return Result<ProductResponse>.Success(ToResponse(product));
     }
 
     public async Task<Result<PagedResult<ProductResponse>>> GetPublishedAsync(ProductQuery query, CancellationToken ct = default)
@@ -199,7 +269,9 @@ public class ProductService : IProductService
         return null;
     }
 
-    private static Result<PagedResult<ProductResponse>> ToPagedResult(PagedResult<Product> paged) =>
+    private static string ContentTypeFor(string extension) => extension == "png" ? "image/png" : "image/jpeg";
+
+    private Result<PagedResult<ProductResponse>> ToPagedResult(PagedResult<Product> paged) =>
         Result<PagedResult<ProductResponse>>.Success(new PagedResult<ProductResponse>
         {
             Items = paged.Items.Select(ToResponse).ToList(),
@@ -208,5 +280,14 @@ public class ProductService : IProductService
             PageSize = paged.PageSize,
         });
 
-    private static ProductResponse ToResponse(Product product) => product.Adapt<ProductResponse>();
+    // ImageUrls are derived from Azure Blob Storage (never stored columns) — same reasoning as
+    // CategoryService.ToResponse/BuildIconUrl, generalized to a list ordered by DisplayOrder.
+    private ProductResponse ToResponse(Product product) =>
+        product.Adapt<ProductResponse>() with { Images = BuildImages(product) };
+
+    private List<ProductImageResponse> BuildImages(Product product) =>
+        product.Images
+            .OrderBy(i => i.DisplayOrder)
+            .Select(i => new ProductImageResponse(i.Id, _blobStorageService.GetPublicUrl(ContainerName, i.BlobName), i.DisplayOrder))
+            .ToList();
 }

@@ -1,25 +1,25 @@
 import '../core/api_client.dart';
 import '../models/api_error.dart';
-import '../models/responses/event_response.dart';
 import '../models/responses/paged_result.dart';
+import '../models/responses/product_response.dart';
 import '../models/search_objects/base_search_object.dart';
 import 'api_exception.dart';
 
-/// GET /api/events/all?OrganizationId=... — backs the organization detail
-/// screen's Events tab (and its event-count stat card, via the response's
-/// totalCount). Not a nested `/organizations/{id}/events` route — Catalog
-/// (Events) and Identity (Organizations) are separate services/databases,
-/// so no such nested route exists; this hits Catalog's flat `/events/all`
+/// GET /api/products/all?OrganizationId=... — backs the organization detail
+/// screen's Products tab (and its product-count stat card, via the response's
+/// totalCount). Not a nested `/organizations/{id}/products` route — Catalog
+/// (Products) and Identity (Organizations) are separate services/databases,
+/// so no such nested route exists; this hits Catalog's flat `/products/all`
 /// with an OrganizationId filter merged into the query, mirroring how
 /// OrganizationUsersProvider hits Identity's nested route for admins/
 /// superadmins.
-class OrganizationEventsProvider {
-  static const String _extension = 'events/all';
+class OrganizationProductsProvider {
+  static const String _extension = 'products/all';
 
-  Future<PagedResult<EventResponse>> getAll({
+  Future<PagedResult<ProductResponse>> getAll({
     required String organizationId,
     BaseSearchObject? searchObject,
-    required EventResponse Function(Map<String, dynamic>) fromJson,
+    required ProductResponse Function(Map<String, dynamic>) fromJson,
   }) async {
     final queryParams = <String, dynamic>{
       ...?searchObject?.toQueryString(),
