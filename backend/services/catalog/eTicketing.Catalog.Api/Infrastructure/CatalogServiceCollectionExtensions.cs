@@ -1,6 +1,6 @@
 using eTicketing.Catalog.Business;
 using eTicketing.Catalog.Business.Categories;
-using eTicketing.Catalog.Business.Events;
+using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
@@ -20,14 +20,15 @@ public static class CatalogServiceCollectionExtensions
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CatalogDbContext>());
         builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-        builder.Services.AddScoped<IEventRepository, EventRepository>();
+        builder.Services.AddScoped<IProductRepository, ProductRepository>();
+        builder.Services.AddScoped<IProductImageRepository, ProductImageRepository>();
 
         builder.AddAzureBlobStorage();
 
         builder.Services.AddScoped<ICategoryService, CategoryService>();
-        builder.Services.AddScoped<IEventService, EventService>();
+        builder.Services.AddScoped<IProductService, ProductService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ICategoryService).Assembly);
-        // Mapster's IRegister configs (CategoryMappingConfig, EventMappingConfig) are scanned
+        // Mapster's IRegister configs (CategoryMappingConfig, ProductMappingConfig) are scanned
         // into TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in
         // eTicketing.Catalog.Business — see MapsterRegistration.cs — so no explicit call needed.
 

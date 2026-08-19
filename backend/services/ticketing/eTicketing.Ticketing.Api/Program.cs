@@ -1,5 +1,6 @@
 using eTicketing.Contracts.Hosting;
 using eTicketing.Shared.Auth;
+using eTicketing.Ticketing.Api.Endpoints;
 using eTicketing.Ticketing.Api.Infrastructure;
 using eTicketing.Ticketing.Data;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,9 @@ app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// TODO (Sprint 2/3): app.MapSectorEndpoints(); app.MapTicketEndpoints(); app.MapPurchaseEndpoints();
+app.MapSectorEndpoints();
+// TODO: app.MapPurchaseEndpoints(); app.MapTicketEndpoints(); app.MapSubscriptionEndpoints();
+// — buying is deferred, see .claude/rules/01-domain.md.
 app.MapHealthChecks("/health");
 
 app.Run();

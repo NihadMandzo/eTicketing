@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Data.Entities;
+using eTicketing.Contracts.Persistence;
 
 namespace eTicketing.Catalog.Data.Seeders;
 
@@ -14,7 +15,10 @@ public static class CategorySeeder
 
     /// <summary>IconBlobName is deliberately left null for every seeded category — images aren't
     /// seeded (per the seeding requirements), only uploaded later through the Category management
-    /// screen's dedicated icon endpoints. IconUrl comes back null for these until then.</summary>
+    /// screen's dedicated icon endpoints. IconUrl comes back null for these until then. All three
+    /// existing categories are SingleOccurrence (classic events) — matching the seeded Products
+    /// below; DailyEntry/RecurringReservation categories aren't seeded yet since there's no
+    /// working UI for those modes.</summary>
     public static Category[] GetSeedData() =>
     [
         new Category
@@ -24,6 +28,7 @@ public static class CategorySeeder
             Description = "Koncerti i muzički festivali",
             IsActive = true,
             DisplayOrder = 1,
+            TicketingMode = TicketingMode.SingleOccurrence,
             IconBlobName = null,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
@@ -35,6 +40,7 @@ public static class CategorySeeder
             Description = "Sportski događaji",
             IsActive = true,
             DisplayOrder = 2,
+            TicketingMode = TicketingMode.SingleOccurrence,
             IconBlobName = null,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
@@ -46,6 +52,7 @@ public static class CategorySeeder
             Description = "Konferencije i meetupovi",
             IsActive = true,
             DisplayOrder = 3,
+            TicketingMode = TicketingMode.SingleOccurrence,
             IconBlobName = null,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,

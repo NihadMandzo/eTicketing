@@ -1,9 +1,12 @@
 namespace eTicketing.Contracts.Events;
 
 public record TicketPurchased(
-    int TicketId,
-    int EventId,
-    int SectorId,
+    Guid TicketId,
+    Guid ProductId,
+    Guid SectorId,
     Guid UserId,
     string UserEmail,
-    DateTime PurchasedAt);
+    DateTime PurchasedAt,
+    DateOnly? ValidDate,   // DailyEntry: which calendar day this ticket admits entry for
+    DateOnly? ValidFrom,   // RecurringReservation: billing period start
+    DateOnly? ValidTo);    // RecurringReservation: billing period end

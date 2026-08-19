@@ -1,14 +1,18 @@
+import '../enums/ticketing_mode.dart';
+
 class CategoryInsertRequest {
   final String name;
   final String description;
   final bool isActive;
   final int displayOrder;
+  final TicketingMode ticketingMode;
 
   const CategoryInsertRequest({
     required this.name,
     this.description = '',
     this.isActive = true,
     this.displayOrder = 0,
+    this.ticketingMode = TicketingMode.singleOccurrence,
   });
 
   // Plain JSON body now — Icon moved to the dedicated POST /categories/{id}/icon
@@ -19,5 +23,6 @@ class CategoryInsertRequest {
         'Description': description,
         'IsActive': isActive,
         'DisplayOrder': displayOrder,
+        'TicketingMode': ticketingMode.value,
       };
 }

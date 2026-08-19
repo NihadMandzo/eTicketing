@@ -1,5 +1,5 @@
 using eTicketing.Catalog.Business.Categories;
-using eTicketing.Catalog.Business.Events;
+using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
@@ -22,7 +22,8 @@ public sealed class CatalogTestContext : IDisposable
 
     public CatalogDbContext DbContext { get; }
     public ICategoryRepository CategoryRepository { get; }
-    public IEventRepository EventRepository { get; }
+    public IProductRepository ProductRepository { get; }
+    public IProductImageRepository ProductImageRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public FakeBlobStorageService BlobStorage { get; } = new();
 
@@ -40,14 +41,16 @@ public sealed class CatalogTestContext : IDisposable
         DbContext.Database.EnsureCreated();
 
         CategoryRepository = new CategoryRepository(DbContext);
-        EventRepository = new EventRepository(DbContext);
+        ProductRepository = new ProductRepository(DbContext);
+        ProductImageRepository = new ProductImageRepository(DbContext);
         UnitOfWork = DbContext;
     }
 
     public ICategoryService CreateCategoryService() =>
-        new CategoryService(CategoryRepository, EventRepository, UnitOfWork, BlobStorage);
+        new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
-    public IEventService CreateEventService() => new EventService(EventRepository);
+    public IProductService CreateProductService() =>
+        new ProductService(ProductRepository, ProductImageRepository, CategoryRepository, UnitOfWork, BlobStorage);
 
     public void Dispose()
     {

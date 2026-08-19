@@ -1,4 +1,5 @@
 using eTicketing.Contracts.Pagination;
+using eTicketing.Contracts.Persistence;
 using Microsoft.AspNetCore.Http;
 
 namespace eTicketing.Catalog.Business.Categories;
@@ -13,6 +14,7 @@ public record CategoryResponse(
     string? IconUrl,
     bool IsActive,
     int DisplayOrder,
+    TicketingMode TicketingMode,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
@@ -24,6 +26,7 @@ public record CreateCategoryRequest
     public string Description { get; init; } = string.Empty;
     public bool IsActive { get; init; } = true;
     public int DisplayOrder { get; init; }
+    public TicketingMode TicketingMode { get; init; } = TicketingMode.SingleOccurrence;
 }
 
 public record UpdateCategoryRequest
@@ -32,6 +35,7 @@ public record UpdateCategoryRequest
     public string Description { get; init; } = string.Empty;
     public bool IsActive { get; init; } = true;
     public int DisplayOrder { get; init; }
+    public TicketingMode TicketingMode { get; init; } = TicketingMode.SingleOccurrence;
 }
 
 /// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].

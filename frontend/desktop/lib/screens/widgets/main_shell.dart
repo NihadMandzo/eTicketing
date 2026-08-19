@@ -6,6 +6,7 @@ import '../../theme/app_colors.dart';
 import '../categories_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
+import '../products_screen.dart';
 import '../users_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
@@ -103,6 +104,9 @@ class _PageContent extends StatelessWidget {
     if (page == 'categories') {
       return const CategoriesScreen();
     }
+    if (page == 'products') {
+      return const ProductsScreen();
+    }
     if (page == 'organizations') {
       return const OrganizationsScreen();
     }
@@ -155,8 +159,8 @@ class _PageContent extends StatelessWidget {
     switch (page) {
       case 'dashboard':
         return 'Kontrolna tabla';
-      case 'events':
-        return 'Događaji';
+      case 'products':
+        return 'Proizvodi';
       case 'categories':
         return 'Kategorije';
       case 'tickets':

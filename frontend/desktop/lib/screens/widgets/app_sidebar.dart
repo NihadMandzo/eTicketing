@@ -28,9 +28,9 @@ const List<NavItem> kNavItems = [
     icon: Icons.dashboard_rounded,
   ),
   NavItem(
-    id: 'events',
-    label: 'Događaji',
-    icon: Icons.event_rounded,
+    id: 'products',
+    label: 'Proizvodi',
+    icon: Icons.inventory_2_rounded,
     allowedRoles: ['OrganizationAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(

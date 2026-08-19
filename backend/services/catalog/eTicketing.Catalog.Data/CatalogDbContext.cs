@@ -9,7 +9,8 @@ public class CatalogDbContext : DbContext, IUnitOfWork
     public CatalogDbContext(DbContextOptions<CatalogDbContext> options) : base(options) { }
 
     public DbSet<Category> Categories => Set<Category>();
-    public DbSet<Event> Events => Set<Event>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductImage> ProductImages => Set<ProductImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
