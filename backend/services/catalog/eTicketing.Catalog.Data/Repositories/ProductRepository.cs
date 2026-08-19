@@ -12,6 +12,7 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
     public Task<PagedResult<Product>> SearchAsync(
         BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Include(p => p.Category)
             .Include(p => p.Images)
             .Where(p => string.IsNullOrEmpty(query.FTS) || p.Name.Contains(query.FTS))

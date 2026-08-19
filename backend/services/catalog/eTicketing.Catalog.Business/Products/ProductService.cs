@@ -164,7 +164,12 @@ public class ProductService : IProductService
                 $"Proizvod već ima maksimalan broj slika ({ProductImageValidation.MaxCount})."));
         }
 
-        var productImage = new ProductImage { Id = Guid.NewGuid(), ProductId = product.Id, DisplayOrder = product.Images.Count };
+        // DisplayOrder must be derived from the max existing value, not Count — after a
+        // non-sequential delete (e.g. images at 0,1,2, delete index 1 -> survivors {0,2},
+        // Count == 2), Count would collide with the surviving DisplayOrder=2 image and break
+        // deterministic ordering/cover-image selection.
+        var nextDisplayOrder = product.Images.Count == 0 ? 0 : product.Images.Max(i => i.DisplayOrder) + 1;
+        var productImage = new ProductImage { Id = Guid.NewGuid(), ProductId = product.Id, DisplayOrder = nextDisplayOrder };
         var extension = await ProductImageValidation.DetectExtensionAsync(image, ct);
         productImage.BlobName = BlobNaming.BuildBlobName(productImage.Id, product.Name, extension);
 

@@ -97,6 +97,12 @@ public class SectorService : ISectorService
         if (ownershipError is not null)
             return Result<SectorResponse>.Failure(ownershipError);
 
+        // ProductId is immutable after creation — letting it change would silently re-parent
+        // OrganizationId/TicketingMode and could invalidate outstanding holds' semantics once
+        // ticket purchasing exists.
+        if (request.ProductId != sector.ProductId)
+            return Result<SectorResponse>.Failure(Error.Validation("sector.product_id_immutable", "Sektor se ne može premjestiti na drugi proizvod."));
+
         var validation = await ValidateAsync(request, user, ct);
         if (validation.IsFailure)
             return Result<SectorResponse>.Failure(validation.Error);
@@ -109,7 +115,6 @@ public class SectorService : ISectorService
         sector.Price = request.Price;
         sector.PeriodYear = request.PeriodYear;
         sector.PeriodMonth = request.PeriodMonth;
-        sector.ProductId = request.ProductId;
         sector.OrganizationId = product.OrganizationId;
         sector.TicketingMode = product.TicketingMode;
 

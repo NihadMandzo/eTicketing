@@ -97,6 +97,13 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         // far into the future so it keeps counting as "used" forever instead of being lazily
         // reclaimed by a later TryHoldAsync call.
         await Db.HashSetAsync(counterKey.ToString(), holdId, $"{quantity}:{DateTimeOffset.MaxValue.ToUnixTimeSeconds()}");
+
+        // The hash *value* above is now permanent, but TryHoldAsync's Lua script always sets
+        // EXPIRE <counterKey> 86400 regardless — if nothing else touches this counter within 24h
+        // of the last hold, Redis would still expire the whole key and silently forget every
+        // "permanently confirmed" hold, letting a later TryHoldAsync oversell already-sold
+        // capacity. Remove the TTL on the counter key itself so a confirmed hold survives forever.
+        await Db.KeyPersistAsync(counterKey.ToString());
     }
 
     public async Task ReleaseAsync(string holdId, CancellationToken ct = default)

@@ -21,7 +21,11 @@ import '../../utility/snackbar_service.dart';
 /// other two modes don't use a single product-level date at all.
 class ProductUpsertDialog extends StatefulWidget {
   final ProductResponse? product;
-  final VoidCallback onSaved;
+
+  /// Called with the just-created/just-updated product — the response the backend already
+  /// returned from insert()/update(), so callers can adopt it directly instead of re-querying
+  /// getMine() (which only works if the edited product happens to land on page 1).
+  final void Function(ProductResponse product) onSaved;
 
   const ProductUpsertDialog({super.key, this.product, required this.onSaved});
 
@@ -126,10 +130,18 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
           ? TimeOfDay.fromDateTime(_selectedDate!)
           : const TimeOfDay(hour: 20, minute: 0),
     );
-    if (time == null) return;
+    if (time == null || !mounted) return;
+
+    final combined = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    // The backend rejects Date <= DateTime.UtcNow — picking today's calendar day still allows a
+    // past time-of-day, so catch that here instead of only after a round trip to the API.
+    if (combined.isBefore(DateTime.now())) {
+      SnackbarService.showError('Odabrani datum i vrijeme moraju biti u budućnosti.');
+      return;
+    }
 
     setState(() {
-      _selectedDate = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _selectedDate = combined;
       _hasPreviewed = false;
     });
   }
@@ -191,14 +203,12 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
 
     setState(() => _isSaving = true);
     try {
-      if (_isEditing) {
-        await _provider.updateProduct(widget.product!.id, _buildRequest());
-      } else {
-        await _provider.createProduct(_buildRequest());
-      }
+      final saved = _isEditing
+          ? await _provider.updateProduct(widget.product!.id, _buildRequest())
+          : await _provider.createProduct(_buildRequest());
       if (mounted) {
         Navigator.of(context).pop();
-        widget.onSaved();
+        widget.onSaved(saved);
       }
     } catch (e) {
       if (mounted) {

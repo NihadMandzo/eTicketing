@@ -82,18 +82,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       barrierDismissible: false,
       builder: (_) => ProductUpsertDialog(
         product: _product,
-        onSaved: () async {
-          // No GET /products/{id} exists — the org's product list already has
-          // the fresh copy after an edit, so re-derive it from GetMineAsync
-          // scoped to this id instead of a second endpoint just for this.
-          try {
-            final refreshed = await ProductProvider().getMine();
-            final match = refreshed.items.where((p) => p.id == _product.id);
-            if (mounted && match.isNotEmpty) setState(() => _product = match.first);
-          } catch (_) {
-            // Non-fatal — the list screen will show the fresh copy regardless.
-          }
-        },
+        // updateProduct() already returns the fresh ProductResponse — adopt it directly instead
+        // of re-querying getMine() (which only found the edit if it happened to land on page 1).
+        onSaved: (updated) => setState(() => _product = updated),
       ),
     );
   }

@@ -250,6 +250,21 @@ public class SectorServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenProductIdChanges_ReturnsValidationError()
+    {
+        // Regression test for PR #19 review feedback: ProductId is immutable after creation —
+        // letting it change would silently re-parent OrganizationId/TicketingMode and could
+        // invalidate outstanding holds' semantics once ticket purchasing exists.
+        var created = await _sut.CreateAsync(SingleOccurrenceRequest(), OrgACaller());
+
+        var result = await _sut.UpdateAsync(
+            created.Value!.Id, SingleOccurrenceRequest() with { ProductId = _dailyEntryProductId }, OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("sector.product_id_immutable");
+    }
+
+    [Fact]
     public async Task DeleteAsync_ForOwnSector_RemovesIt()
     {
         var created = await _sut.CreateAsync(SingleOccurrenceRequest(), OrgACaller());

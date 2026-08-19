@@ -35,7 +35,7 @@ class SectorProvider extends BaseProvider<SectorResponse, String> {
   /// GET /api/sectors/mine — organizer's own organization's sectors, any status.
   Future<PagedResult<SectorResponse>> getMine({SectorSearchObject? searchObject}) async {
     final response =
-        await apiClient.get('sectors/mine', queryParameters: searchObject?.toQueryString());
+        await send(() => apiClient.get('sectors/mine', queryParameters: searchObject?.toQueryString()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -44,7 +44,7 @@ class SectorProvider extends BaseProvider<SectorResponse, String> {
 
   /// POST /api/sectors/preview — stateless, no DB write.
   Future<SectorPreviewResponse> preview(SectorUpsertRequest request) async {
-    final response = await apiClient.post('sectors/preview', data: request.toJson());
+    final response = await send(() => apiClient.post('sectors/preview', data: request.toJson()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -53,7 +53,7 @@ class SectorProvider extends BaseProvider<SectorResponse, String> {
 
   /// POST /api/sectors/{id}/publish — Draft → Published.
   Future<SectorResponse> publish(String id) async {
-    final response = await apiClient.post('sectors/$id/publish');
+    final response = await send(() => apiClient.post('sectors/$id/publish'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

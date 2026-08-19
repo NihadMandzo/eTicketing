@@ -38,7 +38,7 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
   /// by the inherited getAll() (that hits the plain "products" — Published-only — route).
   Future<PagedResult<ProductResponse>> getMine({ProductSearchObject? searchObject}) async {
     final response =
-        await apiClient.get('products/mine', queryParameters: searchObject?.toQueryString());
+        await send(() => apiClient.get('products/mine', queryParameters: searchObject?.toQueryString()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -47,7 +47,7 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
 
   /// POST /api/products/preview — stateless, no DB write.
   Future<ProductPreviewResponse> preview(ProductUpsertRequest request) async {
-    final response = await apiClient.post('products/preview', data: request.toJson());
+    final response = await send(() => apiClient.post('products/preview', data: request.toJson()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -56,7 +56,7 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
 
   /// POST /api/products/{id}/publish — Draft → Published.
   Future<ProductResponse> publish(String id) async {
-    final response = await apiClient.post('products/$id/publish');
+    final response = await send(() => apiClient.post('products/$id/publish'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -75,7 +75,7 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
       ),
     });
 
-    final response = await apiClient.post('products/$id/images', data: formData);
+    final response = await send(() => apiClient.post('products/$id/images', data: formData));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -84,7 +84,7 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
 
   /// DELETE /api/products/:id/images/:imageId.
   Future<ProductResponse> deleteImage(String id, String imageId) async {
-    final response = await apiClient.delete('products/$id/images/$imageId');
+    final response = await send(() => apiClient.delete('products/$id/images/$imageId'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

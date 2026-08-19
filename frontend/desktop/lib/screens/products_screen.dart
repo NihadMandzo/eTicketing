@@ -83,7 +83,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => ProductUpsertDialog(onSaved: _loadData),
+      builder: (_) => ProductUpsertDialog(onSaved: (_) => _loadData()),
     );
   }
 

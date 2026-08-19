@@ -124,7 +124,7 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => ProductUpsertDialog(product: product, onSaved: _loadProducts),
+      builder: (_) => ProductUpsertDialog(product: product, onSaved: (_) => _loadProducts()),
     );
   }
 

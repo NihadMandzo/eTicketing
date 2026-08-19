@@ -38,7 +38,14 @@ class BaseProvider<T, TId> {
 
   bool _isSuccess(int? statusCode) => statusCode != null && statusCode >= 200 && statusCode < 300;
 
-  Future<Response> _send(Future<Response> Function() request) async {
+  /// Wraps every request through this provider (generic CRUD here, and any custom endpoint a
+  /// subclass adds) so a Dio connection/send/receive timeout always surfaces as the same Bosnian
+  /// `ApiException` message instead of a raw English `DioException` reaching the UI. Public (not
+  /// `_send`) specifically so subclasses — which live in separate library files, where a leading
+  /// underscore would NOT grant access (Dart privacy is file-scoped, not class-scoped) — can route
+  /// their own custom methods (preview/publish/getMine/...) through the same handling rather than
+  /// calling `apiClient` directly and bypassing it.
+  Future<Response> send(Future<Response> Function() request) async {
     try {
       return await request();
     } on DioException catch (e) {
@@ -60,7 +67,7 @@ class BaseProvider<T, TId> {
   }) async {
     final queryParams = searchObject?.toQueryString() ?? {};
 
-    final response = await _send(() => apiClient.get(
+    final response = await send(() => apiClient.get(
           _extension,
           queryParameters: queryParams.isNotEmpty ? queryParams : null,
         ));
@@ -74,7 +81,7 @@ class BaseProvider<T, TId> {
     TId id, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final response = await _send(() => apiClient.get('$_extension/$id'));
+    final response = await send(() => apiClient.get('$_extension/$id'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -85,7 +92,7 @@ class BaseProvider<T, TId> {
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final response = await _send(() => apiClient.post(_extension, data: request));
+    final response = await send(() => apiClient.post(_extension, data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -97,7 +104,7 @@ class BaseProvider<T, TId> {
     dynamic request, {
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final response = await _send(() => apiClient.put('$_extension/$id', data: request));
+    final response = await send(() => apiClient.put('$_extension/$id', data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -109,7 +116,7 @@ class BaseProvider<T, TId> {
   /// AdminEndpoints.Delete on the backend). Purely additive: every other
   /// caller keeps compiling unchanged since this defaults to null.
   Future<void> delete(TId id, {dynamic data}) async {
-    final response = await _send(() => apiClient.delete('$_extension/$id', data: data));
+    final response = await send(() => apiClient.delete('$_extension/$id', data: data));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }

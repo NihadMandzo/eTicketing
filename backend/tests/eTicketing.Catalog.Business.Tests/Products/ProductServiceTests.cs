@@ -413,6 +413,27 @@ public class ProductServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadImageAsync_AfterNonSequentialDelete_AssignsDisplayOrderPastMaxNotCount()
+    {
+        // Regression test for PR #19 review feedback: DisplayOrder must be derived from the max
+        // existing value, not Images.Count — deleting a middle image (index 1 of 0,1,2) leaves
+        // survivors {0,2} with Count == 2, which used to collide with the surviving DisplayOrder=2
+        // image on the next upload.
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        await _sut.UploadImageAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller()); // DisplayOrder 0
+        var second = await _sut.UploadImageAsync(created.Value.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller()); // DisplayOrder 1
+        await _sut.UploadImageAsync(created.Value.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller()); // DisplayOrder 2
+        var middleImageId = second.Value!.Images.Single(i => i.DisplayOrder == 1).Id;
+
+        await _sut.DeleteImageAsync(created.Value.Id, middleImageId, OrgACaller());
+        var afterUpload = await _sut.UploadImageAsync(created.Value.Id, CreateFormFile(CreatePngBytes(40, 40)), OrgACaller());
+
+        afterUpload.IsSuccess.Should().BeTrue();
+        afterUpload.Value!.Images.Select(i => i.DisplayOrder).Should().OnlyHaveUniqueItems();
+        afterUpload.Value.Images.Should().Contain(i => i.DisplayOrder == 3);
+    }
+
+    [Fact]
     public async Task DeleteImageAsync_ForOwnProduct_RemovesImageAndBlob()
     {
         var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
