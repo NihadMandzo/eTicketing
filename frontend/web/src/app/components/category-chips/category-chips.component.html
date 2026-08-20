@@ -1,0 +1,22 @@
+<div class="chips">
+  <button
+    type="button"
+    class="chip"
+    [class.active]="selectedCategoryId() === null"
+    (click)="select(null)"
+  >
+    <span class="chip-badge" style="background-color: var(--muted-foreground)">S</span>
+    Sve kategorije
+  </button>
+  @for (category of categories(); track category.id; let i = $index) {
+    <button
+      type="button"
+      class="chip"
+      [class.active]="selectedCategoryId() === category.id"
+      (click)="select(category.id)"
+    >
+      <span class="chip-badge" [style.background-color]="colorFor(i)">{{ category.name.charAt(0) }}</span>
+      {{ category.name }}
+    </button>
+  }
+</div>

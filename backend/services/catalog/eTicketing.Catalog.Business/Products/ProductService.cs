@@ -217,6 +217,15 @@ public class ProductService : IProductService
         return ToPagedResult(paged);
     }
 
+    public async Task<Result<ProductResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        if (product is null || product.Status != PublishStatus.Published)
+            return Result<ProductResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
+
+        return Result<ProductResponse>.Success(ToResponse(product));
+    }
+
     public async Task<Result<PagedResult<ProductResponse>>> GetMineAsync(ProductQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
         var organizationId = user.GetOrganizationId();

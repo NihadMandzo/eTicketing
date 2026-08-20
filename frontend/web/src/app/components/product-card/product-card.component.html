@@ -1,0 +1,21 @@
+<a [routerLink]="['/dogadjaji', product().id]" class="product-card">
+  <div class="product-image">
+    @if (coverImageUrl(); as url) {
+      <img [src]="url" [alt]="product().name" />
+    }
+    <div class="product-badge">{{ product().categoryName }}</div>
+  </div>
+  <div class="product-content">
+    @if (formattedDate(); as date) {
+      <div class="product-date">{{ date }}</div>
+    }
+    <h3 class="product-title">{{ product().name }}</h3>
+    @if (product().description) {
+      <p class="product-description">{{ product().description }}</p>
+    }
+    <div class="product-footer">
+      <span class="product-mode">{{ product().ticketingMode === 'DailyEntry' ? 'Dnevna ulaznica' : product().ticketingMode === 'RecurringReservation' ? 'Mjesečna karta' : 'Događaj' }}</span>
+      <span class="product-cta">Detalji →</span>
+    </div>
+  </div>
+</a>

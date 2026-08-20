@@ -1,0 +1,347 @@
+import 'package:flutter/material.dart';
+
+import '../models/requests/purchase_request.dart';
+import '../services/api_exception.dart';
+import '../services/cart.dart';
+import '../services/purchase_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/labeled_field.dart';
+import '../widgets/responsive_page.dart';
+import 'login_screen.dart';
+import 'main_shell.dart';
+
+enum _PaymentMethod { card, paypal }
+
+/// Mockup screen 7 — order summary, per-hold line items, payment method
+/// radio, card form (validated identically to `PurchaseRequestValidator`).
+/// Purchases every [CartHoldGroup] in [Cart.state] **sequentially, not in
+/// parallel** — they share one card, so an early decline means the rest
+/// would fail too; an un-purchased hold just expires via its own 5-min TTL
+/// (same as `frontend/web`'s CheckoutComponent).
+class PaymentScreen extends StatefulWidget {
+  const PaymentScreen({super.key});
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _purchaseService = PurchaseService();
+
+  final _cardNumberCtrl = TextEditingController();
+  final _expiryCtrl = TextEditingController();
+  final _cvvCtrl = TextEditingController();
+
+  _PaymentMethod _method = _PaymentMethod.card;
+  bool _isSubmitting = false;
+  String? _submitError;
+
+  @override
+  void dispose() {
+    _cardNumberCtrl.dispose();
+    _expiryCtrl.dispose();
+    _cvvCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final cart = Cart.state.value;
+    if (cart == null || cart.holds.isEmpty) return;
+
+    if (_method == _PaymentMethod.paypal) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PayPal trenutno nije dostupan. Koristite platnu karticu.')),
+      );
+      return;
+    }
+
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+
+    final cardNumber = _cardNumberCtrl.text.replaceAll(RegExp(r'\s'), '');
+
+    try {
+      for (final hold in cart.holds) {
+        await _purchaseService.purchase(PurchaseRequest(
+          holdId: hold.holdId,
+          lineItems: hold.lineItems
+              .map((item) => PurchaseLineItemRequest(ticketTypeId: item.ticketTypeId, quantity: item.quantity))
+              .toList(),
+          cardNumber: cardNumber,
+          cardExpiry: _expiryCtrl.text.trim(),
+          cardCvv: _cvvCtrl.text.trim(),
+        ));
+      }
+
+      Cart.clear();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell(initialIndex: 1)),
+        (route) => false,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ulaznice su uspješno kupljene!'), backgroundColor: AppColors.success),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 401) {
+        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+        return;
+      }
+      // payment.declined / purchase.hold_expired / purchase.quantity_mismatch → 400,
+      // client-fixable, shown inline. payment.unavailable → 503, a genuine
+      // outage — shown as a toast instead (see PurchaseService.ChargeAsync's
+      // 400-vs-503 distinction, decision D8).
+      if (e.statusCode == 503) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.apiError.displayMessage), backgroundColor: AppColors.errorDark),
+        );
+      } else {
+        setState(() => _submitError = e.apiError.displayMessage);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _submitError = 'Plaćanje nije uspjelo. Pokušajte ponovo.');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cart = Cart.state.value;
+    if (cart == null || cart.holds.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Plaćanje')),
+        body: const Center(child: Text('Korpa je prazna.')),
+      );
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Plaćanje')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: ResponsivePage(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    gradient: const LinearGradient(colors: [AppColors.primary, AppColors.secondary]),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(cart.productName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                                      if (cart.eventSummary.isNotEmpty)
+                                        Text(cart.eventSummary, style: TextStyle(fontSize: 12, color: tertiaryText)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text('Pregled narudžbe', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 10),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                for (final hold in cart.holds)
+                                  for (final item in hold.lineItems)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '${item.ticketTypeName ?? hold.sectorName} × ${item.quantity}',
+                                            style: TextStyle(fontSize: 13, color: tertiaryText),
+                                          ),
+                                          Text('${item.total.toStringAsFixed(0)} KM', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                        ],
+                                      ),
+                                    ),
+                                const Divider(height: 1),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Ukupno za plaćanje', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                                    Text(
+                                      '${cart.grandTotal.toStringAsFixed(0)} KM',
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text('Način plaćanja', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 10),
+                        _MethodTile(
+                          icon: Icons.credit_card_rounded,
+                          label: 'Platna kartica',
+                          selected: _method == _PaymentMethod.card,
+                          onTap: () => setState(() => _method = _PaymentMethod.card),
+                        ),
+                        const SizedBox(height: 10),
+                        _MethodTile(
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: 'PayPal',
+                          selected: _method == _PaymentMethod.paypal,
+                          onTap: () => setState(() => _method = _PaymentMethod.paypal),
+                        ),
+                        if (_method == _PaymentMethod.card) ...[
+                          const SizedBox(height: 20),
+                          LabeledField(
+                            label: 'Broj kartice',
+                            controller: _cardNumberCtrl,
+                            hintText: '4242 4242 4242 4242',
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              final digits = (v ?? '').replaceAll(RegExp(r'\s'), '');
+                              return RegExp(r'^\d{12,19}$').hasMatch(digits) ? null : 'Unesite ispravan broj kartice (12-19 cifara)';
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: LabeledField(
+                                  label: 'Datum isteka',
+                                  controller: _expiryCtrl,
+                                  hintText: 'MM/GG',
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) => RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$').hasMatch(v ?? '')
+                                      ? null
+                                      : 'Format MM/GG',
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: LabeledField(
+                                  label: 'CVV',
+                                  controller: _cvvCtrl,
+                                  hintText: '123',
+                                  obscureText: true,
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) => RegExp(r'^\d{3,4}$').hasMatch(v ?? '') ? null : '3-4 cifre',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Test kartica: bilo koji broj koji ne završava sa 0000 se prihvata.',
+                            style: TextStyle(fontSize: 12, color: tertiaryText),
+                          ),
+                        ],
+                        if (_submitError != null) ...[
+                          const SizedBox(height: 16),
+                          Text(_submitError!, style: const TextStyle(color: AppColors.errorDark, fontSize: 13)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+              ),
+              child: FilledButton(
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
+                onPressed: _isSubmitting ? null : _submit,
+                child: _isSubmitting
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text('Plati ${cart.grandTotal.toStringAsFixed(0)} KM'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MethodTile({required this.icon, required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? primary : border, width: selected ? 2 : 1),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: selected ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary) : tertiaryText),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary) : tertiaryText,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+              size: 20,
+              color: selected ? primary : border,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -10,12 +10,13 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const primary = Color(0xFF0D7C66);
-  static const primaryDark = Color(0xFF0A6B57);
-  static const primaryDarkest = Color(0xFF085C4B);
-  static const secondary = Color(0xFF41C9B4);
-  static const accent = Color(0xFFFF6F3C);
+  // Brand — eKarta green palette (#1D5B3A dark / #6FAE4A mid / #8DC63F
+  // bright), replacing the earlier teal/coral scheme.
+  static const primary = Color(0xFF1D5B3A);
+  static const primaryDark = Color(0xFF164A2F);
+  static const primaryDarkest = Color(0xFF0F3521);
+  static const secondary = Color(0xFF6FAE4A);
+  static const accent = Color(0xFF8DC63F);
 
   // Light surfaces / text
   static const lightBackground = Color(0xFFFAFAFA);

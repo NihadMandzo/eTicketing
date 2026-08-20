@@ -1,5 +1,8 @@
 using eTicketing.Contracts.Persistence;
+using eTicketing.Payment.Business.Payments;
 using eTicketing.Payment.Data;
+using eTicketing.Payment.Data.Repositories;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace eTicketing.Payment.Api.Infrastructure;
@@ -13,8 +16,9 @@ public static class PaymentServiceCollectionExtensions
             .AddInterceptors(new AuditableEntitySaveChangesInterceptor()));
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PaymentDbContext>());
-
-        // TODO (Sprint 3, US-3.2): registrovati IPaymentRepository i IPaymentService kad entiteti budu dodani.
+        builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+        builder.Services.AddScoped<IPaymentService, PaymentService>();
+        builder.Services.AddValidatorsFromAssembly(typeof(IPaymentService).Assembly);
 
         return builder;
     }

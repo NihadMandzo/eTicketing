@@ -15,6 +15,14 @@ export const routes: Routes = [
         loadChildren: () => import('./pages/products/products.routes').then(m => m.PRODUCTS_ROUTES)
       },
       {
+        path: 'dogadjaji/:id',
+        loadChildren: () => import('./pages/product-details/product-details.routes').then(m => m.PRODUCT_DETAILS_ROUTES)
+      },
+      {
+        path: 'placanje',
+        loadChildren: () => import('./pages/checkout/checkout.routes').then(m => m.CHECKOUT_ROUTES)
+      },
+      {
         path: 'pomoc',
         loadChildren: () => import('./pages/help/help.routes').then(m => m.HELP_ROUTES)
       },

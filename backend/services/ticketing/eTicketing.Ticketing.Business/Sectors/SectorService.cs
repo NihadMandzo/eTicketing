@@ -73,7 +73,7 @@ public class SectorService : ISectorService
 
     public async Task<Result<SectorResponse>> PublishAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var sector = await _sectorRepository.GetByIdAsync(id, ct);
+        var sector = await _sectorRepository.GetByIdWithTicketTypesAsync(id, ct);
         if (sector is null)
             return Result<SectorResponse>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 
@@ -89,7 +89,7 @@ public class SectorService : ISectorService
 
     public async Task<Result<SectorResponse>> UpdateAsync(Guid id, UpsertSectorRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var sector = await _sectorRepository.GetByIdAsync(id, ct);
+        var sector = await _sectorRepository.GetByIdWithTicketTypesAsync(id, ct);
         if (sector is null)
             return Result<SectorResponse>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 

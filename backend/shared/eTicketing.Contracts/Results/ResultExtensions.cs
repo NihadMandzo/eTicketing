@@ -29,6 +29,9 @@ public static class ResultExtensions
         ErrorType.Validation => Http.BadRequest(new { error.Code, error.Message }),
         ErrorType.Conflict => Http.Conflict(new { error.Code, error.Message }),
         ErrorType.Unauthorized => Http.Json(new { error.Code, error.Message }, statusCode: StatusCodes.Status403Forbidden),
+        // Reserved for genuine downstream-unavailable conditions (e.g. Ticketing→Payment circuit
+        // open) — distinct from the 500 default, which stays for truly unexpected states.
+        ErrorType.Failure => Http.Json(new { error.Code, error.Message }, statusCode: StatusCodes.Status503ServiceUnavailable),
         _ => Http.Problem(title: error.Message, statusCode: StatusCodes.Status500InternalServerError)
     };
 }

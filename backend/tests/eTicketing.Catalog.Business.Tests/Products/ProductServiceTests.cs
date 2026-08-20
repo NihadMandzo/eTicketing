@@ -298,6 +298,40 @@ public class ProductServiceTests : IDisposable
         result.Error.Code.Should().Be("product.forbidden");
     }
 
+    // --- GetByIdAsync ---
+
+    [Fact]
+    public async Task GetByIdAsync_ForPublishedProduct_ReturnsIt()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+        await _sut.PublishAsync(created.Value!.Id, OrgACaller());
+
+        var result = await _sut.GetByIdAsync(created.Value.Id);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Id.Should().Be(created.Value.Id);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ForDraftProduct_ReturnsNotFound()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+
+        var result = await _sut.GetByIdAsync(created.Value!.Id);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.not_found");
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ForUnknownId_ReturnsNotFound()
+    {
+        var result = await _sut.GetByIdAsync(Guid.NewGuid());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.not_found");
+    }
+
     // --- GetPublishedAsync / GetMineAsync / GetAllAsync ---
 
     [Fact]

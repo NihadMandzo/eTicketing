@@ -2,6 +2,12 @@ namespace eTicketing.Ticketing.Business.Sectors;
 
 public record HoldResult(bool Success, string? HoldId, DateTime? ExpiresAt);
 
+/// <summary>What a holdId actually reserved, reconstructed server-side from Redis. PurchaseService
+/// resolves SectorId/Quantity exclusively from this — never from client-supplied values — so a
+/// caller cannot present one sector's hold together with a different sector/quantity claim and
+/// have capacity silently not decremented for what was actually sold.</summary>
+public record HeldReservation(Guid SectorId, DateOnly? Date, int Quantity);
+
 /// <summary>
 /// Redis-backed atomic capacity hold, generalized across TicketingModes via an optional date:
 /// SingleOccurrence/RecurringReservation key off the sector alone
@@ -16,6 +22,10 @@ public interface ISectorCapacityLock
     /// Capacity on first touch) by <paramref name="quantity"/> under a TTL. Returns
     /// Success=false (no hold created) if there isn't enough remaining capacity.</summary>
     Task<HoldResult> TryHoldAsync(Guid sectorId, int capacity, int quantity, DateOnly? date, TimeSpan ttl, CancellationToken ct = default);
+
+    /// <summary>Reads back what a still-active holdId reserved, without mutating anything. Returns
+    /// null if the hold is unknown/already expired.</summary>
+    Task<HeldReservation?> PeekAsync(string holdId, CancellationToken ct = default);
 
     /// <summary>Purchase succeeded: the decrement becomes permanent (TTL cancelled). No-op if
     /// the hold already expired.</summary>

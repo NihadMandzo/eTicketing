@@ -32,8 +32,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapSectorEndpoints();
-// TODO: app.MapPurchaseEndpoints(); app.MapTicketEndpoints(); app.MapSubscriptionEndpoints();
-// — buying is deferred, see .claude/rules/01-domain.md.
+app.MapTicketTypeEndpoints();
+app.MapPurchaseEndpoints();
+app.MapTicketEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

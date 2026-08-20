@@ -1,8 +1,13 @@
+import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
+import { PurchaseService } from '../../core/services/purchase.service';
+import { Ticket } from '../../core/models/purchase.models';
+
+type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 
 function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors | null {
   const newPassword = control.get('newPassword')?.value;
@@ -13,7 +18,7 @@ function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, DatePipe],
   templateUrl: './profile.component.html',
   styleUrl: './profile.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,6 +26,7 @@ function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors 
 export class ProfileComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly purchaseService = inject(PurchaseService);
   private readonly router = inject(Router);
 
   readonly currentUser = this.authService.currentUser;
@@ -28,6 +34,27 @@ export class ProfileComponent {
     const user = this.currentUser();
     if (!user) return '';
     return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
+  });
+
+  readonly activeTab = signal<'tickets' | 'settings'>('tickets');
+  readonly tickets = signal<Ticket[]>([]);
+  readonly isLoadingTickets = signal(true);
+  readonly ticketFilter = signal<TicketFilter>('sve');
+
+  // Ticket doesn't carry TicketingMode directly (denormalized only as far as
+  // SectorId/ProductId) — SingleOccurrence tickets have no ValidDate/ValidFrom,
+  // DailyEntry has ValidDate, RecurringReservation has ValidFrom/ValidTo. Good
+  // enough to filter by without a second request per ticket.
+  private modeOf(ticket: Ticket): TicketFilter {
+    if (ticket.validDate) return 'DailyEntry';
+    if (ticket.validFrom) return 'RecurringReservation';
+    return 'SingleOccurrence';
+  }
+
+  readonly filteredTickets = computed(() => {
+    const filter = this.ticketFilter();
+    if (filter === 'sve') return this.tickets();
+    return this.tickets().filter((t) => this.modeOf(t) === filter);
   });
 
   readonly isSavingProfile = signal(false);
@@ -74,6 +101,31 @@ export class ProfileComponent {
         });
       }
     });
+
+    this.purchaseService.getMyTickets().subscribe({
+      next: (result) => {
+        this.tickets.set(result.items);
+        this.isLoadingTickets.set(false);
+      },
+      error: () => {
+        this.isLoadingTickets.set(false);
+      },
+    });
+  }
+
+  statusLabel(status: Ticket['status']): string {
+    switch (status) {
+      case 'Confirmed':
+        return 'Potvrđena';
+      case 'Processing':
+        return 'U obradi';
+      case 'Ready':
+        return 'Spremna';
+      case 'Cancelled':
+        return 'Otkazana';
+      default:
+        return status;
+    }
   }
 
   saveProfile(): void {

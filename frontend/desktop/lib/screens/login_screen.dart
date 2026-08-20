@@ -134,9 +134,9 @@ class _LoginScreenState extends State<LoginScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF0D7C66),
-                    Color(0xFF0a6b57),
-                    Color(0xFF085c4b),
+                    AppColors.primary,
+                    AppColors.primaryDark,
+                    AppColors.primaryDarkest,
                   ],
                 ),
               ),
@@ -179,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             padding: const EdgeInsets.all(24),
                             child: Image.asset(
-                              'assets/eTicketing-logo.png',
+                              'assets/logo.png',
                               fit: BoxFit.cover,
                             ),
                           ),

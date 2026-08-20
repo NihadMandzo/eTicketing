@@ -11,9 +11,9 @@ public enum TicketStatus
 }
 
 /// <summary>
-/// Schema-only this pass — no Purchase endpoint exists yet (buying is deferred, see
-/// .claude/rules/01-domain.md), so this table stays empty until that work lands. Defined now so
-/// no second migration is needed once purchasing is built.
+/// One row per admission unit (one QR code / receipt line), minted by PurchaseService. A single
+/// POST /purchases call can mint several Tickets at once (e.g. 2x Odrasli + 1x Djeca) — they all
+/// share OrderId so "my tickets"/receipt UIs can group them back into one order.
 /// </summary>
 public class Ticket : BaseEntity
 {
@@ -21,6 +21,14 @@ public class Ticket : BaseEntity
 
     public Guid SectorId { get; set; }
     public Sector? Sector { get; set; }
+
+    // Null iff Sector.TicketTypes was empty at purchase time (today's single-implicit-price path).
+    public Guid? TicketTypeId { get; set; }
+    public TicketType? TicketType { get; set; }
+
+    // Groups every Ticket row minted by one POST /purchases call — also reused as the OrderRef
+    // sent to eTicketing.Payment, so a Payment row and its Tickets share the same identifier.
+    public Guid OrderId { get; set; }
 
     // Denormalized from Sector.ProductId — avoids a join for common "my tickets" filters and
     // matches the shape of the TicketPurchased integration event.

@@ -1,9 +1,9 @@
-/* Global styles for Kuda - Event Hosting & Ticket Shop */
+/* Global styles for eKarta - Event Hosting & Ticket Shop */
 
 :root {
   --font-size: 16px;
-  
-  /* Deep Teal & Coral Color Scheme */
+
+  /* eKarta Green Color Scheme */
   --background: #FAFAFA;
   --foreground: #111827;
 
@@ -12,14 +12,14 @@
 
   --popover: #FFFFFF;
   --popover-foreground: #111827;
-  
-  --primary: #0D7C66;  /* Deep Teal */
+
+  --primary: #1D5B3A;  /* Dark Green */
   --primary-foreground: #FFFFFF;
-  
-  --secondary: #41C9B4;  /* Light Teal */
+
+  --secondary: #6FAE4A;  /* Mid Green */
   --secondary-foreground: #FFFFFF;
-  
-  --accent: #FF6F3C;  /* Coral */
+
+  --accent: #8DC63F;  /* Bright Green */
   --accent-foreground: #FFFFFF;
   
   --muted: #F5F5F5;
@@ -33,7 +33,7 @@
   --input-background: #F9FAFB;
   --switch-background: #D1D5DB;
 
-  --ring: #0D7C66;
+  --ring: #1D5B3A;
 
   --success: #16A34A;
   --success-foreground: #FFFFFF;
@@ -69,23 +69,23 @@
   --popover: #111816;
   --popover-foreground: #F9FAFB;
   
-  --primary: #41C9B4;
+  --primary: #6FAE4A;  /* Dark-mode primary reuses the lighter canonical green for contrast against near-black surfaces */
   --primary-foreground: #0A0F0D;
-  
-  --secondary: #0D7C66;
+
+  --secondary: #1D5B3A;
   --secondary-foreground: #F9FAFB;
-  
-  --accent: #FF8C61;
+
+  --accent: #A3D468;  /* Lightened accent — pops against dark surfaces and the dark-mode primary buttons */
   --accent-foreground: #0A0F0D;
-  
-  /* Teal-tinted neutrals — matches the --background/--card hue instead of a
+
+  /* Green-tinted neutrals — matches the --background/--card hue instead of a
      plain blue-slate gray, so surfaces don't read as mismatched/muddy. */
   --muted: #17221E;
   --muted-foreground: #93A29D;
 
   --border: #2A3B36;
   --input: #17221E;
-  --ring: #41C9B4;
+  --ring: #6FAE4A;
 
   --success: #22C55E;
   --success-foreground: #0A0F0D;

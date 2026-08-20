@@ -175,7 +175,7 @@ class _Logo extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Image.asset(
-              'assets/eTicketing-logo.png',
+              'assets/logo.png',
               fit: BoxFit.contain,
             ),
           ),

@@ -1,4 +1,5 @@
 using eTicketing.Contracts.Hosting;
+using eTicketing.Payment.Api.Endpoints;
 using eTicketing.Payment.Api.Infrastructure;
 using eTicketing.Payment.Data;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseExceptionHandler();
 
-// TODO (Sprint 3): app.MapPaymentEndpoints();
+app.MapPaymentEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

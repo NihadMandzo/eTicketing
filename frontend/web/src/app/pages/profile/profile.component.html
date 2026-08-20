@@ -10,76 +10,170 @@
 
     <section class="content-section">
       <div class="container">
-        <form class="card" [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
-          <h2>Moj profil</h2>
+        <div class="tab-switcher" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="tab-btn"
+            [class.active]="activeTab() === 'tickets'"
+            [attr.aria-selected]="activeTab() === 'tickets'"
+            (click)="activeTab.set('tickets')"
+          >
+            Moje ulaznice
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab-btn"
+            [class.active]="activeTab() === 'settings'"
+            [attr.aria-selected]="activeTab() === 'settings'"
+            (click)="activeTab.set('settings')"
+          >
+            Postavke
+          </button>
+        </div>
 
-          @if (profileMessage()) {
-            <div class="alert alert-success">{{ profileMessage() }}</div>
-          }
-          @if (profileError()) {
-            <div class="alert alert-error">{{ profileError() }}</div>
-          }
-
-          <div class="field-row">
-            <label class="field">
-              <span class="field-label">Ime</span>
-              <input type="text" formControlName="firstName" class="field-input" />
-            </label>
-            <label class="field">
-              <span class="field-label">Prezime</span>
-              <input type="text" formControlName="lastName" class="field-input" />
-            </label>
+        @if (activeTab() === 'tickets') {
+          <div class="filter-chips">
+            <button
+              type="button"
+              class="chip"
+              [class.active]="ticketFilter() === 'sve'"
+              (click)="ticketFilter.set('sve')"
+            >
+              Sve
+            </button>
+            <button
+              type="button"
+              class="chip"
+              [class.active]="ticketFilter() === 'SingleOccurrence'"
+              (click)="ticketFilter.set('SingleOccurrence')"
+            >
+              Događaji
+            </button>
+            <button
+              type="button"
+              class="chip"
+              [class.active]="ticketFilter() === 'DailyEntry'"
+              (click)="ticketFilter.set('DailyEntry')"
+            >
+              Dnevne ulaznice
+            </button>
+            <button
+              type="button"
+              class="chip"
+              [class.active]="ticketFilter() === 'RecurringReservation'"
+              (click)="ticketFilter.set('RecurringReservation')"
+            >
+              Rezervacije
+            </button>
           </div>
 
-          <label class="field">
-            <span class="field-label">Korisničko ime</span>
-            <input type="text" formControlName="username" class="field-input" />
-          </label>
-
-          <label class="field">
-            <span class="field-label">Broj telefona</span>
-            <input type="tel" formControlName="phoneNumber" class="field-input" />
-          </label>
-
-          <button type="submit" class="btn btn-primary" [disabled]="isSavingProfile()">
-            {{ isSavingProfile() ? 'Čuvanje…' : 'Sačuvaj izmjene' }}
-          </button>
-        </form>
-
-        <form class="card" [formGroup]="passwordForm" (ngSubmit)="savePassword()" novalidate>
-          <h2>Promjena lozinke</h2>
-
-          @if (passwordMessage()) {
-            <div class="alert alert-success">{{ passwordMessage() }}</div>
+          @if (isLoadingTickets()) {
+            <p class="empty-state">Učitavanje ulaznica…</p>
+          } @else if (filteredTickets().length === 0) {
+            <p class="empty-state">Nemate kupljenih ulaznica u ovoj kategoriji.</p>
+          } @else {
+            <div class="ticket-list">
+              @for (ticket of filteredTickets(); track ticket.id) {
+                <div class="ticket-card">
+                  <div class="ticket-main">
+                    <h3 class="ticket-sector">{{ ticket.sectorName }}</h3>
+                    @if (ticket.ticketTypeName) {
+                      <span class="ticket-type">{{ ticket.ticketTypeName }}</span>
+                    }
+                    <div class="ticket-meta">
+                      @if (ticket.validDate) {
+                        <span>Datum: {{ ticket.validDate }}</span>
+                      }
+                      @if (ticket.validFrom) {
+                        <span>Period: {{ ticket.validFrom }} – {{ ticket.validTo }}</span>
+                      }
+                      <span>Kupljeno: {{ ticket.createdAt | date: 'dd.MM.yyyy.' }}</span>
+                    </div>
+                  </div>
+                  <div class="ticket-side">
+                    <span class="ticket-status" [class.confirmed]="ticket.status === 'Confirmed'">{{ statusLabel(ticket.status) }}</span>
+                    <span class="ticket-price">{{ ticket.pricePaid }} KM</span>
+                  </div>
+                </div>
+              }
+            </div>
           }
-          @if (passwordError()) {
-            <div class="alert alert-error">{{ passwordError() }}</div>
-          }
+        }
 
-          <label class="field">
-            <span class="field-label">Trenutna lozinka</span>
-            <input type="password" formControlName="currentPassword" class="field-input" autocomplete="current-password" />
-          </label>
+        @if (activeTab() === 'settings') {
+          <form class="card" [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
+            <h2>Moj profil</h2>
 
-          <label class="field">
-            <span class="field-label">Nova lozinka</span>
-            <input type="password" formControlName="newPassword" class="field-input" autocomplete="new-password" />
-          </label>
-
-          <label class="field">
-            <span class="field-label">Potvrdite novu lozinku</span>
-            <input type="password" formControlName="confirmPassword" class="field-input" autocomplete="new-password" />
-            @if (passwordForm.errors?.['passwordMismatch'] && passwordForm.controls.confirmPassword.touched) {
-              <span class="field-error">Lozinke se ne podudaraju.</span>
+            @if (profileMessage()) {
+              <div class="alert alert-success">{{ profileMessage() }}</div>
             }
-          </label>
+            @if (profileError()) {
+              <div class="alert alert-error">{{ profileError() }}</div>
+            }
 
-          <button type="submit" class="btn btn-primary" [disabled]="isSavingPassword()">
-            {{ isSavingPassword() ? 'Čuvanje…' : 'Promijeni lozinku' }}
-          </button>
-        </form>
+            <div class="field-row">
+              <label class="field">
+                <span class="field-label">Ime</span>
+                <input type="text" formControlName="firstName" class="field-input" />
+              </label>
+              <label class="field">
+                <span class="field-label">Prezime</span>
+                <input type="text" formControlName="lastName" class="field-input" />
+              </label>
+            </div>
 
-        <button type="button" class="btn btn-outline logout-btn" (click)="logout()">Odjavi se</button>
+            <label class="field">
+              <span class="field-label">Korisničko ime</span>
+              <input type="text" formControlName="username" class="field-input" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Broj telefona</span>
+              <input type="tel" formControlName="phoneNumber" class="field-input" />
+            </label>
+
+            <button type="submit" class="btn btn-primary" [disabled]="isSavingProfile()">
+              {{ isSavingProfile() ? 'Čuvanje…' : 'Sačuvaj izmjene' }}
+            </button>
+          </form>
+
+          <form class="card" [formGroup]="passwordForm" (ngSubmit)="savePassword()" novalidate>
+            <h2>Promjena lozinke</h2>
+
+            @if (passwordMessage()) {
+              <div class="alert alert-success">{{ passwordMessage() }}</div>
+            }
+            @if (passwordError()) {
+              <div class="alert alert-error">{{ passwordError() }}</div>
+            }
+
+            <label class="field">
+              <span class="field-label">Trenutna lozinka</span>
+              <input type="password" formControlName="currentPassword" class="field-input" autocomplete="current-password" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Nova lozinka</span>
+              <input type="password" formControlName="newPassword" class="field-input" autocomplete="new-password" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Potvrdite novu lozinku</span>
+              <input type="password" formControlName="confirmPassword" class="field-input" autocomplete="new-password" />
+              @if (passwordForm.errors?.['passwordMismatch'] && passwordForm.controls.confirmPassword.touched) {
+                <span class="field-error">Lozinke se ne podudaraju.</span>
+              }
+            </label>
+
+            <button type="submit" class="btn btn-primary" [disabled]="isSavingPassword()">
+              {{ isSavingPassword() ? 'Čuvanje…' : 'Promijeni lozinku' }}
+            </button>
+          </form>
+
+          <button type="button" class="btn btn-outline logout-btn" (click)="logout()">Odjavi se</button>
+        }
       </div>
     </section>
   </div>

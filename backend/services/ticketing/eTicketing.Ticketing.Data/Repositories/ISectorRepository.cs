@@ -12,4 +12,9 @@ public interface ISectorRepository : IRepository<Sector, Guid>
     /// Business.</summary>
     Task<PagedResult<Sector>> SearchAsync(
         BaseSearchObject query, Guid? productId, Guid? organizationId, PublishStatus? status, CancellationToken ct = default);
+
+    /// <summary>Plain GetByIdAsync (DbSet.FindAsync) can't eager-load — use this instead wherever
+    /// the caller needs Sector.TicketTypes populated in the response (Publish/Update; Purchase's
+    /// own Sector lookup).</summary>
+    Task<Sector?> GetByIdWithTicketTypesAsync(Guid id, CancellationToken ct = default);
 }

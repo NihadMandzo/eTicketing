@@ -7,7 +7,7 @@
 .page-title {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--foreground);
   margin-bottom: 24px;
 }
 
@@ -19,17 +19,19 @@
   width: 100%;
   padding: 16px 20px;
   font-size: 16px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border);
   border-radius: 12px;
   outline: none;
   transition: all 0.2s ease;
+  background-color: var(--card);
+  color: var(--foreground);
 }
 
 .search-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 15%, transparent);
 }
 
 .search-input::placeholder {
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }

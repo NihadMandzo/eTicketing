@@ -1,3 +1,4 @@
+using System.Globalization;
 using eTicketing.Ticketing.Business.Sectors;
 using StackExchange.Redis;
 
@@ -59,6 +60,25 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
 
     private static string BuildHoldInfoKey(string holdId) => $"holdinfo:{holdId}";
 
+    /// <summary>Reverses BuildCounterKey — "sector:{sectorId}:capacity" or
+    /// "sector:{sectorId}:date:{yyyy-MM-dd}:capacity" — back into (SectorId, Date). Returns null if
+    /// the key doesn't match either shape (should never happen for a key this class itself wrote).</summary>
+    private static (Guid SectorId, DateOnly? Date)? TryParseCounterKey(string counterKey)
+    {
+        var parts = counterKey.Split(':');
+        if (parts.Length == 3 && parts[0] == "sector" && parts[2] == "capacity" && Guid.TryParse(parts[1], out var sectorId))
+            return (sectorId, null);
+
+        if (parts.Length == 5 && parts[0] == "sector" && parts[2] == "date" && parts[4] == "capacity"
+            && Guid.TryParse(parts[1], out var dailySectorId)
+            && DateOnly.TryParseExact(parts[3], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        {
+            return (dailySectorId, date);
+        }
+
+        return null;
+    }
+
     public async Task<HoldResult> TryHoldAsync(Guid sectorId, int capacity, int quantity, DateOnly? date, TimeSpan ttl, CancellationToken ct = default)
     {
         var counterKey = BuildCounterKey(sectorId, date);
@@ -79,6 +99,24 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         await Db.StringSetAsync(BuildHoldInfoKey(holdId), counterKey, ttl);
 
         return new HoldResult(true, holdId, expiresAt.UtcDateTime);
+    }
+
+    public async Task<HeldReservation?> PeekAsync(string holdId, CancellationToken ct = default)
+    {
+        var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
+        if (counterKey.IsNullOrEmpty)
+            return null;
+
+        var current = await Db.HashGetAsync(counterKey.ToString(), holdId);
+        if (current.IsNullOrEmpty)
+            return null;
+
+        var parsed = TryParseCounterKey(counterKey.ToString()!);
+        if (parsed is null)
+            return null;
+
+        var quantity = int.Parse(current.ToString().Split(':')[0], CultureInfo.InvariantCulture);
+        return new HeldReservation(parsed.Value.SectorId, parsed.Value.Date, quantity);
     }
 
     public async Task ConfirmAsync(string holdId, CancellationToken ct = default)

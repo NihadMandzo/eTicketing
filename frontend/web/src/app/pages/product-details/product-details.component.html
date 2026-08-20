@@ -1,0 +1,164 @@
+@if (isLoading()) {
+  <div class="state-message"><p>Učitavanje...</p></div>
+} @else if (loadError()) {
+  <div class="state-message">
+    <p>{{ loadError() }}</p>
+    <a routerLink="/dogadjaji" class="btn btn-primary">Pregledaj ponudu</a>
+  </div>
+} @else if (product(); as product) {
+  <div class="product-details-page">
+    <div class="container details-grid">
+      <!-- Left: gallery + info -->
+      <div class="details-main">
+        <div class="gallery-main">
+          @if (product.images.length > 0) {
+            <img [src]="product.images[activeImageIndex()].url" [alt]="product.name" />
+          } @else {
+            <div class="gallery-placeholder"></div>
+          }
+          <div class="gallery-badge">{{ product.categoryName }}</div>
+        </div>
+        @if (product.images.length > 1) {
+          <div class="gallery-thumbs">
+            @for (img of product.images; track img.id; let i = $index) {
+              <button type="button" class="thumb" [class.active]="i === activeImageIndex()" (click)="selectImage(i)">
+                <img [src]="img.url" alt="" />
+              </button>
+            }
+          </div>
+        }
+
+        <div class="info-card">
+          <h1>{{ product.name }}</h1>
+          @if (product.date) {
+            <div class="info-row">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              <span>{{ product.date | date: "d. MMMM y. 'u' HH:mm" }}</span>
+            </div>
+          }
+          @if (product.description) {
+            <div class="description">
+              <h2>O ponudi</h2>
+              <p>{{ product.description }}</p>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Right: purchase card, mode-dependent -->
+      <div class="details-side">
+        <div class="purchase-card">
+          @switch (product.ticketingMode) {
+            @case ('SingleOccurrence') {
+              <h3>Kupite ulaznicu</h3>
+              @if (rows().length === 0) {
+                <p class="empty-text">Trenutno nema dostupnih sektora.</p>
+              } @else {
+                <div class="rows">
+                  @for (row of rows(); track row.sectorId + (row.ticketTypeId ?? '')) {
+                    <div class="row">
+                      <div>
+                        <p class="row-name">{{ row.ticketTypeName ?? row.sectorName }}</p>
+                        @if (row.ticketTypeName) {
+                          <p class="row-sub">{{ row.sectorName }}</p>
+                        }
+                        <p class="row-price">{{ row.price }} KM</p>
+                      </div>
+                      <div class="stepper">
+                        <button type="button" (click)="decQuantity(row)">−</button>
+                        <span>{{ quantityFor(row) }}</span>
+                        <button type="button" (click)="incQuantity(row)">+</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+                <div class="total-row">
+                  <span>Ukupno</span>
+                  <span class="total-amount">{{ total() }} KM</span>
+                </div>
+                @if (submitError()) {
+                  <p class="error-text">{{ submitError() }}</p>
+                }
+                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting()" (click)="proceedToCheckout()">
+                  {{ isSubmitting() ? 'Molimo sačekajte...' : 'Kupi ulaznicu' }}
+                </button>
+              }
+            }
+            @case ('DailyEntry') {
+              <h3>Kupite ulaznicu</h3>
+              <label class="field-label" for="visit-date">Datum posjete</label>
+              <input id="visit-date" type="date" class="date-input" [value]="selectedDate()" [min]="minDate" (change)="onDateChange($any($event.target).value)" />
+
+              @if (rows().length === 0) {
+                <p class="empty-text">Trenutno nema dostupnih ulaznica.</p>
+              } @else {
+                <div class="rows">
+                  @for (row of rows(); track row.sectorId + (row.ticketTypeId ?? '')) {
+                    <div class="row row-bordered">
+                      <div>
+                        <p class="row-name">{{ row.ticketTypeName ?? row.sectorName }}</p>
+                        <p class="row-price">{{ row.price }} KM</p>
+                      </div>
+                      <div class="stepper">
+                        <button type="button" (click)="decQuantity(row)">−</button>
+                        <span>{{ quantityFor(row) }}</span>
+                        <button type="button" (click)="incQuantity(row)">+</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+                <div class="total-row">
+                  <span>Ukupno</span>
+                  <span class="total-amount">{{ total() }} KM</span>
+                </div>
+                @if (submitError()) {
+                  <p class="error-text">{{ submitError() }}</p>
+                }
+                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting()" (click)="proceedToCheckout()">
+                  {{ isSubmitting() ? 'Molimo sačekajte...' : 'Kupi ulaznicu' }}
+                </button>
+                <p class="hint-text">Otkazivanje besplatno do 24h prije posjete</p>
+              }
+            }
+            @case ('RecurringReservation') {
+              <h3>Mjesečna karta</h3>
+              @if (sectors().length === 0) {
+                <p class="empty-text">Trenutno nema dostupnih mjesta.</p>
+              } @else {
+                <p class="field-label">Odaberite mjesto</p>
+                <div class="spot-grid">
+                  @for (sector of sectors(); track sector.id) {
+                    <button
+                      type="button"
+                      class="spot"
+                      [class.taken]="takenSpotIds().has(sector.id)"
+                      [class.selected]="selectedSpotSectorId() === sector.id"
+                      [disabled]="takenSpotIds().has(sector.id) || isSubmitting()"
+                      (click)="selectSpot(sector)"
+                    >
+                      {{ sector.name }}
+                    </button>
+                  }
+                </div>
+                @if (submitError()) {
+                  <p class="error-text">{{ submitError() }}</p>
+                }
+                @if (selectedSpotTotal(); as spotTotal) {
+                  <div class="total-row">
+                    <span>Mjesečno</span>
+                    <span class="total-amount">{{ spotTotal }} KM</span>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-lg full-width" (click)="goToCheckoutWithSpot()">
+                    Nastavi na plaćanje
+                  </button>
+                } @else {
+                  <p class="hint-text">Kliknite na slobodno mjesto da ga rezervišete.</p>
+                }
+              }
+            }
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}

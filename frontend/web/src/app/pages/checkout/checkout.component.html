@@ -1,0 +1,191 @@
+@if (!cart() && !done()) {
+  <div class="state-message">
+    <h2>Nema podataka o kupovini</h2>
+    <p>Niste odabrali ulaznicu.</p>
+    <a routerLink="/dogadjaji" class="btn btn-primary">Pregledaj ponudu</a>
+  </div>
+} @else if (done()) {
+  <div class="state-message success">
+    <div class="success-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+    </div>
+    <h2>Plaćanje uspješno!</h2>
+    <p>Vaša narudžba je uspješno obrađena.</p>
+    <p class="order-ids">
+      @for (result of results(); track result.orderId) {
+        <span class="order-id">Narudžba: {{ result.orderId }}</span>
+      }
+    </p>
+    <div class="success-actions">
+      <a routerLink="/" class="btn btn-outline">Nazad na početnu</a>
+      <a routerLink="/profil" class="btn btn-primary">Pregledaj ulaznice</a>
+    </div>
+  </div>
+} @else if (cart(); as cart) {
+  <div class="checkout-page">
+    <div class="container checkout-grid">
+      <div class="checkout-main">
+        <!-- Stepper -->
+        <div class="stepper-header">
+          <div class="dots-row">
+            @for (label of stepLabels; track label; let i = $index) {
+              <div class="dot-wrap">
+                <div class="dot" [class.active]="step() >= i">{{ step() > i ? '✓' : i + 1 }}</div>
+                @if (i < stepLabels.length - 1) {
+                  <div class="dot-line" [class.active]="step() > i"></div>
+                }
+              </div>
+            }
+          </div>
+          <div class="labels-row">
+            @for (label of stepLabels; track label; let i = $index) {
+              <div class="dot-label" [class.active]="step() >= i">{{ label }}</div>
+            }
+          </div>
+        </div>
+
+        <!-- Step 0: order review -->
+        @if (step() === 0) {
+          <div class="step-card">
+            <h2>Pregled narudžbe</h2>
+            @for (hold of cart.holds; track hold.holdId) {
+              <div class="hold-block">
+                <p class="hold-title">{{ cart.productName }} — {{ hold.sectorName }}</p>
+                @if (cart.date) {
+                  <p class="hold-sub">Datum posjete: {{ cart.date }}</p>
+                }
+                <div class="line-items">
+                  @for (li of hold.lineItems; track li.ticketTypeId) {
+                    <div class="line-item">
+                      <span>{{ li.ticketTypeName ?? 'Ulaznica' }} × {{ li.quantity }}</span>
+                      <span>{{ li.quantity * li.unitPrice }} KM</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            <div class="grand-total-row">
+              <span>Ukupno</span>
+              <span class="grand-total">{{ grandTotal() }} KM</span>
+            </div>
+          </div>
+        }
+
+        <!-- Step 1: payment method -->
+        @if (step() === 1) {
+          <div class="step-card">
+            <h2>Način plaćanja</h2>
+            <div class="method-list">
+              <button type="button" class="method" [class.active]="paymentMethod() === 'card'" (click)="selectPaymentMethod('card')">
+                <span class="method-icon">💳</span>
+                <span class="method-text"><strong>Kreditna/Debitna kartica</strong><small>Visa, Mastercard, Maestro</small></span>
+              </button>
+              <button type="button" class="method" [class.active]="paymentMethod() === 'paypal'" (click)="selectPaymentMethod('paypal')">
+                <span class="method-icon">👛</span>
+                <span class="method-text"><strong>PayPal</strong><small>Brzo i sigurno plaćanje</small></span>
+              </button>
+              <button type="button" class="method" [class.active]="paymentMethod() === 'mobile'" (click)="selectPaymentMethod('mobile')">
+                <span class="method-icon">📱</span>
+                <span class="method-text"><strong>Mobilno plaćanje</strong><small>BH Telecom, m:tel, HT Eronet</small></span>
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- Step 2: payment details -->
+        @if (step() === 2) {
+          <div class="step-card">
+            <h2>Detalji plaćanja</h2>
+            <div class="form-grid">
+              <label class="field">
+                <span>Email adresa</span>
+                <input type="email" placeholder="vasa.email@adresa.ba" [ngModel]="email()" (ngModelChange)="email.set($event)" />
+              </label>
+              <label class="field">
+                <span>Telefon</span>
+                <input type="tel" placeholder="+387 61 234 567" [ngModel]="phone()" (ngModelChange)="phone.set($event)" />
+              </label>
+            </div>
+            @if (paymentMethod() === 'card') {
+              <div class="form-grid">
+                <label class="field">
+                  <span>Broj kartice</span>
+                  <input type="text" placeholder="0000 0000 0000 0000" [ngModel]="cardNumber()" (ngModelChange)="cardNumber.set($event)" />
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>Datum isteka</span>
+                    <input type="text" placeholder="MM/GG" [ngModel]="cardExpiry()" (ngModelChange)="cardExpiry.set($event)" />
+                  </label>
+                  <label class="field">
+                    <span>CVV</span>
+                    <input type="text" placeholder="123" [ngModel]="cardCvv()" (ngModelChange)="cardCvv.set($event)" />
+                  </label>
+                </div>
+              </div>
+              <p class="hint-text">Demo: kartica koja se završava na 0000 simulira odbijeno plaćanje.</p>
+            } @else {
+              <p class="hint-text">Unesite podatke za nastavak — plaćanje je simulirano u ovoj verziji.</p>
+            }
+          </div>
+        }
+
+        <!-- Step 3: confirmation -->
+        @if (step() === 3) {
+          <div class="step-card center-text">
+            <div class="success-icon small">
+              <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <h2>Potvrda kupovine</h2>
+            <p class="hint-text">Molimo provjerite sve podatke prije finalizacije</p>
+            <div class="confirm-box">
+              <div class="line-item"><span>Proizvod</span><span>{{ cart.productName }}</span></div>
+              <div class="line-item"><span>Email</span><span>{{ email() }}</span></div>
+              <div class="line-item"><span>Način plaćanja</span><span>{{ paymentMethodLabel() }}</span></div>
+            </div>
+            <div class="confirm-total">
+              <span>Ukupno za plaćanje</span>
+              <span class="grand-total">{{ grandTotal() }} KM</span>
+            </div>
+          </div>
+        }
+
+        @if (submitError()) {
+          <p class="error-text">{{ submitError() }}</p>
+        }
+
+        <div class="nav-buttons">
+          @if (step() > 0) {
+            <button type="button" class="btn btn-outline" [disabled]="isSubmitting()" (click)="goBack()">Nazad</button>
+          }
+          @if (step() < 3) {
+            <button type="button" class="btn btn-primary flex-grow" [disabled]="step() === 2 && !canContinueFromDetails()" (click)="goNext()">Nastavi</button>
+          } @else {
+            <button type="button" class="btn btn-primary flex-grow" [disabled]="isSubmitting()" (click)="finishPayment()">
+              {{ isSubmitting() ? 'Obrada...' : 'Završi plaćanje' }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Summary sidebar -->
+      <div class="checkout-side">
+        <div class="summary-card">
+          <h3>Sažetak narudžbe</h3>
+          @for (hold of cart.holds; track hold.holdId) {
+            @for (li of hold.lineItems; track li.ticketTypeId) {
+              <div class="line-item">
+                <span>{{ li.ticketTypeName ?? hold.sectorName }} × {{ li.quantity }}</span>
+                <span>{{ li.quantity * li.unitPrice }} KM</span>
+              </div>
+            }
+          }
+          <div class="grand-total-row">
+            <span>Ukupno</span>
+            <span class="grand-total">{{ grandTotal() }} KM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+}

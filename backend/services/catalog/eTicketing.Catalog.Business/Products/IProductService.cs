@@ -29,6 +29,10 @@ public interface IProductService
     /// <summary>Public — Status=Published only, any organization.</summary>
     Task<Result<PagedResult<ProductResponse>>> GetPublishedAsync(ProductQuery query, CancellationToken ct = default);
 
+    /// <summary>Public single-product lookup — Status=Published only (a Draft product returns
+    /// NotFound rather than leaking it), used by the storefront's product-details pages.</summary>
+    Task<Result<ProductResponse>> GetByIdAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Organizer — own organization's products, any status.</summary>
     Task<Result<PagedResult<ProductResponse>>> GetMineAsync(ProductQuery query, ClaimsPrincipal user, CancellationToken ct = default);
 

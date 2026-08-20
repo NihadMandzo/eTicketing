@@ -4,6 +4,8 @@ import '../core/session.dart';
 import '../models/responses/user_response.dart';
 import '../theme/app_colors.dart';
 import '../widgets/initials_avatar.dart';
+import 'events_screen.dart';
+import 'my_tickets_screen.dart';
 import 'profile_screen.dart';
 
 /// The signed-in app shell — matches the design mockup's screens 2/5/8
@@ -13,19 +15,21 @@ import 'profile_screen.dart';
 /// Material's default `NavigationBar` chrome.
 ///
 /// Događaji/Moje ulaznice show the mockup's own header treatment (brand
-/// row / plain title) but a "uskoro dostupno" body — Catalog/Ticketing
-/// aren't wired into mobile yet (see the "Design reference" note in
-/// `.claude/rules/22-frontend-mobile.md`), so this matches the mockup's
-/// structure without fabricating event/ticket data.
+/// row / plain title) wrapping the real [EventsScreen]/[MyTicketsScreen]
+/// content now that Catalog/Ticketing are wired into mobile.
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  /// Which tab to land on — defaults to Događaji, but PaymentScreen lands
+  /// on Moje ulaznice (index 1) right after a successful purchase.
+  final int initialIndex;
+
+  const MainShell({super.key, this.initialIndex = 0});
 
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
-  int _index = 0;
+  late int _index = widget.initialIndex;
 
   void _goToProfile() => setState(() => _index = 2);
 
@@ -137,25 +141,13 @@ class _EventsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Row(
             children: [
-              Icon(Icons.confirmation_number_rounded, size: 24, color: scheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                'eKarta',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-                ),
-              ),
+              Image.asset('assets/logo.png', height: 28),
               const Spacer(),
               ValueListenableBuilder<UserResponse?>(
                 valueListenable: Session.currentUser,
@@ -167,12 +159,7 @@ class _EventsTab extends StatelessWidget {
             ],
           ),
         ),
-        const Expanded(
-          child: _ComingSoonBody(
-            icon: Icons.event_outlined,
-            message: 'Pregled događaja će uskoro biti dostupan.',
-          ),
-        ),
+        const Expanded(child: EventsScreen()),
       ],
     );
   }
@@ -203,41 +190,8 @@ class _TicketsTab extends StatelessWidget {
             ),
           ),
         ),
-        const Expanded(
-          child: _ComingSoonBody(
-            icon: Icons.confirmation_number_outlined,
-            message: 'Vaše kupljene ulaznice će uskoro biti dostupne ovdje.',
-          ),
-        ),
+        const Expanded(child: MyTicketsScreen()),
       ],
-    );
-  }
-}
-
-class _ComingSoonBody extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _ComingSoonBody({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final scheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: scheme.primary),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: tertiaryText)),
-          ],
-        ),
-      ),
     );
   }
 }

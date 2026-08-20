@@ -7,11 +7,11 @@
 .page-title {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--foreground);
   margin-bottom: 8px;
 }
 
 .page-description {
   font-size: 16px;
-  color: #64748b;
+  color: var(--muted-foreground);
 }

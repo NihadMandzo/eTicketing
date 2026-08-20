@@ -84,20 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const SizedBox(height: 32),
                   Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.confirmation_number_rounded, size: 40, color: scheme.primary),
-                        const SizedBox(height: 8),
-                        Text(
-                          'eKarta',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: Image.asset('assets/logo.png', height: 88),
                   ),
                   const SizedBox(height: 28),
                   Text(

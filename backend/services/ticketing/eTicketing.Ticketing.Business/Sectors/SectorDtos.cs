@@ -13,7 +13,8 @@ public record SectorResponse(
     TicketingMode TicketingMode,
     int? PeriodYear,
     int? PeriodMonth,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<TicketTypeResponse> TicketTypes);
 
 /// <summary>Returned by both POST /sectors/preview (stateless, no DB write) and as the shape
 /// PreviewAsync/CreateAsync validate against — see SectorService.ValidateAsync().</summary>

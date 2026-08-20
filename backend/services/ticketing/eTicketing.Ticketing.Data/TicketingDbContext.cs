@@ -9,6 +9,7 @@ public class TicketingDbContext : DbContext, IUnitOfWork
     public TicketingDbContext(DbContextOptions<TicketingDbContext> options) : base(options) { }
 
     public DbSet<Sector> Sectors => Set<Sector>();
+    public DbSet<TicketType> TicketTypes => Set<TicketType>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
 

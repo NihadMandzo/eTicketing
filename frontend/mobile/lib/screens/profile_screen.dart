@@ -5,12 +5,12 @@ import '../models/responses/user_response.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_controller.dart';
-import '../widgets/coming_soon_screen.dart';
 import '../widgets/initials_avatar.dart';
 import '../widgets/responsive_page.dart';
 import 'change_password_screen.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
+import 'my_tickets_screen.dart';
 
 /// The "Profil" tab body inside [MainShell] — account summary + personal
 /// info/change-password/order-history entry points, the light/dark toggle,
@@ -81,10 +81,9 @@ class ProfileScreen extends StatelessWidget {
                         label: 'Historija narudžbi',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const ComingSoonScreen(
-                              title: 'Historija narudžbi',
-                              icon: Icons.receipt_long_outlined,
-                              message: 'Historija vaših narudžbi će uskoro biti dostupna ovdje.',
+                            builder: (_) => Scaffold(
+                              appBar: AppBar(title: const Text('Historija narudžbi')),
+                              body: const SafeArea(child: MyTicketsScreen()),
                             ),
                           ),
                         ),
