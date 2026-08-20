@@ -1,12 +1,21 @@
-.main-content {
+/* Sticky-footer shell: the footer is part of every screen now, so a short
+   page (an empty search, an error state) must still park it at the bottom of
+   the viewport instead of leaving it floating mid-screen. */
+:host {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.main-content {
+  flex: 1;
+  /* Clears the fixed top navbar. */
   padding-top: 72px;
-  padding-bottom: 20px;
 }
 
 @media (max-width: 768px) {
   .main-content {
     padding-top: 64px;
-    padding-bottom: 80px;
   }
 }
