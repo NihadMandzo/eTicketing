@@ -1,3 +1,5 @@
+import '../api_enum.dart';
+
 class TicketResponse {
   final String id;
   final String orderId;
@@ -38,7 +40,7 @@ class TicketResponse {
       productId: json['productId'] as String,
       ticketTypeId: json['ticketTypeId'] as String?,
       ticketTypeName: json['ticketTypeName'] as String?,
-      status: json['status'] as String? ?? 'Confirmed',
+      status: ticketStatusFromJson(json['status']),
       pricePaid: (json['pricePaid'] as num?)?.toDouble() ?? 0,
       validDate: json['validDate'] != null ? DateTime.tryParse(json['validDate'] as String) : null,
       validFrom: json['validFrom'] != null ? DateTime.tryParse(json['validFrom'] as String) : null,

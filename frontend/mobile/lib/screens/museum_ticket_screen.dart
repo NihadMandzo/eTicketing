@@ -57,10 +57,38 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
   @override
   void initState() {
     super.initState();
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    _visibleMonth = DateTime(tomorrow.year, tomorrow.month);
-    _selectedDate = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
+    // Provisional until the sectors load and tell us which months are
+    // actually bookable (see _firstSelectableDate).
+    final first = _tomorrow();
+    _visibleMonth = DateTime(first.year, first.month);
+    _selectedDate = first;
     _load();
+  }
+
+  static DateTime _tomorrow() {
+    final now = DateTime.now().add(const Duration(days: 1));
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  /// Earliest bookable day: tomorrow if that already falls inside a sector's
+  /// period, otherwise day 1 of the earliest period still ahead of us. A
+  /// DailyEntry sector covers exactly one calendar month
+  /// (PeriodYear/PeriodMonth), so opening the calendar on the current month
+  /// showed an empty ticket list for any museum whose sectors start later.
+  static DateTime _firstSelectableDate(List<SectorResponse> sectors) {
+    final earliest = _tomorrow();
+    final periods = sectors
+        .where((s) => s.periodYear != null && s.periodMonth != null)
+        .map((s) => DateTime(s.periodYear!, s.periodMonth!))
+        .toList()
+      ..sort();
+
+    for (final period in periods) {
+      final lastDay = DateTime(period.year, period.month + 1, 0);
+      if (lastDay.isBefore(earliest)) continue;
+      return period.isAfter(earliest) ? period : earliest;
+    }
+    return earliest;
   }
 
   Future<void> _load() async {
@@ -72,10 +100,13 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
         org = await _organizationService.getById(product.organizationId);
       } catch (_) {}
       if (!mounted) return;
+      final firstDate = _firstSelectableDate(sectors.items);
       setState(() {
         _product = product;
         _sectors = sectors.items;
         _organization = org;
+        _selectedDate = firstDate;
+        _visibleMonth = DateTime(firstDate.year, firstDate.month);
         _isLoading = false;
       });
     } catch (_) {
@@ -87,7 +118,18 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
     }
   }
 
-  List<_TicketTypeRow> get _rows => _sectors.expand((sector) {
+  /// Only the sectors covering the selected date's month — the backend
+  /// rejects any other hold with `sector.date_out_of_period` (see
+  /// SectorService.HoldAsync). Flattening every period's sectors into one
+  /// list, as this used to, offered a museum's September *and* October
+  /// tickets at once and then failed the hold for whichever didn't match.
+  List<SectorResponse> get _sectorsForSelectedDate {
+    final date = _selectedDate;
+    if (date == null) return const [];
+    return _sectors.where((s) => s.periodYear == date.year && s.periodMonth == date.month).toList();
+  }
+
+  List<_TicketTypeRow> get _rows => _sectorsForSelectedDate.expand((sector) {
         if (sector.ticketTypes.isNotEmpty) {
           return sector.ticketTypes
               .map((tt) => _TicketTypeRow(sector: sector, ticketTypeId: tt.id, ticketTypeName: tt.name, price: tt.price));
@@ -103,6 +145,19 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
     setState(() {
       _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
       _selectedDate = null;
+      _quantities.clear();
+      _submitError = null;
+    });
+  }
+
+  void _selectDate(DateTime date) {
+    setState(() {
+      final changedMonth = _selectedDate == null || _selectedDate!.month != date.month || _selectedDate!.year != date.year;
+      _selectedDate = date;
+      if (changedMonth) {
+        _quantities.clear();
+        _submitError = null;
+      }
     });
   }
 
@@ -246,13 +301,18 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
                           visibleMonth: _visibleMonth,
                           firstSelectableDay: firstSelectableDay,
                           selectedDate: _selectedDate,
-                          onSelect: (d) => setState(() => _selectedDate = d),
+                          onSelect: _selectDate,
                         ),
                         const SizedBox(height: 12),
                         const Text('Vrsta ulaznice', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 12),
                         if (_rows.isEmpty)
-                          Text('Nema dostupnih ulaznica za ovaj muzej.', style: TextStyle(color: tertiaryText))
+                          Text(
+                            _sectors.isEmpty
+                                ? 'Nema dostupnih ulaznica za ovaj muzej.'
+                                : 'Za odabrani datum nema dostupnih ulaznica. Odaberite drugi datum.',
+                            style: TextStyle(color: tertiaryText),
+                          )
                         else
                           Column(children: [
                             for (final row in _rows)

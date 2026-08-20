@@ -69,6 +69,16 @@
           }
         </div>
       }
+
+      @if (!isLoading() && products().length > 0) {
+        <app-pagination-bar
+          [currentPage]="page()"
+          [totalPages]="totalPages()"
+          [pageSize]="pageSize()"
+          (pageChanged)="onPageChanged($event)"
+          (pageSizeChanged)="onPageSizeChanged($event)"
+        />
+      }
     </div>
   </section>
 </div>

@@ -1,4 +1,15 @@
+import { coerceEnum } from '../utils/api-enum.util';
+
 export type TicketingMode = 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
+export type PublishStatus = 'Draft' | 'Published';
+
+// Declaration order must match eTicketing.Contracts.Persistence.TicketingMode
+// and .PublishStatus exactly — the wire value is the ordinal, see coerceEnum.
+const TICKETING_MODES: readonly TicketingMode[] = ['SingleOccurrence', 'DailyEntry', 'RecurringReservation'];
+const PUBLISH_STATUSES: readonly PublishStatus[] = ['Draft', 'Published'];
+
+export const toTicketingMode = (raw: unknown): TicketingMode => coerceEnum(raw, TICKETING_MODES, 'SingleOccurrence');
+export const toPublishStatus = (raw: unknown): PublishStatus => coerceEnum(raw, PUBLISH_STATUSES, 'Published');
 
 export interface Category {
   id: number;
@@ -22,7 +33,7 @@ export interface Product {
   categoryName: string;
   ticketingMode: TicketingMode;
   organizationId: string;
-  status: 'Draft' | 'Published';
+  status: PublishStatus;
   images: ProductImage[];
   createdAt: string;
 }

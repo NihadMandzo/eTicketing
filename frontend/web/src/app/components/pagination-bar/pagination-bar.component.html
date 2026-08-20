@@ -1,0 +1,49 @@
+@if (totalPages() > 1) {
+  <div class="pagination-bar">
+    <div class="pager">
+      <button
+        type="button"
+        class="nav-btn"
+        [disabled]="currentPage() === 0"
+        (click)="goToPage(currentPage() - 1)"
+        aria-label="Prethodna stranica"
+      >
+        ‹
+      </button>
+      @for (page of pageNumbers(); track $index) {
+        @if (page === null) {
+          <span class="ellipsis">…</span>
+        } @else {
+          <button
+            type="button"
+            class="page-btn"
+            [class.active]="page === currentPage()"
+            (click)="goToPage(page)"
+          >
+            {{ page + 1 }}
+          </button>
+        }
+      }
+      <button
+        type="button"
+        class="nav-btn"
+        [disabled]="currentPage() >= totalPages() - 1"
+        (click)="goToPage(currentPage() + 1)"
+        aria-label="Sljedeća stranica"
+      >
+        ›
+      </button>
+    </div>
+
+    @if (showPageSize()) {
+      <div class="page-size">
+        <label for="page-size-select">Po stranici:</label>
+        <select id="page-size-select" [value]="pageSize()" (change)="onPageSizeChange($any($event.target).value)">
+          @for (option of pageSizeOptions(); track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </div>
+    }
+  </div>
+}

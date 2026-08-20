@@ -1,4 +1,4 @@
-import { TicketingMode } from './catalog.models';
+import { PublishStatus, TicketingMode } from './catalog.models';
 
 export interface TicketType {
   id: string;
@@ -14,7 +14,7 @@ export interface Sector {
   name: string;
   capacity: number;
   price: number;
-  status: 'Draft' | 'Published';
+  status: PublishStatus;
   ticketingMode: TicketingMode;
   periodYear: number | null;
   periodMonth: number | null;

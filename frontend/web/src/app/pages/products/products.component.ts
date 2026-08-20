@@ -5,11 +5,12 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { Category, Product, TicketingMode } from '../../core/models/catalog.models';
 import { CategoryChipsComponent } from '../../components/category-chips/category-chips.component';
 import { ProductCardComponent } from '../../components/product-card/product-card.component';
+import { PaginationBarComponent } from '../../components/pagination-bar/pagination-bar.component';
 
 @Component({
   selector: 'app-products',
   standalone: true,
-  imports: [RouterLink, CategoryChipsComponent, ProductCardComponent],
+  imports: [RouterLink, CategoryChipsComponent, ProductCardComponent, PaginationBarComponent],
   templateUrl: './products.component.html',
   styleUrl: './products.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,6 +24,15 @@ export class ProductsComponent {
   readonly searchText = signal('');
   readonly isLoading = signal(true);
 
+  // Pagination — the full catalog page always paginates (unlike the
+  // landing page's fixed-size "Popularne ulaznice" preview, which
+  // deliberately has no pager). 0-indexed, per the locked PagedResult
+  // contract (see 01-domain.md).
+  readonly page = signal(0);
+  readonly pageSize = signal(20);
+  readonly totalCount = signal(0);
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / this.pageSize())));
+
   private searchDebounce?: ReturnType<typeof setTimeout>;
 
   /** Which layout to render — SingleOccurrence (or "sve kategorije") gets the
@@ -35,7 +45,7 @@ export class ProductsComponent {
   });
 
   readonly resultCountLabel = computed(() => {
-    const count = this.products().length;
+    const count = this.totalCount();
     const mode = this.effectiveMode();
     if (mode === 'DailyEntry') return count === 1 ? '1 lokacija' : `${count} lokacije`;
     if (mode === 'RecurringReservation') return `${count} parking lokacije`;
@@ -52,31 +62,49 @@ export class ProductsComponent {
 
   onCategorySelected(categoryId: number | null): void {
     this.selectedCategoryId.set(categoryId);
+    this.page.set(0);
     this.loadProducts();
   }
 
   onSearchChanged(value: string): void {
     this.searchText.set(value);
+    this.page.set(0);
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
     this.searchDebounce = setTimeout(() => this.loadProducts(), 300);
+  }
+
+  onPageChanged(page: number): void {
+    this.page.set(page);
+    this.loadProducts();
+    // Jumping pages without scrolling back up reads as "nothing happened"
+    // on a long results grid.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  onPageSizeChanged(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(0);
+    this.loadProducts();
   }
 
   private loadProducts(): void {
     this.isLoading.set(true);
     this.catalogService
       .getProducts({
-        page: 0,
-        pageSize: 60,
+        page: this.page(),
+        pageSize: this.pageSize(),
         categoryId: this.selectedCategoryId(),
         fts: this.searchText().trim() || null,
       })
       .subscribe({
         next: (result) => {
           this.products.set(result.items);
+          this.totalCount.set(result.totalCount);
           this.isLoading.set(false);
         },
         error: () => {
           this.products.set([]);
+          this.totalCount.set(0);
           this.isLoading.set(false);
         },
       });

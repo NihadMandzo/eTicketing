@@ -36,10 +36,52 @@
               <span>{{ product.date | date: "d. MMMM y. 'u' HH:mm" }}</span>
             </div>
           }
+          @if (organization(); as organizer) {
+            <div class="info-row">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Organizator: {{ organizer.name }}</span>
+            </div>
+          }
           @if (product.description) {
             <div class="description">
               <h2>O ponudi</h2>
               <p>{{ product.description }}</p>
+            </div>
+          }
+
+          @if (sectors().length > 0) {
+            <div class="sectors-overview">
+              <h2>{{ product.ticketingMode === 'RecurringReservation' ? 'Dostupna mjesta' : 'Sektori i tipovi ulaznica' }}</h2>
+              @for (sector of sectors(); track sector.id) {
+                <div class="sector-block">
+                  <div class="sector-head">
+                    <span class="sector-name">{{ sector.name }}</span>
+                    <span class="sector-capacity">
+                      @if (sectorPeriodLabel(sector); as period) {
+                        {{ period }} ·
+                      }
+                      {{ capacityLabel(sector) }}
+                    </span>
+                  </div>
+                  @if (sector.ticketTypes.length > 0) {
+                    <ul class="ticket-type-list">
+                      @for (ticketType of sector.ticketTypes; track ticketType.id) {
+                        <li>
+                          <span>{{ ticketType.name }}</span>
+                          <span class="ticket-type-price">{{ ticketType.price }} KM</span>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <ul class="ticket-type-list">
+                      <li>
+                        <span>Jedinstvena cijena</span>
+                        <span class="ticket-type-price">{{ sector.price }} KM</span>
+                      </li>
+                    </ul>
+                  }
+                </div>
+              }
             </div>
           }
         </div>
@@ -87,10 +129,22 @@
             @case ('DailyEntry') {
               <h3>Kupite ulaznicu</h3>
               <label class="field-label" for="visit-date">Datum posjete</label>
-              <input id="visit-date" type="date" class="date-input" [value]="selectedDate()" [min]="minDate" (change)="onDateChange($any($event.target).value)" />
+              <input
+                id="visit-date"
+                type="date"
+                class="date-input"
+                [value]="selectedDate()"
+                [min]="minDate"
+                [attr.max]="maxDate()"
+                (change)="onDateChange($any($event.target).value)"
+              />
 
               @if (rows().length === 0) {
-                <p class="empty-text">Trenutno nema dostupnih ulaznica.</p>
+                <p class="empty-text">
+                  {{ sectors().length === 0
+                      ? 'Trenutno nema dostupnih ulaznica.'
+                      : 'Za odabrani datum nema dostupnih ulaznica. Odaberite drugi datum.' }}
+                </p>
               } @else {
                 <div class="rows">
                   @for (row of rows(); track row.sectorId + (row.ticketTypeId ?? '')) {

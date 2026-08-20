@@ -1,3 +1,4 @@
+import '../api_enum.dart';
 import '../ticketing_mode.dart';
 
 class ProductImageResponse {
@@ -51,9 +52,9 @@ class ProductResponse {
       date: json['date'] != null ? DateTime.tryParse(json['date'] as String) : null,
       categoryId: json['categoryId'] as int,
       categoryName: json['categoryName'] as String? ?? '',
-      ticketingMode: ticketingModeFromJson(json['ticketingMode'] as String? ?? ''),
+      ticketingMode: ticketingModeFromJson(json['ticketingMode']),
       organizationId: json['organizationId'] as String,
-      status: json['status'] as String? ?? 'Published',
+      status: publishStatusFromJson(json['status']),
       images: (json['images'] as List? ?? [])
           .map((e) => ProductImageResponse.fromJson(e as Map<String, dynamic>))
           .toList(),

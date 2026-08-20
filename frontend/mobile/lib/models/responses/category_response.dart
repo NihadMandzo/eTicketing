@@ -12,7 +12,7 @@ class CategoryResponse {
     return CategoryResponse(
       id: json['id'] as int,
       name: json['name'] as String,
-      ticketingMode: ticketingModeFromJson(json['ticketingMode'] as String? ?? ''),
+      ticketingMode: ticketingModeFromJson(json['ticketingMode']),
       iconUrl: json['iconUrl'] as String?,
     );
   }

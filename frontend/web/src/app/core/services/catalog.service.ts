@@ -3,7 +3,26 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { Category, PagedResult, Product, ProductQuery } from '../models/catalog.models';
+import { Category, PagedResult, Product, ProductQuery, toPublishStatus, toTicketingMode } from '../models/catalog.models';
+
+/**
+ * `ticketingMode`/`status` arrive as integer ordinals, not names — see
+ * `coerceEnum`. Normalizing here, once on the way in, is what keeps every
+ * downstream `@switch (product.ticketingMode)` and `=== 'DailyEntry'`
+ * comparison working; without it they silently compare a string literal
+ * against a number and never match.
+ */
+function normalizeProduct(raw: Product): Product {
+  return {
+    ...raw,
+    ticketingMode: toTicketingMode(raw.ticketingMode),
+    status: toPublishStatus(raw.status),
+  };
+}
+
+function normalizeCategory(raw: Category): Category {
+  return { ...raw, ticketingMode: toTicketingMode(raw.ticketingMode) };
+}
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
@@ -23,7 +42,7 @@ export class CatalogService {
   getCategories(): Observable<Category[]> {
     return this.http
       .get<PagedResult<Category>>(`${this.baseUrl}/categories`, { params: { pageSize: '100' } })
-      .pipe(map((result) => result.items));
+      .pipe(map((result) => result.items.map(normalizeCategory)));
   }
 
   /** GET /api/products — Published only, public. */
@@ -34,11 +53,13 @@ export class CatalogService {
     if (query?.fts) params['fts'] = query.fts;
     if (query?.categoryId != null) params['categoryId'] = String(query.categoryId);
 
-    return this.http.get<PagedResult<Product>>(`${this.baseUrl}/products`, { params });
+    return this.http
+      .get<PagedResult<Product>>(`${this.baseUrl}/products`, { params })
+      .pipe(map((result) => ({ ...result, items: result.items.map(normalizeProduct) })));
   }
 
   /** GET /api/products/{id} — Published only, public (404 for Draft/unknown). */
   getProductById(id: string): Observable<Product> {
-    return this.http.get<Product>(`${this.baseUrl}/products/${id}`);
+    return this.http.get<Product>(`${this.baseUrl}/products/${id}`).pipe(map(normalizeProduct));
   }
 }

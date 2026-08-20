@@ -1,3 +1,4 @@
+import '../api_enum.dart';
 import '../ticketing_mode.dart';
 import 'ticket_type_response.dart';
 
@@ -35,8 +36,8 @@ class SectorResponse {
       name: json['name'] as String,
       capacity: json['capacity'] as int? ?? 0,
       price: (json['price'] as num).toDouble(),
-      status: json['status'] as String? ?? 'Published',
-      ticketingMode: ticketingModeFromJson(json['ticketingMode'] as String? ?? ''),
+      status: publishStatusFromJson(json['status']),
+      ticketingMode: ticketingModeFromJson(json['ticketingMode']),
       periodYear: json['periodYear'] as int?,
       periodMonth: json['periodMonth'] as int?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),

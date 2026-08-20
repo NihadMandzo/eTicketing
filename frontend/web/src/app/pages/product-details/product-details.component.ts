@@ -1,13 +1,16 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 import { CatalogService } from '../../core/services/catalog.service';
 import { SectorService } from '../../core/services/sector.service';
+import { OrganizationService } from '../../core/services/organization.service';
 import { CartHoldGroup, CartService } from '../../core/services/cart.service';
 import { Product } from '../../core/models/catalog.models';
 import { Sector } from '../../core/models/sector.models';
+import { Organization } from '../../core/models/organization.models';
 
 /** One purchasable row on the SingleOccurrence/DailyEntry purchase card — one
  * per Sector.TicketType, or one per Sector itself when it has no TicketTypes
@@ -24,6 +27,27 @@ function rowKey(sectorId: string, ticketTypeId: string | null): string {
   return `${sectorId}::${ticketTypeId ?? 'flat'}`;
 }
 
+const MONTHS = [
+  'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Juni',
+  'Juli', 'August', 'Septembar', 'Oktobar', 'Novembar', 'Decembar',
+];
+
+function tomorrow(): Date {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 1);
+  return date;
+}
+
+/** Local-time `yyyy-MM-dd`. Deliberately not `toISOString().slice(0, 10)`,
+ * which shifts to UTC and hands the backend the previous day for anyone east
+ * of Greenwich — including Sarajevo. */
+function toIsoDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 @Component({
   selector: 'app-product-details',
   standalone: true,
@@ -37,10 +61,12 @@ export class ProductDetailsComponent {
   private readonly router = inject(Router);
   private readonly catalogService = inject(CatalogService);
   private readonly sectorService = inject(SectorService);
+  private readonly organizationService = inject(OrganizationService);
   private readonly cartService = inject(CartService);
 
   readonly product = signal<Product | null>(null);
   readonly sectors = signal<Sector[]>([]);
+  readonly organization = signal<Organization | null>(null);
   readonly isLoading = signal(true);
   readonly loadError = signal<string | null>(null);
 
@@ -59,8 +85,23 @@ export class ProductDetailsComponent {
 
   readonly minDate = this.tomorrowIso();
 
+  /**
+   * A DailyEntry sector defines capacity+price for one calendar month
+   * (PeriodYear/PeriodMonth), so only the sectors covering the chosen date's
+   * month are purchasable for it — the backend rejects anything else with
+   * `sector.date_out_of_period` (see SectorService.HoldAsync). Flattening
+   * every period's sectors into one list, as this used to, meant a museum
+   * with a September *and* an October sector offered both at once and then
+   * failed the hold for whichever one didn't match.
+   */
+  readonly sectorsForSelectedDate = computed<Sector[]>(() => {
+    if (this.product()?.ticketingMode !== 'DailyEntry') return this.sectors();
+    const [year, month] = this.selectedDate().split('-').map(Number);
+    return this.sectors().filter((sector) => sector.periodYear === year && sector.periodMonth === month);
+  });
+
   readonly rows = computed<PurchaseRow[]>(() =>
-    this.sectors().flatMap((sector): PurchaseRow[] =>
+    this.sectorsForSelectedDate().flatMap((sector): PurchaseRow[] =>
       sector.ticketTypes.length > 0
         ? sector.ticketTypes.map((tt) => ({
             sectorId: sector.id,
@@ -104,7 +145,11 @@ export class ProductDetailsComponent {
       next: ({ product, sectors }) => {
         this.product.set(product);
         this.sectors.set(sectors.items);
+        if (product.ticketingMode === 'DailyEntry') {
+          this.selectedDate.set(this.firstSelectableDate(sectors.items));
+        }
         this.isLoading.set(false);
+        this.loadOrganization(product.organizationId);
       },
       error: () => {
         this.loadError.set('Proizvod nije pronađen ili više nije dostupan.');
@@ -113,10 +158,70 @@ export class ProductDetailsComponent {
     });
   }
 
+  /** Organizer name is a nice-to-have — it must never block or fail the
+   * whole page, so it's a separate request that swallows its own error
+   * (same treatment as mobile's EventDetailsScreen). */
+  private loadOrganization(organizationId: string): void {
+    this.organizationService
+      .getById(organizationId)
+      .pipe(catchError(() => of(null)))
+      .subscribe((organization) => this.organization.set(organization));
+  }
+
   private tomorrowIso(): string {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return toIsoDate(tomorrow());
+  }
+
+  /** Earliest bookable day: tomorrow if that already falls inside a sector's
+   * period, otherwise day 1 of the earliest period still ahead of us.
+   * Without this the picker opened on tomorrow, which for a museum whose
+   * sectors start next month meant an empty ticket list and no way to tell
+   * why. */
+  private firstSelectableDate(sectors: Sector[]): string {
+    const earliest = tomorrow();
+    const periods = sectors
+      .filter((sector) => sector.periodYear != null && sector.periodMonth != null)
+      .map((sector) => ({ year: sector.periodYear!, month: sector.periodMonth! }))
+      .sort((a, b) => a.year - b.year || a.month - b.month);
+
+    for (const period of periods) {
+      const lastDay = new Date(period.year, period.month, 0);
+      if (lastDay < earliest) continue;
+      const firstDay = new Date(period.year, period.month - 1, 1);
+      return toIsoDate(firstDay > earliest ? firstDay : earliest);
+    }
+    return toIsoDate(earliest);
+  }
+
+  /** Latest day any sector covers — caps the native date picker so a buyer
+   * can't wander months past the last published period. */
+  readonly maxDate = computed<string | null>(() => {
+    const periods = this.sectors().filter((s) => s.periodYear != null && s.periodMonth != null);
+    if (periods.length === 0) return null;
+    const last = periods.reduce((a, b) =>
+      b.periodYear! > a.periodYear! || (b.periodYear === a.periodYear && b.periodMonth! > a.periodMonth!) ? b : a,
+    );
+    return toIsoDate(new Date(last.periodYear!, last.periodMonth!, 0));
+  });
+
+  /** Period a DailyEntry sector covers, for the read-only overview list. */
+  sectorPeriodLabel(sector: Sector): string | null {
+    if (sector.periodYear == null || sector.periodMonth == null) return null;
+    return `${MONTHS[sector.periodMonth - 1]} ${sector.periodYear}.`;
+  }
+
+  /** Capacity means a different thing per mode: a fixed seat count for a
+   * SingleOccurrence sector, a per-day allowance for DailyEntry, and always
+   * exactly 1 for a RecurringReservation space (where the count is noise). */
+  capacityLabel(sector: Sector): string {
+    switch (sector.ticketingMode) {
+      case 'DailyEntry':
+        return `${sector.capacity} ulaznica dnevno`;
+      case 'RecurringReservation':
+        return 'Jedno mjesto';
+      default:
+        return `${sector.capacity} mjesta`;
+    }
   }
 
   selectImage(index: number): void {
@@ -138,7 +243,15 @@ export class ProductDetailsComponent {
   }
 
   onDateChange(value: string): void {
+    if (!value) return;
+    const previous = this.selectedDate();
     this.selectedDate.set(value);
+    // A different month means a different set of sectors, so the quantities
+    // keyed by the old sectors' ids no longer refer to anything on screen.
+    if (previous.slice(0, 7) !== value.slice(0, 7)) {
+      this.quantities.set({});
+      this.submitError.set(null);
+    }
   }
 
   /** SingleOccurrence/DailyEntry — places one hold per Sector that has any
