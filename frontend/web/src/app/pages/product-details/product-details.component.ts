@@ -27,11 +27,6 @@ function rowKey(sectorId: string, ticketTypeId: string | null): string {
   return `${sectorId}::${ticketTypeId ?? 'flat'}`;
 }
 
-const MONTHS = [
-  'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Juni',
-  'Juli', 'August', 'Septembar', 'Oktobar', 'Novembar', 'Decembar',
-];
-
 function tomorrow(): Date {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -204,25 +199,6 @@ export class ProductDetailsComponent {
     return toIsoDate(new Date(last.periodYear!, last.periodMonth!, 0));
   });
 
-  /** Period a DailyEntry sector covers, for the read-only overview list. */
-  sectorPeriodLabel(sector: Sector): string | null {
-    if (sector.periodYear == null || sector.periodMonth == null) return null;
-    return `${MONTHS[sector.periodMonth - 1]} ${sector.periodYear}.`;
-  }
-
-  /** Capacity means a different thing per mode: a fixed seat count for a
-   * SingleOccurrence sector, a per-day allowance for DailyEntry, and always
-   * exactly 1 for a RecurringReservation space (where the count is noise). */
-  capacityLabel(sector: Sector): string {
-    switch (sector.ticketingMode) {
-      case 'DailyEntry':
-        return `${sector.capacity} ulaznica dnevno`;
-      case 'RecurringReservation':
-        return 'Jedno mjesto';
-      default:
-        return `${sector.capacity} mjesta`;
-    }
-  }
 
   selectImage(index: number): void {
     this.activeImageIndex.set(index);

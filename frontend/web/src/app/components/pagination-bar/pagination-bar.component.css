@@ -68,4 +68,16 @@
   color: var(--foreground);
   font-size: 13px;
   font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.page-size select:hover {
+  border-color: var(--primary);
+}
+
+.nav-btn,
+.page-btn,
+.page-size select {
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }

@@ -12,10 +12,7 @@
     @if (formattedDate(); as date) {
       <div class="product-date">{{ date }}</div>
     }
-    <h3 class="product-title">{{ product().name }}</h3>
-    @if (product().description) {
-      <p class="product-description">{{ product().description }}</p>
-    }
+    <h3 class="product-title" [title]="product().name">{{ product().name }}</h3>
     <div class="product-footer">
       <span class="product-mode">{{ product().ticketingMode === 'DailyEntry' ? 'Dnevna ulaznica' : product().ticketingMode === 'RecurringReservation' ? 'Mjesečna karta' : 'Događaj' }}</span>
       <span class="product-cta">Detalji →</span>

@@ -1,5 +1,9 @@
-@if (totalPages() > 1) {
+<!-- The page-size selector must outlive the pager: gating the whole bar on
+     `totalPages() > 1` meant picking a size large enough to fit everything on
+     one page removed the only control that could change it back. -->
+@if (totalPages() > 1 || showPageSize()) {
   <div class="pagination-bar">
+    @if (totalPages() > 1) {
     <div class="pager">
       <button
         type="button"
@@ -34,13 +38,14 @@
         ›
       </button>
     </div>
+    }
 
     @if (showPageSize()) {
       <div class="page-size">
         <label for="page-size-select">Po stranici:</label>
-        <select id="page-size-select" [value]="pageSize()" (change)="onPageSizeChange($any($event.target).value)">
+        <select id="page-size-select" (change)="onPageSizeChange($any($event.target).value)">
           @for (option of pageSizeOptions(); track option) {
-            <option [value]="option">{{ option }}</option>
+            <option [value]="option" [selected]="option === pageSize()">{{ option }}</option>
           }
         </select>
       </div>

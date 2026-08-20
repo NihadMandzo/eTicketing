@@ -48,42 +48,6 @@
               <p>{{ product.description }}</p>
             </div>
           }
-
-          @if (sectors().length > 0) {
-            <div class="sectors-overview">
-              <h2>{{ product.ticketingMode === 'RecurringReservation' ? 'Dostupna mjesta' : 'Sektori i tipovi ulaznica' }}</h2>
-              @for (sector of sectors(); track sector.id) {
-                <div class="sector-block">
-                  <div class="sector-head">
-                    <span class="sector-name">{{ sector.name }}</span>
-                    <span class="sector-capacity">
-                      @if (sectorPeriodLabel(sector); as period) {
-                        {{ period }} ·
-                      }
-                      {{ capacityLabel(sector) }}
-                    </span>
-                  </div>
-                  @if (sector.ticketTypes.length > 0) {
-                    <ul class="ticket-type-list">
-                      @for (ticketType of sector.ticketTypes; track ticketType.id) {
-                        <li>
-                          <span>{{ ticketType.name }}</span>
-                          <span class="ticket-type-price">{{ ticketType.price }} KM</span>
-                        </li>
-                      }
-                    </ul>
-                  } @else {
-                    <ul class="ticket-type-list">
-                      <li>
-                        <span>Jedinstvena cijena</span>
-                        <span class="ticket-type-price">{{ sector.price }} KM</span>
-                      </li>
-                    </ul>
-                  }
-                </div>
-              }
-            </div>
-          }
         </div>
       </div>
 

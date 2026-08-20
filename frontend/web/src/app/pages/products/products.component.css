@@ -32,6 +32,8 @@
   top: 50%;
   transform: translateY(-50%);
   color: var(--muted-foreground);
+  transition: color 0.15s ease;
+  pointer-events: none;
 }
 
 .search-input {
@@ -44,10 +46,22 @@
   outline: none;
   font-family: inherit;
   color: var(--foreground);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input::placeholder {
+  color: var(--muted-foreground);
 }
 
 .search-input:focus {
   border-color: var(--ring);
+  /* colour-mix keeps the halo on-theme in both modes without a second token
+     — --ring is the green in light mode and the lighter green in dark. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent);
+}
+
+.search-row:focus-within .search-icon {
+  color: var(--ring);
 }
 
 .result-count {

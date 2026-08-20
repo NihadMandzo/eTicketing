@@ -85,6 +85,11 @@
 
   --border: #2A3B36;
   --input: #17221E;
+  /* Must be redefined here, not inherited: the light value (#F9FAFB) is a
+     near-white, so every search field and form input rendered as a bright
+     slab on the near-black page. */
+  --input-background: #17221E;
+  --switch-background: #2A3B36;
   --ring: #6FAE4A;
 
   --success: #22C55E;
