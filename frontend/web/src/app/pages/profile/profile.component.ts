@@ -2,10 +2,14 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
+import { CatalogService } from '../../core/services/catalog.service';
 import { PurchaseService } from '../../core/services/purchase.service';
+import { Product } from '../../core/models/catalog.models';
 import { Ticket } from '../../core/models/purchase.models';
+import { TicketDetailModalComponent } from '../../components/ticket-detail-modal/ticket-detail-modal.component';
 
 type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 
@@ -18,7 +22,7 @@ function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [ReactiveFormsModule, DatePipe],
+  imports: [ReactiveFormsModule, DatePipe, TicketDetailModalComponent],
   templateUrl: './profile.component.html',
   styleUrl: './profile.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,6 +31,7 @@ export class ProfileComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly purchaseService = inject(PurchaseService);
+  private readonly catalogService = inject(CatalogService);
   private readonly router = inject(Router);
 
   readonly currentUser = this.authService.currentUser;
@@ -40,6 +45,16 @@ export class ProfileComponent {
   readonly tickets = signal<Ticket[]>([]);
   readonly isLoadingTickets = signal(true);
   readonly ticketFilter = signal<TicketFilter>('sve');
+  // Upcoming/past split, mirrors mobile's Nadolazeće/Iskorištene tabs in
+  // my_tickets_screen.dart — kept in sync so both platforms offer the exact
+  // same filtering capability over "moje ulaznice".
+  readonly showUpcoming = signal(true);
+  // Ticket carries no ProductName/ProductDate of its own (only
+  // SectorName/ValidDate/ValidFrom/ValidTo) — SingleOccurrence tickets in
+  // particular have no per-ticket date at all, since the single showing
+  // date lives on Product.Date. Batch-fetched below (small N in practice)
+  // for both a display fallback and the upcoming/past split.
+  private readonly productsById = signal<Record<string, Product>>({});
 
   // Ticket doesn't carry TicketingMode directly (denormalized only as far as
   // SectorId/ProductId) — SingleOccurrence tickets have no ValidDate/ValidFrom,
@@ -51,11 +66,41 @@ export class ProfileComponent {
     return 'SingleOccurrence';
   }
 
+  private effectiveDate(ticket: Ticket): Date | null {
+    const raw = ticket.validTo ?? ticket.validDate ?? this.productsById()[ticket.productId]?.date ?? null;
+    return raw ? new Date(raw) : null;
+  }
+
+  private isUpcoming(ticket: Ticket): boolean {
+    const date = this.effectiveDate(ticket);
+    if (!date) return true;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date >= today;
+  }
+
   readonly filteredTickets = computed(() => {
     const filter = this.ticketFilter();
-    if (filter === 'sve') return this.tickets();
-    return this.tickets().filter((t) => this.modeOf(t) === filter);
+    const upcoming = this.showUpcoming();
+    return this.tickets()
+      .filter((t) => filter === 'sve' || this.modeOf(t) === filter)
+      .filter((t) => this.isUpcoming(t) === upcoming);
   });
+
+  // Ticket detail overlay (parity with mobile's ticket_qr_screen.dart).
+  readonly selectedTicket = signal<Ticket | null>(null);
+
+  productNameFor(ticket: Ticket): string {
+    return this.productsById()[ticket.productId]?.name ?? ticket.sectorName;
+  }
+
+  openTicketDetail(ticket: Ticket): void {
+    this.selectedTicket.set(ticket);
+  }
+
+  closeTicketDetail(): void {
+    this.selectedTicket.set(null);
+  }
 
   readonly isSavingProfile = signal(false);
   readonly profileMessage = signal<string | null>(null);
@@ -106,6 +151,18 @@ export class ProfileComponent {
       next: (result) => {
         this.tickets.set(result.items);
         this.isLoadingTickets.set(false);
+
+        const productIds = [...new Set(result.items.map((t) => t.productId))];
+        if (productIds.length === 0) return;
+        forkJoin(
+          productIds.map((id) => this.catalogService.getProductById(id).pipe(catchError(() => of(null)))),
+        ).subscribe((products) => {
+          const byId: Record<string, Product> = {};
+          for (const product of products) {
+            if (product) byId[product.id] = product;
+          }
+          this.productsById.set(byId);
+        });
       },
       error: () => {
         this.isLoadingTickets.set(false);

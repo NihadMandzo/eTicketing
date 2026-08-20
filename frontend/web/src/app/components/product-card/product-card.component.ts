@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RouterLink } from '@angular/router';
 
 import { Product } from '../../core/models/catalog.models';
+import { CategoryIconComponent } from '../category-icon/category-icon.component';
 
 /**
  * Shared card for a Product in any browse grid (Landing's "Popularne
@@ -14,7 +15,7 @@ import { Product } from '../../core/models/catalog.models';
 @Component({
   selector: 'app-product-card',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, CategoryIconComponent],
   templateUrl: './product-card.component.html',
   styleUrl: './product-card.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

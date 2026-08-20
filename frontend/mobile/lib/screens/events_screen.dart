@@ -8,6 +8,7 @@ import '../models/ticketing_mode.dart';
 import '../services/api_exception.dart';
 import '../services/catalog_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/category_icon.dart';
 import 'event_details_screen.dart';
 import 'museum_ticket_screen.dart';
 import 'parking_spot_screen.dart';
@@ -134,12 +135,14 @@ class _EventsScreenState extends State<EventsScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
-              _CategoryChip(label: 'Sve', selected: _selectedCategoryId == null, onTap: () => _selectCategory(null)),
+              _CategoryChip(label: 'Sve', icon: Icons.apps_rounded, selected: _selectedCategoryId == null, onTap: () => _selectCategory(null)),
               for (final category in _categories)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
                   child: _CategoryChip(
                     label: category.name,
+                    icon: categoryIcon(category.name),
+                    iconUrl: category.iconUrl,
                     selected: _selectedCategoryId == category.id,
                     onTap: () => _selectCategory(category.id),
                   ),
@@ -197,31 +200,39 @@ class _EventsScreenState extends State<EventsScreen> {
 
 class _CategoryChip extends StatelessWidget {
   final String label;
+  final IconData icon;
+  final String? iconUrl;
   final bool selected;
   final VoidCallback onTap;
 
-  const _CategoryChip({required this.label, required this.selected, required this.onTap});
+  const _CategoryChip({required this.label, required this.icon, this.iconUrl, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final labelColor = selected ? Colors.white : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary);
     return InkWell(
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? primary : (isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5)),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            iconUrl != null
+                ? CategoryIconGlyph(name: label, iconUrl: iconUrl, size: 16, color: labelColor)
+                : Icon(icon, size: 16, color: labelColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: labelColor),
+            ),
+          ],
         ),
       ),
     );
@@ -287,9 +298,16 @@ class _ProductCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-                    child: Text(
-                      product.categoryName,
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CategoryIconGlyph(name: product.categoryName, size: 12, color: Colors.white),
+                        const SizedBox(width: 5),
+                        Text(
+                          product.categoryName,
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                      ],
                     ),
                   ),
                 ),

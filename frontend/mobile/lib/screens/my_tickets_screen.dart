@@ -8,11 +8,18 @@ import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
 import 'ticket_qr_screen.dart';
 
+/// Ticketing-mode filter, mirrors web's `TicketFilter` in
+/// `profile.component.ts` — kept in sync so both platforms offer the exact
+/// same filtering capability over "moje ulaznice".
+enum _TicketTypeFilter { sve, singleOccurrence, dailyEntry, recurringReservation }
+
 /// "Moje ulaznice" content — mockup screens 5/8: Nadolazeće/Iskorištene
-/// segmented tabs + timeline-style ticket-stub cards. No `Scaffold`/`AppBar`
-/// of its own so it can be embedded either as [MainShell]'s tab body (plain
-/// title header supplied by the caller) or pushed from `ProfileScreen`'s
-/// "Historija narudžbi" row inside a real `Scaffold`+`AppBar`.
+/// segmented tabs + a type-filter chip row (Sve/Događaji/Dnevne
+/// ulaznice/Rezervacije, mirroring web's Profile ticket tab) +
+/// timeline-style ticket-stub cards. No `Scaffold`/`AppBar` of its own so it
+/// can be embedded either as [MainShell]'s tab body (plain title header
+/// supplied by the caller) or pushed from `ProfileScreen`'s "Historija
+/// narudžbi" row inside a real `Scaffold`+`AppBar`.
 ///
 /// `TicketResponse` has no `ProductName`/`ProductDate` of its own (only
 /// `SectorName`/`ValidDate`/`ValidFrom`/`ValidTo`) — SingleOccurrence
@@ -37,6 +44,17 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
   List<TicketResponse> _tickets = [];
   Map<String, ProductResponse> _productsById = {};
   bool _showUpcoming = true;
+  _TicketTypeFilter _typeFilter = _TicketTypeFilter.sve;
+
+  // Ticket doesn't carry TicketingMode directly (denormalized only as far as
+  // SectorId/ProductId) — SingleOccurrence tickets have no
+  // ValidDate/ValidFrom, DailyEntry has ValidDate, RecurringReservation has
+  // ValidFrom. Mirrors web's `modeOf()` in profile.component.ts exactly.
+  _TicketTypeFilter _modeOf(TicketResponse ticket) {
+    if (ticket.validDate != null) return _TicketTypeFilter.dailyEntry;
+    if (ticket.validFrom != null) return _TicketTypeFilter.recurringReservation;
+    return _TicketTypeFilter.singleOccurrence;
+  }
 
   @override
   void initState() {
@@ -98,7 +116,10 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
-    final filtered = _tickets.where((t) => _isUpcoming(t) == _showUpcoming).toList()
+    final filtered = _tickets
+        .where((t) => _isUpcoming(t) == _showUpcoming)
+        .where((t) => _typeFilter == _TicketTypeFilter.sve || _modeOf(t) == _typeFilter)
+        .toList()
       ..sort((a, b) => (_effectiveDate(a) ?? a.createdAt).compareTo(_effectiveDate(b) ?? b.createdAt));
 
     return Column(
@@ -114,6 +135,39 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
           ),
         ),
         Container(height: 1, color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 32,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              _TypeFilterChip(
+                label: 'Sve',
+                selected: _typeFilter == _TicketTypeFilter.sve,
+                onTap: () => setState(() => _typeFilter = _TicketTypeFilter.sve),
+              ),
+              const SizedBox(width: 8),
+              _TypeFilterChip(
+                label: 'Događaji',
+                selected: _typeFilter == _TicketTypeFilter.singleOccurrence,
+                onTap: () => setState(() => _typeFilter = _TicketTypeFilter.singleOccurrence),
+              ),
+              const SizedBox(width: 8),
+              _TypeFilterChip(
+                label: 'Dnevne ulaznice',
+                selected: _typeFilter == _TicketTypeFilter.dailyEntry,
+                onTap: () => setState(() => _typeFilter = _TicketTypeFilter.dailyEntry),
+              ),
+              const SizedBox(width: 8),
+              _TypeFilterChip(
+                label: 'Rezervacije',
+                selected: _typeFilter == _TicketTypeFilter.recurringReservation,
+                onTap: () => setState(() => _typeFilter = _TicketTypeFilter.recurringReservation),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 4),
         Expanded(
           child: _isLoading
@@ -162,6 +216,39 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
                         ),
         ),
       ],
+    );
+  }
+}
+
+class _TypeFilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TypeFilterChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? primary : (isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
+          ),
+        ),
+      ),
     );
   }
 }

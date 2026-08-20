@@ -1,0 +1,55 @@
+<div class="backdrop" (click)="close()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <button type="button" class="close-btn" aria-label="Zatvori" (click)="close()">✕</button>
+
+    <div class="header-band">
+      <h3>{{ productName() }}</h3>
+      @if (validityLine(); as line) {
+        <p>{{ line }}</p>
+      } @else {
+        <p>Kupljeno: {{ ticket().createdAt | date: 'dd.MM.yyyy. HH:mm' }}</p>
+      }
+    </div>
+
+    <div class="body">
+      <div class="qr-placeholder" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <line x1="14" y1="14" x2="14" y2="21" />
+          <line x1="21" y1="14" x2="21" y2="21" />
+          <line x1="14" y1="17.5" x2="21" y2="17.5" />
+        </svg>
+      </div>
+      <p class="code-label">Kod ulaznice</p>
+      <p class="code-value">{{ ticket().id.toUpperCase() }}</p>
+
+      <div class="info-rows">
+        <div class="info-row">
+          <span>Sektor</span>
+          <span>{{ ticket().sectorName }}</span>
+        </div>
+        @if (ticket().ticketTypeName) {
+          <div class="info-row">
+            <span>Vrsta ulaznice</span>
+            <span>{{ ticket().ticketTypeName }}</span>
+          </div>
+        }
+        <div class="info-row">
+          <span>Cijena</span>
+          <span>{{ ticket().pricePaid }} KM</span>
+        </div>
+        <div class="info-row">
+          <span>Status</span>
+          <span>{{ statusLabel(ticket().status) }}</span>
+        </div>
+      </div>
+
+      <button type="button" class="wallet-btn" (click)="addToWallet()">Dodaj u Wallet</button>
+      @if (walletMessageVisible()) {
+        <p class="wallet-message">Nije dostupno.</p>
+      }
+    </div>
+  </div>
+</div>

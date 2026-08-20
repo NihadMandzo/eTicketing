@@ -34,6 +34,29 @@
         </div>
 
         @if (activeTab() === 'tickets') {
+          <div class="tab-switcher ticket-time-switcher" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              class="tab-btn"
+              [class.active]="showUpcoming()"
+              [attr.aria-selected]="showUpcoming()"
+              (click)="showUpcoming.set(true)"
+            >
+              Nadolazeće
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="tab-btn"
+              [class.active]="!showUpcoming()"
+              [attr.aria-selected]="!showUpcoming()"
+              (click)="showUpcoming.set(false)"
+            >
+              Iskorištene
+            </button>
+          </div>
+
           <div class="filter-chips">
             <button
               type="button"
@@ -76,7 +99,7 @@
           } @else {
             <div class="ticket-list">
               @for (ticket of filteredTickets(); track ticket.id) {
-                <div class="ticket-card">
+                <div class="ticket-card" role="button" tabindex="0" (click)="openTicketDetail(ticket)" (keydown.enter)="openTicketDetail(ticket)">
                   <div class="ticket-main">
                     <h3 class="ticket-sector">{{ ticket.sectorName }}</h3>
                     @if (ticket.ticketTypeName) {
@@ -177,4 +200,12 @@
       </div>
     </section>
   </div>
+
+  @if (selectedTicket(); as ticket) {
+    <app-ticket-detail-modal
+      [ticket]="ticket"
+      [productName]="productNameFor(ticket)"
+      (closed)="closeTicketDetail()"
+    />
+  }
 }

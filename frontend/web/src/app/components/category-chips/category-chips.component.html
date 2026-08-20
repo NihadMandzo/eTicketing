@@ -5,7 +5,9 @@
     [class.active]="selectedCategoryId() === null"
     (click)="select(null)"
   >
-    <span class="chip-badge" style="background-color: var(--muted-foreground)">S</span>
+    <span class="chip-badge" style="background-color: var(--muted-foreground)">
+      <app-category-icon name="Sve kategorije" />
+    </span>
     Sve kategorije
   </button>
   @for (category of categories(); track category.id; let i = $index) {
@@ -15,7 +17,9 @@
       [class.active]="selectedCategoryId() === category.id"
       (click)="select(category.id)"
     >
-      <span class="chip-badge" [style.background-color]="colorFor(i)">{{ category.name.charAt(0) }}</span>
+      <span class="chip-badge" [style.background-color]="colorFor(i)">
+        <app-category-icon [name]="category.name" [iconUrl]="category.iconUrl" />
+      </span>
       {{ category.name }}
     </button>
   }

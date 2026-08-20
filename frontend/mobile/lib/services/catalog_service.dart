@@ -23,10 +23,18 @@ class CatalogService {
     throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
   }
 
+  /// GET /api/categories — like /api/products, this comes back as a
+  /// PagedResult wrapper (`{items, totalCount, page, pageSize}`), never a
+  /// bare array — this used to be parsed as `response.data as List`, which
+  /// threw a TypeError on every call (silently swallowed by callers'
+  /// generic catch blocks) despite the HTTP request itself succeeding.
+  /// pageSize is set to the server's enforced ceiling since there are only
+  /// ever a handful of categories and this call should just return all of
+  /// them, not the default page size of 10.
   Future<List<CategoryResponse>> getCategories() async {
-    final response = await apiClient.get('Categories');
+    final response = await apiClient.get('Categories', queryParameters: {'pageSize': 100});
     if (!_isSuccess(response.statusCode)) _handleError(response);
-    return (response.data as List).map((e) => CategoryResponse.fromJson(e as Map<String, dynamic>)).toList();
+    return PagedResult.fromJson(response.data as Map<String, dynamic>, CategoryResponse.fromJson).items;
   }
 
   /// GET /api/products — Published only, public.

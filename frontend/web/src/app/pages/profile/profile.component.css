@@ -112,6 +112,14 @@
   padding: 20px;
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.ticket-card:hover,
+.ticket-card:focus-visible {
+  box-shadow: var(--shadow-xl);
+  outline: none;
 }
 
 .ticket-main {

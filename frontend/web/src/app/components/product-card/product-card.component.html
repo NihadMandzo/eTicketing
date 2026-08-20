@@ -3,7 +3,10 @@
     @if (coverImageUrl(); as url) {
       <img [src]="url" [alt]="product().name" />
     }
-    <div class="product-badge">{{ product().categoryName }}</div>
+    <div class="product-badge">
+      <app-category-icon class="product-badge-icon" [name]="product().categoryName" />
+      {{ product().categoryName }}
+    </div>
   </div>
   <div class="product-content">
     @if (formattedDate(); as date) {
