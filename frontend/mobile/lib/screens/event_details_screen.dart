@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/responses/organization_response.dart';
@@ -11,6 +13,7 @@ import '../services/organization_service.dart';
 import '../services/sector_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/purchase_widgets.dart';
+import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
 import 'payment_screen.dart';
 
@@ -23,15 +26,21 @@ class _PurchaseRow {
   final String? ticketTypeName;
   final double price;
 
-  const _PurchaseRow({required this.sector, this.ticketTypeId, this.ticketTypeName, required this.price});
+  const _PurchaseRow({
+    required this.sector,
+    this.ticketTypeId,
+    this.ticketTypeName,
+    required this.price,
+  });
 
   String get key => '${sector.id}::${ticketTypeId ?? 'flat'}';
 }
 
 /// SingleOccurrence event details (mockup screen 4) — hero gradient, info
-/// rows, description, per-Sector independent qty steppers (multi-sector
-/// cart, same D4 resolution as `frontend/web`), sticky total + "Kupi
-/// ulaznice" bottom bar.
+/// rows, description, per-Sector independent qty steppers (one Sector per
+/// Redis hold, same as `frontend/web`'s ProductDetailsComponent — a buyer
+/// selecting quantities across several Sectors ends up with one hold, and
+/// one order, per Sector), sticky total + "Kupi ulaznice" bottom bar.
 class EventDetailsScreen extends StatefulWidget {
   final String productId;
 
@@ -89,13 +98,23 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   List<_PurchaseRow> get _rows => _sectors.expand((sector) {
-        if (sector.ticketTypes.isNotEmpty) {
-          return sector.ticketTypes.map((tt) => _PurchaseRow(sector: sector, ticketTypeId: tt.id, ticketTypeName: tt.name, price: tt.price));
-        }
-        return [_PurchaseRow(sector: sector, price: sector.price)];
-      }).toList();
+    if (sector.ticketTypes.isNotEmpty) {
+      return sector.ticketTypes.map(
+        (tt) => _PurchaseRow(
+          sector: sector,
+          ticketTypeId: tt.id,
+          ticketTypeName: tt.name,
+          price: tt.price,
+        ),
+      );
+    }
+    return [_PurchaseRow(sector: sector, price: sector.price)];
+  }).toList();
 
-  double get _total => _rows.fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price);
+  double get _total => _rows.fold(
+    0,
+    (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price,
+  );
 
   bool get _hasSelection => _quantities.values.any((q) => q > 0);
 
@@ -116,44 +135,74 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       _submitError = null;
     });
 
+    // Declared outside the try so both catch clauses below can see (and release) whichever holds
+    // already succeeded before a later Sector's hold call failed — otherwise those holds just sit
+    // there ticking down their own TTL instead of being released immediately.
+    final holds = <CartHoldGroup>[];
     try {
-      final holds = <CartHoldGroup>[];
       for (final entry in bySector.entries) {
-        final quantity = entry.value.fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0));
-        final hold = await _sectorService.hold(entry.key, HoldSectorRequest(quantity: quantity));
-        holds.add(CartHoldGroup(
-          holdId: hold.holdId,
-          sectorId: entry.key,
-          sectorName: entry.value.first.sector.name,
-          lineItems: entry.value
-              .map((row) => CartLineItem(
+        final quantity = entry.value.fold(
+          0,
+          (sum, row) => sum + (_quantities[row.key] ?? 0),
+        );
+        final hold = await _sectorService.hold(
+          entry.key,
+          HoldSectorRequest(quantity: quantity),
+        );
+        holds.add(
+          CartHoldGroup(
+            holdId: hold.holdId,
+            sectorId: entry.key,
+            sectorName: entry.value.first.sector.name,
+            lineItems: entry.value
+                .map(
+                  (row) => CartLineItem(
                     ticketTypeId: row.ticketTypeId,
                     ticketTypeName: row.ticketTypeName,
                     quantity: _quantities[row.key] ?? 0,
                     unitPrice: row.price,
-                  ))
-              .toList(),
-        ));
+                  ),
+                )
+                .toList(),
+          ),
+        );
       }
 
-      Cart.set(CartState(
-        productId: product.id,
-        productName: product.name,
-        eventSummary: product.date != null ? _formatDateTime(product.date!) : '',
-        holds: holds,
-      ));
+      Cart.set(
+        CartState(
+          productId: product.id,
+          productName: product.name,
+          eventSummary: product.date != null
+              ? _formatDateTime(product.date!)
+              : '',
+          holds: holds,
+        ),
+      );
 
       if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
     } on ApiException catch (e) {
+      for (final hold in holds) {
+        unawaited(_sectorService.release(hold.holdId));
+      }
       if (!mounted) return;
       if (e.statusCode == 401) {
-        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
         return;
       }
       setState(() => _submitError = e.apiError.displayMessage);
     } catch (_) {
-      if (mounted) setState(() => _submitError = 'Došlo je do greške. Pokušajte ponovo.');
+      for (final hold in holds) {
+        unawaited(_sectorService.release(hold.holdId));
+      }
+      if (mounted) {
+        setState(() => _submitError = 'Došlo je do greške. Pokušajte ponovo.');
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -161,7 +210,18 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
   static String _formatDateTime(DateTime date) {
     const months = [
-      'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Juni', 'Juli', 'August', 'Septembar', 'Oktobar', 'Novembar', 'Decembar',
+      'Januar',
+      'Februar',
+      'Mart',
+      'April',
+      'Maj',
+      'Juni',
+      'Juli',
+      'August',
+      'Septembar',
+      'Oktobar',
+      'Novembar',
+      'Decembar',
     ];
     final hh = date.hour.toString().padLeft(2, '0');
     final mm = date.minute.toString().padLeft(2, '0');
@@ -182,7 +242,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
     final product = _product!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final tertiaryText = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
 
     return Scaffold(
       body: Stack(
@@ -191,92 +253,164 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             bottom: false,
             child: SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        height: 220,
-                        width: double.infinity,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [AppColors.primary, AppColors.secondary],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: product.images.isNotEmpty
-                            ? Image.network(product.images.first.url, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink())
-                            : null,
-                      ),
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: CircleBackButton(onTap: () => Navigator.of(context).pop()),
-                      ),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: ResponsivePage(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-                              child: Text(product.categoryName, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                        Container(
+                          height: 220,
+                          width: double.infinity,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [AppColors.primary, AppColors.secondary],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(product.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 16),
-                        if (product.date != null) InfoRow(icon: Icons.calendar_today_rounded, text: _formatDateTime(product.date!)),
-                        if (_organization != null) ...[
-                          const SizedBox(height: 12),
-                          InfoRow(icon: Icons.person_outline_rounded, text: 'Organizator: ${_organization!.name}'),
-                        ],
-                        const SizedBox(height: 20),
-                        const Divider(),
-                        const SizedBox(height: 12),
-                        const Text('O događaju', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 8),
-                        Text(
-                          product.description.isNotEmpty ? product.description : 'Opis nije dostupan.',
-                          style: TextStyle(fontSize: 14, color: tertiaryText, height: 1.5),
-                        ),
-                        const SizedBox(height: 24),
-                        const Text('Sektori', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        if (_rows.isEmpty)
-                          Text('Nema dostupnih sektora za ovaj događaj.', style: TextStyle(color: tertiaryText))
-                        else
-                          Column(
-                            children: [
-                              for (final row in _rows)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 14),
-                                  child: QuantityRow(
-                                    title: row.ticketTypeName ?? row.sector.name,
-                                    price: row.price,
-                                    quantity: _quantities[row.key] ?? 0,
-                                    onDecrement: () => setState(() => _quantities[row.key] = ((_quantities[row.key] ?? 0) - 1).clamp(0, 10)),
-                                    onIncrement: () => setState(() => _quantities[row.key] = ((_quantities[row.key] ?? 0) + 1).clamp(0, 10)),
-                                  ),
-                                ),
-                            ],
                           ),
-                        if (_submitError != null) ...[
-                          const SizedBox(height: 8),
-                          Text(_submitError!, style: const TextStyle(color: AppColors.errorDark, fontSize: 13)),
-                        ],
+                          child: product.images.isNotEmpty
+                              ? Image.network(
+                                  product.images.first.url,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) =>
+                                      const SizedBox.shrink(),
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: CircleBackButton(
+                            onTap: () => Navigator.of(context).pop(),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  product.categoryName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            product.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (product.date != null)
+                            InfoRow(
+                              icon: Icons.calendar_today_rounded,
+                              text: _formatDateTime(product.date!),
+                            ),
+                          if (_organization != null) ...[
+                            const SizedBox(height: 12),
+                            InfoRow(
+                              icon: Icons.person_outline_rounded,
+                              text: 'Organizator: ${_organization!.name}',
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'O događaju',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            product.description.isNotEmpty
+                                ? product.description
+                                : 'Opis nije dostupan.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: tertiaryText,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Sektori',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_rows.isEmpty)
+                            Text(
+                              'Nema dostupnih sektora za ovaj događaj.',
+                              style: TextStyle(color: tertiaryText),
+                            )
+                          else
+                            Column(
+                              children: [
+                                for (final row in _rows)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: QuantityRow(
+                                      title:
+                                          row.ticketTypeName ?? row.sector.name,
+                                      price: row.price,
+                                      quantity: _quantities[row.key] ?? 0,
+                                      onDecrement: () => setState(
+                                        () => _quantities[row.key] =
+                                            ((_quantities[row.key] ?? 0) - 1)
+                                                .clamp(0, 10),
+                                      ),
+                                      onIncrement: () => setState(
+                                        () => _quantities[row.key] =
+                                            ((_quantities[row.key] ?? 0) + 1)
+                                                .clamp(0, 10),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          if (_submitError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _submitError!,
+                              style: const TextStyle(
+                                color: AppColors.errorDark,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

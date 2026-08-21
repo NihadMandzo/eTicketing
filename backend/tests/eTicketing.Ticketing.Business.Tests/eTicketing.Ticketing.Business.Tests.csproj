@@ -25,6 +25,11 @@
     <ProjectReference Include="..\..\services\ticketing\eTicketing.Ticketing.Business\eTicketing.Ticketing.Business.csproj" />
     <ProjectReference Include="..\..\services\ticketing\eTicketing.Ticketing.Data\eTicketing.Ticketing.Data.csproj" />
     <ProjectReference Include="..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <!-- Test-only reference: nothing in eTicketing.Ticketing.Business itself depends on
+         eTicketing.Payment.Data — this is exclusively so PaymentEnumParityTests can assert
+         PaymentChargeStatus stays in lockstep with the real PaymentStatus it's deserialized
+         against (see that test for why). -->
+    <ProjectReference Include="..\..\services\payment\eTicketing.Payment.Data\eTicketing.Payment.Data.csproj" />
   </ItemGroup>
 
 </Project>

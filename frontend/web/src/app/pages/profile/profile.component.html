@@ -122,6 +122,11 @@
                 </div>
               }
             </div>
+            @if (hasMoreTickets()) {
+              <button type="button" class="btn btn-outline load-more-btn" [disabled]="isLoadingMoreTickets()" (click)="loadMoreTickets()">
+                {{ isLoadingMoreTickets() ? 'Učitavanje…' : 'Prikaži još' }}
+              </button>
+            }
           }
         }
 

@@ -7,6 +7,7 @@ using eTicketing.Ticketing.Data;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace eTicketing.Ticketing.Business.Tests.TestFixtures;
@@ -71,7 +72,9 @@ public sealed class TicketingTestContext : IDisposable
         new TicketService(TicketRepository);
 
     public IPurchaseService CreatePurchaseService() =>
-        new PurchaseService(SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object, EventPublisher.Object, UnitOfWork);
+        new PurchaseService(
+            SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
+            EventPublisher.Object, UnitOfWork, NullLogger<PurchaseService>.Instance);
 
     public void Dispose()
     {

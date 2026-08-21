@@ -16,7 +16,11 @@ enum _PaymentMethod { card, paypal }
 /// radio, card form (validated identically to `PurchaseRequestValidator`).
 /// Purchases every [CartHoldGroup] in [Cart.state] **sequentially, not in
 /// parallel** — they share one card, so an early decline means the rest
-/// would fail too; an un-purchased hold just expires via its own 5-min TTL
+/// would fail too. Each successful purchase is immediately dropped from
+/// [Cart.state] (see [_submit]), so a failure partway through never
+/// resubmits an already-confirmed hold and the buyer can just press "Plati"
+/// again to pick up where the run stopped; any hold not yet attempted
+/// simply expires via its own 5-min TTL if abandoned instead of retried
 /// (same as `frontend/web`'s CheckoutComponent).
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
@@ -64,9 +68,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     final cardNumber = _cardNumberCtrl.text.replaceAll(RegExp(r'\s'), '');
+    final totalHolds = cart.holds.length;
+    var remaining = List<CartHoldGroup>.from(cart.holds);
+    var succeededCount = 0;
 
     try {
-      for (final hold in cart.holds) {
+      while (remaining.isNotEmpty) {
+        final hold = remaining.first;
         await _purchaseService.purchase(PurchaseRequest(
           holdId: hold.holdId,
           lineItems: hold.lineItems
@@ -75,6 +83,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
           cardNumber: cardNumber,
           cardExpiry: _expiryCtrl.text.trim(),
           cardCvv: _cvvCtrl.text.trim(),
+        ));
+
+        succeededCount++;
+        remaining = remaining.sublist(1);
+        // Drop the just-purchased hold immediately — the whole point is that a later hold in this
+        // same run failing (or the buyer retrying after such a failure) must never resubmit a hold
+        // that already purchased successfully.
+        Cart.set(CartState(
+          productId: cart.productId,
+          productName: cart.productName,
+          eventSummary: cart.eventSummary,
+          date: cart.date,
+          holds: remaining,
         ));
       }
 
@@ -95,20 +116,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
       // payment.declined / purchase.hold_expired / purchase.quantity_mismatch → 400,
       // client-fixable, shown inline. payment.unavailable → 503, a genuine
-      // outage — shown as a toast instead (see PurchaseService.ChargeAsync's
-      // 400-vs-503 distinction, decision D8).
+      // outage — shown as a toast instead (see PurchaseService.PurchaseAsync's
+      // 400-vs-503 distinction in eTicketing.Ticketing.Business).
+      final message = _buildFailureMessage(e.apiError.displayMessage, succeededCount, totalHolds);
       if (e.statusCode == 503) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.apiError.displayMessage), backgroundColor: AppColors.errorDark),
+          SnackBar(content: Text(message), backgroundColor: AppColors.errorDark),
         );
       } else {
-        setState(() => _submitError = e.apiError.displayMessage);
+        setState(() => _submitError = message);
       }
     } catch (_) {
-      if (mounted) setState(() => _submitError = 'Plaćanje nije uspjelo. Pokušajte ponovo.');
+      if (mounted) {
+        setState(() => _submitError = _buildFailureMessage('Plaćanje nije uspjelo. Pokušajte ponovo.', succeededCount, totalHolds));
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  String _buildFailureMessage(String base, int succeededCount, int totalHolds) {
+    if (succeededCount == 0) return base;
+    return '$base ($succeededCount od $totalHolds narudžbi je uspješno obrađeno. Preostale možete pokušati ponovo.)';
   }
 
   @override

@@ -7,11 +7,15 @@ import 'package:flutter/material.dart';
 /// category) falls back to a generic calendar icon. Mirrors
 /// `category-icon.util.ts` on web — keep the two keyword tables in sync if
 /// either changes. Uses only built-in Material icons, no new dependency.
+// 'it' is a plain substring of common Bosnian words ("Kredit", "Identitet", ...), so unlike every
+// other keyword below it needs word boundaries — mirrors web's `\bit\b` in category-icon.util.ts.
+final RegExp _wholeWordIt = RegExp(r'\bit\b');
+
 IconData categoryIcon(String name) {
   final lower = name.toLowerCase();
   if (_matches(lower, ['muzik', 'koncert', 'festival'])) return Icons.music_note_rounded;
   if (_matches(lower, ['sport', 'utakmic'])) return Icons.emoji_events_rounded;
-  if (_matches(lower, ['tehnolog', 'it', 'tech', 'konferenc'])) return Icons.memory_rounded;
+  if (_matches(lower, ['tehnolog', 'tech', 'konferenc']) || _wholeWordIt.hasMatch(lower)) return Icons.memory_rounded;
   if (_matches(lower, ['teatar', 'pozorišt', 'pozorist', 'predstav', 'film', 'kino'])) return Icons.theaters_rounded;
   if (_matches(lower, ['galeri', 'umjetnost', 'izložb', 'izlozb'])) return Icons.palette_rounded;
   if (_matches(lower, ['muze'])) return Icons.museum_rounded;

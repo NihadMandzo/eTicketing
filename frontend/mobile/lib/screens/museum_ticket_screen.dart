@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/requests/hold_sector_request.dart';
@@ -11,6 +13,7 @@ import '../services/organization_service.dart';
 import '../services/sector_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/purchase_widgets.dart';
+import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
 import 'payment_screen.dart';
 
@@ -20,7 +23,12 @@ class _TicketTypeRow {
   final String? ticketTypeName;
   final double price;
 
-  const _TicketTypeRow({required this.sector, this.ticketTypeId, this.ticketTypeName, required this.price});
+  const _TicketTypeRow({
+    required this.sector,
+    this.ticketTypeId,
+    this.ticketTypeName,
+    required this.price,
+  });
 
   String get key => '${sector.id}::${ticketTypeId ?? 'flat'}';
 }
@@ -77,11 +85,12 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
   /// showed an empty ticket list for any museum whose sectors start later.
   static DateTime _firstSelectableDate(List<SectorResponse> sectors) {
     final earliest = _tomorrow();
-    final periods = sectors
-        .where((s) => s.periodYear != null && s.periodMonth != null)
-        .map((s) => DateTime(s.periodYear!, s.periodMonth!))
-        .toList()
-      ..sort();
+    final periods =
+        sectors
+            .where((s) => s.periodYear != null && s.periodMonth != null)
+            .map((s) => DateTime(s.periodYear!, s.periodMonth!))
+            .toList()
+          ..sort();
 
     for (final period in periods) {
       final lastDay = DateTime(period.year, period.month + 1, 0);
@@ -126,18 +135,29 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
   List<SectorResponse> get _sectorsForSelectedDate {
     final date = _selectedDate;
     if (date == null) return const [];
-    return _sectors.where((s) => s.periodYear == date.year && s.periodMonth == date.month).toList();
+    return _sectors
+        .where((s) => s.periodYear == date.year && s.periodMonth == date.month)
+        .toList();
   }
 
   List<_TicketTypeRow> get _rows => _sectorsForSelectedDate.expand((sector) {
-        if (sector.ticketTypes.isNotEmpty) {
-          return sector.ticketTypes
-              .map((tt) => _TicketTypeRow(sector: sector, ticketTypeId: tt.id, ticketTypeName: tt.name, price: tt.price));
-        }
-        return [_TicketTypeRow(sector: sector, price: sector.price)];
-      }).toList();
+    if (sector.ticketTypes.isNotEmpty) {
+      return sector.ticketTypes.map(
+        (tt) => _TicketTypeRow(
+          sector: sector,
+          ticketTypeId: tt.id,
+          ticketTypeName: tt.name,
+          price: tt.price,
+        ),
+      );
+    }
+    return [_TicketTypeRow(sector: sector, price: sector.price)];
+  }).toList();
 
-  double get _total => _rows.fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price);
+  double get _total => _rows.fold(
+    0,
+    (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price,
+  );
 
   bool get _hasSelection => _quantities.values.any((q) => q > 0);
 
@@ -152,7 +172,10 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
 
   void _selectDate(DateTime date) {
     setState(() {
-      final changedMonth = _selectedDate == null || _selectedDate!.month != date.month || _selectedDate!.year != date.year;
+      final changedMonth =
+          _selectedDate == null ||
+          _selectedDate!.month != date.month ||
+          _selectedDate!.year != date.year;
       _selectedDate = date;
       if (changedMonth) {
         _quantities.clear();
@@ -182,69 +205,120 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
     final dateStr =
         '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+    // Declared outside the try so both catch clauses below can see (and release) whichever holds
+    // already succeeded before a later Sector's hold call failed — otherwise those holds just sit
+    // there ticking down their own TTL instead of being released immediately.
+    final holds = <CartHoldGroup>[];
     try {
-      final holds = <CartHoldGroup>[];
       for (final entry in bySector.entries) {
-        final quantity = entry.value.fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0));
-        final hold = await _sectorService.hold(entry.key, HoldSectorRequest(quantity: quantity, date: dateStr));
-        holds.add(CartHoldGroup(
-          holdId: hold.holdId,
-          sectorId: entry.key,
-          sectorName: entry.value.first.sector.name,
-          lineItems: entry.value
-              .map((row) => CartLineItem(
+        final quantity = entry.value.fold(
+          0,
+          (sum, row) => sum + (_quantities[row.key] ?? 0),
+        );
+        final hold = await _sectorService.hold(
+          entry.key,
+          HoldSectorRequest(quantity: quantity, date: dateStr),
+        );
+        holds.add(
+          CartHoldGroup(
+            holdId: hold.holdId,
+            sectorId: entry.key,
+            sectorName: entry.value.first.sector.name,
+            lineItems: entry.value
+                .map(
+                  (row) => CartLineItem(
                     ticketTypeId: row.ticketTypeId,
                     ticketTypeName: row.ticketTypeName,
                     quantity: _quantities[row.key] ?? 0,
                     unitPrice: row.price,
-                  ))
-              .toList(),
-        ));
+                  ),
+                )
+                .toList(),
+          ),
+        );
       }
 
-      Cart.set(CartState(
-        productId: product.id,
-        productName: product.name,
-        eventSummary: _formatDate(date),
-        date: dateStr,
-        holds: holds,
-      ));
+      Cart.set(
+        CartState(
+          productId: product.id,
+          productName: product.name,
+          eventSummary: _formatDate(date),
+          date: dateStr,
+          holds: holds,
+        ),
+      );
 
       if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
     } on ApiException catch (e) {
+      for (final hold in holds) {
+        unawaited(_sectorService.release(hold.holdId));
+      }
       if (!mounted) return;
       if (e.statusCode == 401) {
-        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
         return;
       }
       setState(() => _submitError = e.apiError.displayMessage);
     } catch (_) {
-      if (mounted) setState(() => _submitError = 'Došlo je do greške. Pokušajte ponovo.');
+      for (final hold in holds) {
+        unawaited(_sectorService.release(hold.holdId));
+      }
+      if (mounted) {
+        setState(() => _submitError = 'Došlo je do greške. Pokušajte ponovo.');
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   static const _months = [
-    'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Juni', 'Juli', 'August', 'Septembar', 'Oktobar', 'Novembar', 'Decembar',
+    'Januar',
+    'Februar',
+    'Mart',
+    'April',
+    'Maj',
+    'Juni',
+    'Juli',
+    'August',
+    'Septembar',
+    'Oktobar',
+    'Novembar',
+    'Decembar',
   ];
   static const _weekdayLabels = ['P', 'U', 'S', 'Č', 'P', 'S', 'N'];
 
-  static String _formatDate(DateTime date) => '${date.day}. ${_months[date.month - 1]} ${date.year}.';
+  static String _formatDate(DateTime date) =>
+      '${date.day}. ${_months[date.month - 1]} ${date.year}.';
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (_loadError != null || _product == null) {
-      return Scaffold(appBar: AppBar(title: const Text('Muzejska ulaznica')), body: Center(child: Text(_loadError ?? 'Greška')));
+      return Scaffold(
+        appBar: AppBar(title: const Text('Muzejska ulaznica')),
+        body: Center(child: Text(_loadError ?? 'Greška')),
+      );
     }
 
     final product = _product!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final tertiaryText = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
     final tomorrow = DateTime.now().add(const Duration(days: 1));
-    final firstSelectableDay = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
+    final firstSelectableDay = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+    );
 
     return Scaffold(
       body: Stack(
@@ -253,88 +327,166 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
             bottom: false,
             child: SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        height: 200,
-                        width: double.infinity,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(colors: [AppColors.primary, AppColors.secondary], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                        ),
-                      ),
-                      Positioned(top: 0, left: 0, child: CircleBackButton(onTap: () => Navigator.of(context).pop())),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: ResponsivePage(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
                       children: [
-                        Row(children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-                            child: Text(product.categoryName, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [AppColors.primary, AppColors.secondary],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
-                        ]),
-                        const SizedBox(height: 12),
-                        Text(product.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                        if (_organization != null) ...[
-                          const SizedBox(height: 12),
-                          InfoRow(icon: Icons.person_outline_rounded, text: 'Organizator: ${_organization!.name}'),
-                        ],
-                        const SizedBox(height: 20),
-                        const Text('Odaberite datum posjete', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            IconButton(icon: const Icon(Icons.chevron_left_rounded), onPressed: () => _changeMonth(-1)),
-                            Text('${_months[_visibleMonth.month - 1]} ${_visibleMonth.year}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                            IconButton(icon: const Icon(Icons.chevron_right_rounded), onPressed: () => _changeMonth(1)),
-                          ],
                         ),
-                        _CalendarGrid(
-                          visibleMonth: _visibleMonth,
-                          firstSelectableDay: firstSelectableDay,
-                          selectedDate: _selectedDate,
-                          onSelect: _selectDate,
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child: CircleBackButton(
+                            onTap: () => Navigator.of(context).pop(),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        const Text('Vrsta ulaznice', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        if (_rows.isEmpty)
-                          Text(
-                            _sectors.isEmpty
-                                ? 'Nema dostupnih ulaznica za ovaj muzej.'
-                                : 'Za odabrani datum nema dostupnih ulaznica. Odaberite drugi datum.',
-                            style: TextStyle(color: tertiaryText),
-                          )
-                        else
-                          Column(children: [
-                            for (final row in _rows)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: QuantityRow(
-                                  title: row.ticketTypeName ?? row.sector.name,
-                                  price: row.price,
-                                  quantity: _quantities[row.key] ?? 0,
-                                  onDecrement: () => setState(() => _quantities[row.key] = ((_quantities[row.key] ?? 0) - 1).clamp(0, 10)),
-                                  onIncrement: () => setState(() => _quantities[row.key] = ((_quantities[row.key] ?? 0) + 1).clamp(0, 10)),
-                                ),
-                              ),
-                          ]),
-                        if (_submitError != null) ...[
-                          const SizedBox(height: 8),
-                          Text(_submitError!, style: const TextStyle(color: AppColors.errorDark, fontSize: 13)),
-                        ],
                       ],
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  product.categoryName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            product.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (_organization != null) ...[
+                            const SizedBox(height: 12),
+                            InfoRow(
+                              icon: Icons.person_outline_rounded,
+                              text: 'Organizator: ${_organization!.name}',
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Odaberite datum posjete',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chevron_left_rounded),
+                                onPressed: () => _changeMonth(-1),
+                              ),
+                              Text(
+                                '${_months[_visibleMonth.month - 1]} ${_visibleMonth.year}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.chevron_right_rounded),
+                                onPressed: () => _changeMonth(1),
+                              ),
+                            ],
+                          ),
+                          _CalendarGrid(
+                            visibleMonth: _visibleMonth,
+                            firstSelectableDay: firstSelectableDay,
+                            selectedDate: _selectedDate,
+                            onSelect: _selectDate,
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Vrsta ulaznice',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_rows.isEmpty)
+                            Text(
+                              _sectors.isEmpty
+                                  ? 'Nema dostupnih ulaznica za ovaj muzej.'
+                                  : 'Za odabrani datum nema dostupnih ulaznica. Odaberite drugi datum.',
+                              style: TextStyle(color: tertiaryText),
+                            )
+                          else
+                            Column(
+                              children: [
+                                for (final row in _rows)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: QuantityRow(
+                                      title:
+                                          row.ticketTypeName ?? row.sector.name,
+                                      price: row.price,
+                                      quantity: _quantities[row.key] ?? 0,
+                                      onDecrement: () => setState(
+                                        () => _quantities[row.key] =
+                                            ((_quantities[row.key] ?? 0) - 1)
+                                                .clamp(0, 10),
+                                      ),
+                                      onIncrement: () => setState(
+                                        () => _quantities[row.key] =
+                                            ((_quantities[row.key] ?? 0) + 1)
+                                                .clamp(0, 10),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          if (_submitError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _submitError!,
+                              style: const TextStyle(
+                                color: AppColors.errorDark,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -344,10 +496,13 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
               right: 0,
               bottom: 0,
               child: PurchaseBottomBar(
-                totalLabel: _selectedDate != null ? _formatDate(_selectedDate!) : 'Odaberite datum',
+                totalLabel: _selectedDate != null
+                    ? _formatDate(_selectedDate!)
+                    : 'Odaberite datum',
                 total: _total,
                 buttonLabel: 'Kupi ulaznice',
-                enabled: _hasSelection && _selectedDate != null && !_isSubmitting,
+                enabled:
+                    _hasSelection && _selectedDate != null && !_isSubmitting,
                 isLoading: _isSubmitting,
                 onPressed: _proceedToCheckout,
               ),
@@ -374,20 +529,36 @@ class _CalendarGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final disabledText = isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
+    final tertiaryText = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
+    final disabledText = isDark
+        ? AppColors.darkTextDisabled
+        : AppColors.lightTextDisabled;
     final primary = Theme.of(context).colorScheme.primary;
 
-    final daysInMonth = DateTime(visibleMonth.year, visibleMonth.month + 1, 0).day;
+    final daysInMonth = DateTime(
+      visibleMonth.year,
+      visibleMonth.month + 1,
+      0,
+    ).day;
     // Dart's weekday: Monday=1..Sunday=7 — matches the mockup's P U S Č P S N (Mon-first) header directly.
-    final leadingBlanks = DateTime(visibleMonth.year, visibleMonth.month, 1).weekday - 1;
+    final leadingBlanks =
+        DateTime(visibleMonth.year, visibleMonth.month, 1).weekday - 1;
 
     return Column(
       children: [
         Row(
           children: [
             for (final label in _MuseumTicketScreenState._weekdayLabels)
-              Expanded(child: Center(child: Text(label, style: TextStyle(fontSize: 11, color: tertiaryText)))),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 11, color: tertiaryText),
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -395,14 +566,17 @@ class _CalendarGrid extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+          ),
           itemCount: leadingBlanks + daysInMonth,
           itemBuilder: (context, index) {
             if (index < leadingBlanks) return const SizedBox.shrink();
             final day = index - leadingBlanks + 1;
             final date = DateTime(visibleMonth.year, visibleMonth.month, day);
             final isSelectable = !date.isBefore(firstSelectableDay);
-            final isSelected = selectedDate != null &&
+            final isSelected =
+                selectedDate != null &&
                 selectedDate!.year == date.year &&
                 selectedDate!.month == date.month &&
                 selectedDate!.day == date.day;
@@ -414,14 +588,21 @@ class _CalendarGrid extends StatelessWidget {
                 child: Container(
                   width: 30,
                   height: 30,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: isSelected ? primary : Colors.transparent),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSelected ? primary : Colors.transparent,
+                  ),
                   child: Center(
                     child: Text(
                       '$day',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                        color: isSelected ? Colors.white : (isSelectable ? null : disabledText),
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                        color: isSelected
+                            ? Colors.white
+                            : (isSelectable ? null : disabledText),
                       ),
                     ),
                   ),

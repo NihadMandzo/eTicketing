@@ -11,7 +11,6 @@ import { categoryIconKey } from '../../core/utils/category-icon.util';
  */
 @Component({
   selector: 'app-category-icon',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (iconUrl(); as url) {

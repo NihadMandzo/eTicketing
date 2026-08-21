@@ -14,6 +14,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<PaymentEntity>
         builder.Property(p => p.OrderRef).HasMaxLength(100).IsRequired();
         builder.Property(p => p.Amount).HasColumnType("decimal(10,2)");
 
-        builder.HasIndex(p => p.OrderRef);
+        // Unique, not just indexed: OrderRef is the idempotency key PaymentService.ChargeAsync
+        // uses to detect a replayed charge request (e.g. Ticketing's Polly retry re-sending after
+        // a response was lost) — a duplicate row here would mean the same order got charged twice.
+        builder.HasIndex(p => p.OrderRef).IsUnique();
     }
 }

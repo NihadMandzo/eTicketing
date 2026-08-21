@@ -44,5 +44,17 @@ public class PaymentServiceTests : IDisposable
         all.Should().Contain(p => p.OrderRef == "order-4" && p.Status == PaymentStatus.Succeeded);
     }
 
+    [Fact]
+    public async Task ChargeAsync_CalledTwiceWithSameOrderRef_ReturnsOriginalPaymentWithoutDuplicating()
+    {
+        var first = await _sut.ChargeAsync(new ChargeRequest { Amount = 100, OrderRef = "order-replay", CardNumberLast4 = "1234" });
+        var second = await _sut.ChargeAsync(new ChargeRequest { Amount = 100, OrderRef = "order-replay", CardNumberLast4 = "1234" });
+
+        second.IsSuccess.Should().BeTrue();
+        second.Value!.Id.Should().Be(first.Value!.Id);
+
+        _fixture.PaymentRepository.Query().Count(p => p.OrderRef == "order-replay").Should().Be(1);
+    }
+
     public void Dispose() => _fixture.Dispose();
 }

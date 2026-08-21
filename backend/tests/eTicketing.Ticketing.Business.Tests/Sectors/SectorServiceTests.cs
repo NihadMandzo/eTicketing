@@ -409,5 +409,25 @@ public class SectorServiceTests : IDisposable
         result.Error.Code.Should().Be("sector.not_found");
     }
 
+    [Fact]
+    public async Task ReleaseHoldAsync_ForLiveHold_CallsCapacityLockReleaseAndSucceeds()
+    {
+        var result = await _sut.ReleaseHoldAsync("hold-1");
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync("hold-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReleaseHoldAsync_ForUnknownHoldId_StillSucceeds()
+    {
+        // Mirrors ISectorCapacityLock.ReleaseAsync's own no-op-on-unknown-holdId semantics — the
+        // caller only ever wants "make sure this hold isn't holding capacity any more", never
+        // confirmation that it existed in the first place.
+        var result = await _sut.ReleaseHoldAsync(Guid.NewGuid().ToString("N"));
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     public void Dispose() => _fixture.Dispose();
 }

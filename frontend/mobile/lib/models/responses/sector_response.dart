@@ -30,6 +30,11 @@ class SectorResponse {
   });
 
   factory SectorResponse.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id in payload');
+    if (json['productId'] == null) throw const FormatException('Missing productId in payload');
+    if (json['name'] == null) throw const FormatException('Missing name in payload');
+    if (json['price'] == null) throw const FormatException('Missing price in payload');
+
     return SectorResponse(
       id: json['id'] as String,
       productId: json['productId'] as String,

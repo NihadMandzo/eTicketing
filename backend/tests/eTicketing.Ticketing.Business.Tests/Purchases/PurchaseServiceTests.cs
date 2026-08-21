@@ -257,5 +257,59 @@ public class PurchaseServiceTests : IDisposable
         result.Error.Code.Should().Be("purchase.ticket_type_not_applicable");
     }
 
+    [Fact]
+    public async Task PurchaseAsync_SameHoldIdTwice_ReturnsHoldExpiredOnSecondAttempt()
+    {
+        // Models the real RedisSectorCapacityLock contract this mock stands in for: once
+        // ConfirmAsync has run for a holdId, PeekAsync must return null for it from then on (see
+        // RedisSectorCapacityLock.ConfirmAsync's holdinfo cleanup) — otherwise a replayed purchase
+        // request with the same HoldId would be treated as still-live and charged a second time.
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        var confirmed = false;
+        _fixture.CapacityLock
+            .Setup(l => l.PeekAsync("hold-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => confirmed ? null : new HeldReservation(sector.Id, null, 1));
+        _fixture.CapacityLock
+            .Setup(l => l.ConfirmAsync("hold-1", It.IsAny<CancellationToken>()))
+            .Callback(() => confirmed = true)
+            .Returns(Task.CompletedTask);
+        MockSuccessfulCharge();
+
+        var first = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+        var second = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsFailure.Should().BeTrue();
+        second.Error.Code.Should().Be("purchase.hold_expired");
+        _fixture.PaymentClient.Verify(
+            p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_SectorNoLongerPublishedAfterHold_ReturnsNotFound()
+    {
+        // There's no "unpublish" endpoint (Draft → Published is one-way, per the Preview → Publish
+        // pattern in .claude/rules/01-domain.md), so this reverts Status directly through the real
+        // repository to model the case PurchaseService actually has to guard against: a hold that
+        // outlives its Sector's published lifetime (e.g. the organizer deleted/edited it away from
+        // Published between the hold and the purchase attempt) must not be purchasable.
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        var tracked = (await _fixture.SectorRepository.GetByIdWithTicketTypesAsync(sector.Id))!;
+        tracked.Status = PublishStatus.Draft;
+        _fixture.SectorRepository.Update(tracked);
+        await _fixture.UnitOfWork.SaveChangesAsync();
+
+        MockHold(new HeldReservation(sector.Id, null, 1));
+
+        var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("sector.not_found");
+        _fixture.PaymentClient.Verify(
+            p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     public void Dispose() => _fixture.Dispose();
 }

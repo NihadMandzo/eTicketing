@@ -9,6 +9,7 @@ import '../services/api_exception.dart';
 import '../services/catalog_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/category_icon.dart';
+import '../widgets/responsive_page.dart';
 import 'event_details_screen.dart';
 import 'museum_ticket_screen.dart';
 import 'parking_spot_screen.dart';
@@ -112,55 +113,58 @@ class _EventsScreenState extends State<EventsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: TextField(
-            controller: _searchCtrl,
-            onChanged: _onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Pretraži događaje',
-              prefixIcon: const Icon(Icons.search_rounded),
-              filled: true,
-              fillColor: isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 36,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            children: [
-              _CategoryChip(label: 'Sve', icon: Icons.apps_rounded, selected: _selectedCategoryId == null, onTap: () => _selectCategory(null)),
-              for (final category in _categories)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: _CategoryChip(
-                    label: category.name,
-                    icon: categoryIcon(category.name),
-                    iconUrl: category.iconUrl,
-                    selected: _selectedCategoryId == category.id,
-                    onTap: () => _selectCategory(category.id),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (!_isLoading && _errorMessage == null)
+    return ResponsivePage(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('$_totalCount događaja', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tertiaryText)),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Pretraži događaje',
+                prefixIcon: const Icon(Icons.search_rounded),
+                filled: true,
+                fillColor: isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
             ),
           ),
-        Expanded(child: _buildBody(tertiaryText)),
-      ],
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: [
+                _CategoryChip(label: 'Sve', icon: Icons.apps_rounded, selected: _selectedCategoryId == null, onTap: () => _selectCategory(null)),
+                for (final category in _categories)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: _CategoryChip(
+                      label: category.name,
+                      icon: categoryIcon(category.name),
+                      iconUrl: category.iconUrl,
+                      selected: _selectedCategoryId == category.id,
+                      onTap: () => _selectCategory(category.id),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (!_isLoading && _errorMessage == null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('$_totalCount događaja', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tertiaryText)),
+              ),
+            ),
+          Expanded(child: _buildBody(tertiaryText)),
+        ],
+      ),
     );
   }
 

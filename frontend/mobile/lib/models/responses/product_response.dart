@@ -9,6 +9,9 @@ class ProductImageResponse {
   const ProductImageResponse({required this.id, required this.url, required this.displayOrder});
 
   factory ProductImageResponse.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id in payload');
+    if (json['url'] == null) throw const FormatException('Missing url in payload');
+
     return ProductImageResponse(
       id: json['id'] as String,
       url: json['url'] as String,
@@ -45,6 +48,11 @@ class ProductResponse {
   });
 
   factory ProductResponse.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id in payload');
+    if (json['name'] == null) throw const FormatException('Missing name in payload');
+    if (json['categoryId'] == null) throw const FormatException('Missing categoryId in payload');
+    if (json['organizationId'] == null) throw const FormatException('Missing organizationId in payload');
+
     return ProductResponse(
       id: json['id'] as String,
       name: json['name'] as String,

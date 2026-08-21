@@ -11,7 +11,6 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
  */
 @Component({
   selector: 'app-pagination-bar',
-  standalone: true,
   templateUrl: './pagination-bar.component.html',
   styleUrl: './pagination-bar.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

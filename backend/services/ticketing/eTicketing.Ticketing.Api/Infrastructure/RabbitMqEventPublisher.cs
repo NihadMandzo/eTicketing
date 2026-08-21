@@ -36,9 +36,9 @@ public class RabbitMqEventPublisher : IEventPublisher
         catch (Exception ex)
         {
             // Publishing must never break the purchase itself — the Ticket is already committed by
-            // the time this runs. Notifications/PdfGeneration consuming ticket.purchased is
-            // deliberately out of scope for this pass (see .claude/rules/01-domain.md); only log.
-            _logger.LogWarning(ex, "Neuspjela objava eventa {RoutingKey} na RabbitMQ.", routingKey);
+            // the time this runs. But a dropped ticket.purchased event silently skips the
+            // confirmation email/PDF for a real paying customer, so this is an error, not a warning.
+            _logger.LogError(ex, "Neuspjela objava eventa {RoutingKey} na RabbitMQ.", routingKey);
         }
     }
 }

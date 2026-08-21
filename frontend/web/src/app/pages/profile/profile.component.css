@@ -103,6 +103,11 @@
   gap: 12px;
 }
 
+.load-more-btn {
+  margin: 16px auto 0;
+  display: block;
+}
+
 .ticket-card {
   display: flex;
   align-items: flex-start;

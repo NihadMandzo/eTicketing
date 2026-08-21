@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, catchError, map, of } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { HoldSectorRequest, HoldSectorResponse, Sector } from '../models/sector.models';
@@ -30,5 +30,16 @@ export class SectorService {
   /** POST /api/sectors/{id}/hold — Redis atomic hold, TTL 5 min. */
   hold(sectorId: string, request: HoldSectorRequest): Observable<HoldSectorResponse> {
     return this.http.post<HoldSectorResponse>(`${this.baseUrl}/sectors/${sectorId}/hold`, request);
+  }
+
+  /** POST /api/sectors/holds/{holdId}/release — best-effort early release of a still-live hold
+   * (e.g. the buyer switched to a different spot/date, or a sibling hold in the same cart failed
+   * to purchase). Always resolves, even on a network/server error — callers only ever want to
+   * give capacity back on a best-effort basis, never to block on it or surface a failure toast for
+   * a release the buyer didn't directly ask for. */
+  release(holdId: string): Observable<void> {
+    return this.http
+      .post<void>(`${this.baseUrl}/sectors/holds/${holdId}/release`, {})
+      .pipe(catchError(() => of(void 0)));
   }
 }

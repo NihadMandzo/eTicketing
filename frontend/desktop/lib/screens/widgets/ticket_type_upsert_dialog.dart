@@ -9,8 +9,8 @@ import '../../theme/app_colors.dart';
 
 /// Compact create/edit dialog for one TicketType (e.g. "Dijete"/"Student"/
 /// "Odrasli") under a Sector — TicketType has no Draft/Published lifecycle
-/// of its own (see [[01-domain]]), so unlike SectorUpsertDialog there is no
-/// preview step, just Name + Price.
+/// of its own, so unlike SectorUpsertDialog there is no preview step, just
+/// Name + Price.
 class TicketTypeUpsertDialog extends StatefulWidget {
   final String sectorId;
   final TicketTypeResponse? ticketType;

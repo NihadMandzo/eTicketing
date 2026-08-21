@@ -196,6 +196,12 @@ public class SectorService : ISectorService
         return Result<HoldSectorResponse>.Success(new HoldSectorResponse(hold.HoldId!, hold.ExpiresAt!.Value));
     }
 
+    public async Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default)
+    {
+        await _capacityLock.ReleaseAsync(holdId, ct);
+        return Result.Success();
+    }
+
     /// <summary>Shared by PreviewAsync/CreateAsync/UpdateAsync so preview and the real write path
     /// always agree on the same validation message. Field-level rules (Name/Capacity/Price) ran
     /// via CreateSectorRequestValidator at the endpoint filter — this covers the cross-entity

@@ -32,6 +32,11 @@ class TicketResponse {
   });
 
   factory TicketResponse.fromJson(Map<String, dynamic> json) {
+    if (json['id'] == null) throw const FormatException('Missing id in payload');
+    if (json['orderId'] == null) throw const FormatException('Missing orderId in payload');
+    if (json['sectorId'] == null) throw const FormatException('Missing sectorId in payload');
+    if (json['productId'] == null) throw const FormatException('Missing productId in payload');
+
     return TicketResponse(
       id: json['id'] as String,
       orderId: json['orderId'] as String,

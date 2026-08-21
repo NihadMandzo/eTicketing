@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 
 import { CatalogService } from '../../core/services/catalog.service';
 import { SectorService } from '../../core/services/sector.service';
@@ -45,7 +45,6 @@ function toIsoDate(date: Date): string {
 
 @Component({
   selector: 'app-product-details',
-  standalone: true,
   imports: [RouterLink, DatePipe],
   templateUrl: './product-details.component.html',
   styleUrl: './product-details.component.css',
@@ -74,6 +73,9 @@ export class ProductDetailsComponent {
   // RecurringReservation only.
   readonly selectedSpotSectorId = signal<string | null>(null);
   readonly takenSpotIds = signal<Set<string>>(new Set());
+  // The Redis holdId behind the currently-selected spot, so switching to a different spot can
+  // release this one instead of leaking it for the full 5-minute TTL.
+  private selectedSpotHoldId: string | null = null;
 
   readonly isSubmitting = signal(false);
   readonly submitError = signal<string | null>(null);
@@ -250,17 +252,41 @@ export class ProductDetailsComponent {
     this.isSubmitting.set(true);
     this.submitError.set(null);
 
+    // Every hold call is caught individually rather than left to forkJoin's own all-or-nothing
+    // failure: with plain forkJoin, one Sector's hold failing (e.g. sold out between page load and
+    // click) errors the whole subscription without ever telling us which OTHER holds it already
+    // placed — those would then sit as leaked, silently-ticking Redis holds with no way for this
+    // component to release them. Catching per-call turns every branch into a settled outcome, so we
+    // can release whichever holds actually succeeded before reporting the failure.
     const holdCalls = Array.from(bySector.entries()).map(([sectorId, sectorRows]) => {
       const quantity = sectorRows.reduce((sum, row) => sum + this.quantityFor(row), 0);
-      return this.sectorService
-        .hold(sectorId, { quantity, date: isDailyEntry ? this.selectedDate() : null })
-        .pipe();
+      return this.sectorService.hold(sectorId, { quantity, date: isDailyEntry ? this.selectedDate() : null }).pipe(
+        map((response) => ({ ok: true as const, sectorId, sectorRows, response })),
+        catchError((error: unknown) => of({ ok: false as const, sectorId, sectorRows, error })),
+      );
     });
 
-    forkJoin(holdCalls).subscribe({
-      next: (holdResponses) => {
-        const holds: CartHoldGroup[] = Array.from(bySector.entries()).map(([sectorId, sectorRows], i) => ({
-          holdId: holdResponses[i].holdId,
+    forkJoin(holdCalls).subscribe((outcomes) => {
+      const failed = outcomes.find((o) => !o.ok);
+      if (failed) {
+        // Give back capacity for every Sector that DID succeed — otherwise those holds just sit
+        // there ticking down their own TTL instead of being released immediately.
+        for (const outcome of outcomes) {
+          if (outcome.ok) this.sectorService.release(outcome.response.holdId).subscribe();
+        }
+        this.isSubmitting.set(false);
+        if (this.isUnauthorized(failed.error)) {
+          this.router.navigateByUrl('/prijava');
+          return;
+        }
+        this.submitError.set(this.extractErrorMessage(failed.error));
+        return;
+      }
+
+      const holds: CartHoldGroup[] = outcomes
+        .filter((o): o is Extract<typeof o, { ok: true }> => o.ok)
+        .map(({ sectorId, sectorRows, response }) => ({
+          holdId: response.holdId,
           sectorId,
           sectorName: sectorRows[0].sectorName,
           lineItems: sectorRows.map((row) => ({
@@ -269,26 +295,16 @@ export class ProductDetailsComponent {
             quantity: this.quantityFor(row),
             unitPrice: row.price,
           })),
-          total: sectorRows.reduce((sum, row) => sum + this.quantityFor(row) * row.price, 0),
         }));
 
-        this.cartService.set({
-          productId: product.id,
-          productName: product.name,
-          date: isDailyEntry ? this.selectedDate() : null,
-          holds,
-        });
-        this.isSubmitting.set(false);
-        this.router.navigateByUrl('/placanje');
-      },
-      error: (error: unknown) => {
-        this.isSubmitting.set(false);
-        if (this.isUnauthorized(error)) {
-          this.router.navigateByUrl('/prijava');
-          return;
-        }
-        this.submitError.set(this.extractErrorMessage(error));
-      },
+      this.cartService.set({
+        productId: product.id,
+        productName: product.name,
+        date: isDailyEntry ? this.selectedDate() : null,
+        holds,
+      });
+      this.isSubmitting.set(false);
+      this.router.navigateByUrl('/placanje');
     });
   }
 
@@ -303,6 +319,12 @@ export class ProductDetailsComponent {
     this.sectorService.hold(sector.id, { quantity: 1 }).subscribe({
       next: (hold) => {
         this.isSubmitting.set(false);
+        // Only release the previous spot's hold once the new one has actually succeeded — releasing
+        // it up front and then having this call fail would leave the buyer with no held spot at all.
+        const previousHoldId = this.selectedSpotHoldId;
+        if (previousHoldId) this.sectorService.release(previousHoldId).subscribe();
+
+        this.selectedSpotHoldId = hold.holdId;
         this.selectedSpotSectorId.set(sector.id);
         const product = this.product()!;
         this.cartService.set({
@@ -315,7 +337,6 @@ export class ProductDetailsComponent {
               sectorId: sector.id,
               sectorName: sector.name,
               lineItems: [{ ticketTypeId: null, ticketTypeName: null, quantity: 1, unitPrice: sector.price }],
-              total: sector.price,
             },
           ],
         });

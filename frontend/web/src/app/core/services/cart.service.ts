@@ -16,7 +16,14 @@ export interface CartHoldGroup {
   sectorId: string;
   sectorName: string;
   lineItems: CartLineItem[];
-  total: number;
+}
+
+/** Derived, not stored — a hold group's total is always quantity × unitPrice summed across its
+ * own lineItems, so keeping a separate `total` field alongside them let the two silently drift
+ * apart (e.g. a caller updating lineItems without also recomputing total). Compute it here, once,
+ * every time it's needed instead. */
+export function holdGroupTotal(hold: CartHoldGroup): number {
+  return hold.lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
 }
 
 export interface CartState {
@@ -42,7 +49,7 @@ export class CartService {
   private readonly _state = signal<CartState | null>(null);
   readonly state = this._state.asReadonly();
 
-  readonly grandTotal = () => (this._state()?.holds ?? []).reduce((sum, h) => sum + h.total, 0);
+  readonly grandTotal = () => (this._state()?.holds ?? []).reduce((sum, h) => sum + holdGroupTotal(h), 0);
 
   set(cart: CartState): void {
     this._state.set(cart);

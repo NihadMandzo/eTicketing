@@ -14,7 +14,6 @@ import { CategoryIconComponent } from '../category-icon/category-icon.component'
  */
 @Component({
   selector: 'app-product-card',
-  standalone: true,
   imports: [RouterLink, CategoryIconComponent],
   templateUrl: './product-card.component.html',
   styleUrl: './product-card.component.css',
@@ -31,5 +30,16 @@ export class ProductCardComponent {
     const d = new Date(date);
     const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
     return `${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}.`;
+  });
+
+  readonly modeLabel = computed(() => {
+    switch (this.product().ticketingMode) {
+      case 'DailyEntry':
+        return 'Dnevna ulaznica';
+      case 'RecurringReservation':
+        return 'Mjesečna karta';
+      default:
+        return 'Događaj';
+    }
   });
 }

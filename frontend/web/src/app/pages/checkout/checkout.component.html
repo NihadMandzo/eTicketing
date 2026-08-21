@@ -58,7 +58,7 @@
                   @for (li of hold.lineItems; track li.ticketTypeId) {
                     <div class="line-item">
                       <span>{{ li.ticketTypeName ?? 'Ulaznica' }} × {{ li.quantity }}</span>
-                      <span>{{ li.quantity * li.unitPrice }} KM</span>
+                      <span>{{ li.quantity * li.unitPrice | number: '1.2-2' }} KM</span>
                     </div>
                   }
                 </div>
@@ -66,7 +66,7 @@
             }
             <div class="grand-total-row">
               <span>Ukupno</span>
-              <span class="grand-total">{{ grandTotal() }} KM</span>
+              <span class="grand-total">{{ grandTotal() | number: '1.2-2' }} KM</span>
             </div>
           </div>
         }
@@ -95,31 +95,46 @@
 
         <!-- Step 2: payment details -->
         @if (step() === 2) {
-          <div class="step-card">
+          <div class="step-card" [formGroup]="detailsForm">
             <h2>Detalji plaćanja</h2>
             <div class="form-grid">
               <label class="field">
                 <span>Email adresa</span>
-                <input type="email" placeholder="vasa.email@adresa.ba" [ngModel]="email()" (ngModelChange)="email.set($event)" />
+                <input type="email" placeholder="vasa.email@adresa.ba" formControlName="email" />
+                @if (detailsForm.controls.email.invalid && detailsForm.controls.email.touched) {
+                  <span class="field-error">Email adresa je obavezna.</span>
+                }
               </label>
               <label class="field">
                 <span>Telefon</span>
-                <input type="tel" placeholder="+387 61 234 567" [ngModel]="phone()" (ngModelChange)="phone.set($event)" />
+                <input type="tel" placeholder="+387 61 234 567" formControlName="phone" />
+                @if (detailsForm.controls.phone.invalid && detailsForm.controls.phone.touched) {
+                  <span class="field-error">Telefon je obavezan.</span>
+                }
               </label>
             </div>
             <div class="form-grid">
                 <label class="field">
                   <span>Broj kartice</span>
-                  <input type="text" placeholder="0000 0000 0000 0000" [ngModel]="cardNumber()" (ngModelChange)="cardNumber.set($event)" />
+                  <input type="text" placeholder="0000 0000 0000 0000" formControlName="cardNumber" />
+                  @if (detailsForm.controls.cardNumber.invalid && detailsForm.controls.cardNumber.touched) {
+                    <span class="field-error">Unesite ispravan broj kartice (12-19 cifara).</span>
+                  }
                 </label>
                 <div class="field-row">
                   <label class="field">
                     <span>Datum isteka</span>
-                    <input type="text" placeholder="MM/GG" [ngModel]="cardExpiry()" (ngModelChange)="cardExpiry.set($event)" />
+                    <input type="text" placeholder="MM/GG" formControlName="cardExpiry" />
+                    @if (detailsForm.controls.cardExpiry.invalid && detailsForm.controls.cardExpiry.touched) {
+                      <span class="field-error">Format MM/GG.</span>
+                    }
                   </label>
                   <label class="field">
                     <span>CVV</span>
-                    <input type="text" placeholder="123" [ngModel]="cardCvv()" (ngModelChange)="cardCvv.set($event)" />
+                    <input type="text" placeholder="123" formControlName="cardCvv" />
+                    @if (detailsForm.controls.cardCvv.invalid && detailsForm.controls.cardCvv.touched) {
+                      <span class="field-error">3-4 cifre.</span>
+                    }
                   </label>
                 </div>
               </div>
@@ -137,12 +152,12 @@
             <p class="hint-text">Molimo provjerite sve podatke prije finalizacije</p>
             <div class="confirm-box">
               <div class="line-item"><span>Proizvod</span><span>{{ cart.productName }}</span></div>
-              <div class="line-item"><span>Email</span><span>{{ email() }}</span></div>
+              <div class="line-item"><span>Email</span><span>{{ detailsForm.controls.email.value }}</span></div>
               <div class="line-item"><span>Način plaćanja</span><span>{{ paymentMethodLabel }}</span></div>
             </div>
             <div class="confirm-total">
               <span>Ukupno za plaćanje</span>
-              <span class="grand-total">{{ grandTotal() }} KM</span>
+              <span class="grand-total">{{ grandTotal() | number: '1.2-2' }} KM</span>
             </div>
           </div>
         }
@@ -156,7 +171,7 @@
             <button type="button" class="btn btn-outline" [disabled]="isSubmitting()" (click)="goBack()">Nazad</button>
           }
           @if (step() < 3) {
-            <button type="button" class="btn btn-primary flex-grow" [disabled]="step() === 2 && !canContinueFromDetails()" (click)="goNext()">Nastavi</button>
+            <button type="button" class="btn btn-primary flex-grow" [disabled]="step() === 2 && detailsForm.invalid" (click)="goNext()">Nastavi</button>
           } @else {
             <button type="button" class="btn btn-primary flex-grow" [disabled]="isSubmitting()" (click)="finishPayment()">
               {{ isSubmitting() ? 'Obrada...' : 'Završi plaćanje' }}
@@ -173,13 +188,13 @@
             @for (li of hold.lineItems; track li.ticketTypeId) {
               <div class="line-item">
                 <span>{{ li.ticketTypeName ?? hold.sectorName }} × {{ li.quantity }}</span>
-                <span>{{ li.quantity * li.unitPrice }} KM</span>
+                <span>{{ li.quantity * li.unitPrice | number: '1.2-2' }} KM</span>
               </div>
             }
           }
           <div class="grand-total-row">
             <span>Ukupno</span>
-            <span class="grand-total">{{ grandTotal() }} KM</span>
+            <span class="grand-total">{{ grandTotal() | number: '1.2-2' }} KM</span>
           </div>
         </div>
       </div>

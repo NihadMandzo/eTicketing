@@ -1,9 +1,9 @@
-<div class="backdrop" (click)="close()">
-  <div class="modal" (click)="$event.stopPropagation()">
+<div class="backdrop" role="presentation" (click)="close()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ticket-detail-title" tabindex="-1" (click)="$event.stopPropagation()">
     <button type="button" class="close-btn" aria-label="Zatvori" (click)="close()">✕</button>
 
     <div class="header-band">
-      <h3>{{ productName() }}</h3>
+      <h3 id="ticket-detail-title">{{ productName() }}</h3>
       @if (validityLine(); as line) {
         <p>{{ line }}</p>
       } @else {

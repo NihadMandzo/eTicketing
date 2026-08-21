@@ -32,9 +32,9 @@ public static class TicketingServiceCollectionExtensions
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
         builder.Services.AddSingleton<ISectorCapacityLock, RedisSectorCapacityLock>();
 
-        // Ticketing → Catalog: retry + timeout only (no circuit breaker — that's reserved for the
-        // future Ticketing → Payment call on the purchase-critical path, per
-        // .claude/rules/10-backend.md).
+        // Ticketing → Catalog: retry + timeout only — no circuit breaker here. The circuit breaker
+        // is reserved for the Ticketing → Payment call below, since that's the one call on the
+        // synchronous purchase-critical path (per .claude/rules/10-backend.md).
         builder.Services.AddHttpClient<ICatalogClient, HttpCatalogClient>(c =>
                 c.BaseAddress = new Uri(builder.Configuration["Services:Catalog"]!))
             .AddResilienceHandler("catalog-pipeline", pb =>

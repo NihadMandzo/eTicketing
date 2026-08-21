@@ -18,6 +18,11 @@ class PurchaseResponse {
   });
 
   factory PurchaseResponse.fromJson(Map<String, dynamic> json) {
+    if (json['orderId'] == null) throw const FormatException('Missing orderId in payload');
+    if (json['productId'] == null) throw const FormatException('Missing productId in payload');
+    if (json['sectorId'] == null) throw const FormatException('Missing sectorId in payload');
+    if (json['totalPaid'] == null) throw const FormatException('Missing totalPaid in payload');
+
     return PurchaseResponse(
       orderId: json['orderId'] as String,
       productId: json['productId'] as String,

@@ -280,6 +280,15 @@
   border-color: var(--ring);
 }
 
+.field input.ng-invalid.ng-touched {
+  border-color: var(--destructive);
+}
+
+.field-error {
+  color: var(--destructive);
+  font-size: 12px;
+}
+
 .confirm-box {
   background-color: var(--muted);
   border-radius: 8px;

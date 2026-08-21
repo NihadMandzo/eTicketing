@@ -10,8 +10,8 @@ import 'base_provider.dart';
 /// Scoped to one Sector — `sectors/{sectorId}/ticket-types`, per the
 /// backend's nested route. Not `BaseProvider.getAll()` for reads (that
 /// expects a `PagedResult<T>` body); the backend returns a plain array
-/// here since a Sector realistically has a handful of TicketTypes at most,
-/// not a paginated list — see [[01-domain]]'s TicketType note.
+/// here since a Sector realistically has a handful of TicketTypes at most
+/// (e.g. Dijete/Student/Odrasli), not a paginated list.
 class TicketTypeProvider extends BaseProvider<TicketTypeResponse, String> {
   final String sectorId;
 

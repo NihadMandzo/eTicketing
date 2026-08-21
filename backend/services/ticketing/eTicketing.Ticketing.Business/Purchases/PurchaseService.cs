@@ -7,6 +7,7 @@ using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Ticketing.Business.Purchases;
 
@@ -23,22 +24,29 @@ public interface IEventPublisher
 /// .claude/rules/01-domain.md, minus real payment (eTicketing.Payment is an internally-mocked
 /// service, see docs/payment-setup-guide.md). Step by step:
 ///  1. Resolve the hold's actual reservation from Redis via ISectorCapacityLock.PeekAsync — never
-///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why).
+///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why). Also
+///     the guard against a replayed HoldId: PeekAsync returns null once ConfirmAsync has already
+///     run for it (see RedisSectorCapacityLock.ConfirmAsync).
 ///  2. Validate the request's line-item quantities sum to exactly what was held.
 ///  3. Load the held Sector (with TicketTypes) — must still exist and be Published.
 ///  4. Validate each line's TicketTypeId against the Sector's TicketTypes (all-or-nothing: either
-///     every line needs one, or none do).
+///     every line needs one, or none do — the request-shape half of that rule lives in
+///     PurchaseRequestValidator, the DB-dependent half lives here).
 ///  5. Compute the total price.
 ///  6. Charge via IPaymentClient — a circuit-open/timeout/transport failure releases the hold and
-///     returns a 503 (Error.Failure); this is a service-outage, not the buyer's fault.
+///     returns a 503 (Error.Failure); this is a service-outage, not the buyer's fault. PaymentService
+///     on the other side is itself idempotent on OrderRef, so a retried charge after a lost response
+///     never double-charges.
 ///  7. A card the mock declines releases the hold and returns 400 (Error.Validation) — the buyer's
 ///     problem, not an outage; deliberately different HTTP semantics from step 6.
 ///  8. Success confirms the hold (permanent capacity decrement).
-///  9. Mints one Ticket per admission unit (not one Ticket with a Quantity field — see the
-///     reasoning in the approved plan: TicketPurchased already has no Quantity field, each unit
-///     needs its own QR/receipt identity). RecurringReservation additionally creates one
+///  9. Mints one Ticket per admission unit (not one Ticket with a Quantity field — each unit needs
+///     its own QR/receipt identity, and TicketPurchased has no Quantity field to carry one anyway)
+///     via the mode-specific Ticket.ForXxx factory. RecurringReservation additionally creates one
 ///     Subscription shared by that single Ticket (Capacity is always 1 for that mode).
-/// 10. Persists everything in one SaveChangesAsync.
+/// 10. Persists everything in one SaveChangesAsync, logged on failure — by this point the charge has
+///     already succeeded, so a persistence failure here is silent money without a paper trail unless
+///     it's logged loudly.
 /// 11. Publishes TicketPurchased once per minted Ticket.
 /// </summary>
 public class PurchaseService : IPurchaseService
@@ -50,6 +58,7 @@ public class PurchaseService : IPurchaseService
     private readonly IPaymentClient _paymentClient;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<PurchaseService> _logger;
 
     public PurchaseService(
         ISectorRepository sectorRepository,
@@ -58,7 +67,8 @@ public class PurchaseService : IPurchaseService
         ISectorCapacityLock capacityLock,
         IPaymentClient paymentClient,
         IEventPublisher eventPublisher,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<PurchaseService> logger)
     {
         _sectorRepository = sectorRepository;
         _ticketRepository = ticketRepository;
@@ -67,6 +77,7 @@ public class PurchaseService : IPurchaseService
         _paymentClient = paymentClient;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public async Task<Result<PurchaseResponse>> PurchaseAsync(PurchaseRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -131,23 +142,12 @@ public class PurchaseService : IPurchaseService
 
             for (var i = 0; i < line.Quantity; i++)
             {
-                var ticket = new Ticket
-                {
-                    Id = Guid.NewGuid(),
-                    SectorId = sector.Id,
-                    TicketTypeId = ticketType?.Id,
-                    OrderId = orderId,
-                    ProductId = sector.ProductId,
-                    UserId = userId,
-                    UserEmail = userEmail,
-                    Status = TicketStatus.Confirmed,
-                    PricePaid = unitPrice,
-                };
+                Ticket ticket;
 
                 switch (sector.TicketingMode)
                 {
                     case TicketingMode.DailyEntry:
-                        ticket.ValidDate = reservation.Date;
+                        ticket = Ticket.ForDailyEntry(sector.Id, ticketType?.Id, orderId, sector.ProductId, userId, userEmail, unitPrice, reservation.Date);
                         break;
 
                     case TicketingMode.RecurringReservation:
@@ -165,9 +165,13 @@ public class PurchaseService : IPurchaseService
                         };
                         subscription.NextRenewalAt = subscription.CurrentPeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
-                        ticket.SubscriptionId = subscription.Id;
-                        ticket.ValidFrom = subscription.CurrentPeriodStart;
-                        ticket.ValidTo = subscription.CurrentPeriodEnd;
+                        ticket = Ticket.ForRecurringReservation(
+                            sector.Id, ticketType?.Id, orderId, sector.ProductId, userId, userEmail, unitPrice,
+                            subscription.Id, subscription.CurrentPeriodStart, subscription.CurrentPeriodEnd);
+                        break;
+
+                    default:
+                        ticket = Ticket.ForSingleOccurrence(sector.Id, ticketType?.Id, orderId, sector.ProductId, userId, userEmail, unitPrice);
                         break;
                 }
 
@@ -181,7 +185,22 @@ public class PurchaseService : IPurchaseService
         foreach (var ticket in tickets)
             await _ticketRepository.AddAsync(ticket, ct);
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // The charge already succeeded (charge.Id) and the hold is already confirmed by this
+            // point — a failure here means a paying customer has no Ticket row at all with no other
+            // trace of what happened. This must never be silent: log everything needed to manually
+            // reconcile the charge, then let it surface as the real bug it is.
+            _logger.LogError(
+                ex,
+                "Uplata {ChargeId} za OrderRef {OrderRef} (hold {HoldId}) je uspjela, ali čuvanje ulaznica u bazu nije uspjelo.",
+                charge.Id, orderId, request.HoldId);
+            throw;
+        }
 
         foreach (var ticket in tickets)
         {
@@ -191,6 +210,8 @@ public class PurchaseService : IPurchaseService
                 ct);
         }
 
+        // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
+        // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
         var response = new PurchaseResponse(
             orderId, sector.ProductId, sector.Id, totalPrice, tickets[0].CreatedAt,
             tickets.Select(t => ToTicketResponse(t, sector.Name, ticketTypesById)).ToList());
@@ -204,5 +225,8 @@ public class PurchaseService : IPurchaseService
             ticket.TicketTypeId, ticket.TicketTypeId is null ? null : ticketTypesById[ticket.TicketTypeId.Value].Name,
             ticket.Status, ticket.PricePaid, ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo, ticket.CreatedAt);
 
+    // The `cardNumber.Length >= 4` branch below is only a defensive fallback — in practice
+    // CardNumber always has at least 12 digits by the time it reaches here, enforced by
+    // PurchaseRequestValidator's `^\d{12,19}$` rule, which runs before this service method does.
     private static string Last4(string cardNumber) => cardNumber.Length >= 4 ? cardNumber[^4..] : cardNumber;
 }

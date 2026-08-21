@@ -48,8 +48,13 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         """;
 
     private readonly IConnectionMultiplexer _redis;
+    private readonly ILogger<RedisSectorCapacityLock> _logger;
 
-    public RedisSectorCapacityLock(IConnectionMultiplexer redis) => _redis = redis;
+    public RedisSectorCapacityLock(IConnectionMultiplexer redis, ILogger<RedisSectorCapacityLock> logger)
+    {
+        _redis = redis;
+        _logger = logger;
+    }
 
     private IDatabase Db => _redis.GetDatabase();
 
@@ -113,7 +118,10 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
 
         var parsed = TryParseCounterKey(counterKey.ToString()!);
         if (parsed is null)
+        {
+            _logger.LogError("holdinfo:{HoldId} pointed at counter key {CounterKey}, which does not match either known shape", holdId, counterKey.ToString());
             return null;
+        }
 
         var quantity = int.Parse(current.ToString().Split(':')[0], CultureInfo.InvariantCulture);
         return new HeldReservation(parsed.Value.SectorId, parsed.Value.Date, quantity);
@@ -142,6 +150,12 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         // "permanently confirmed" hold, letting a later TryHoldAsync oversell already-sold
         // capacity. Remove the TTL on the counter key itself so a confirmed hold survives forever.
         await Db.KeyPersistAsync(counterKey.ToString());
+
+        // Once confirmed, this holdId must stop resolving via PeekAsync — otherwise a replayed
+        // purchase request (same holdId re-submitted after the first attempt already charged and
+        // confirmed) would see the same hold as still "live" and charge again. Deleting the
+        // holdinfo pointer makes PeekAsync return null for it from now on, same as an expired hold.
+        await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
     }
 
     public async Task ReleaseAsync(string holdId, CancellationToken ct = default)

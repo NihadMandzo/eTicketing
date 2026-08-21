@@ -47,17 +47,7 @@ public class TicketServiceTests : IDisposable
 
     private async Task<Ticket> SeedTicketAsync(Guid userId, Guid sectorId, Guid productId)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            SectorId = sectorId,
-            OrderId = Guid.NewGuid(),
-            ProductId = productId,
-            UserId = userId,
-            UserEmail = "buyer@example.com",
-            Status = TicketStatus.Confirmed,
-            PricePaid = 50,
-        };
+        var ticket = Ticket.ForSingleOccurrence(sectorId, null, Guid.NewGuid(), productId, userId, "buyer@example.com", 50);
         await _fixture.TicketRepository.AddAsync(ticket);
         await _fixture.UnitOfWork.SaveChangesAsync();
         return ticket;

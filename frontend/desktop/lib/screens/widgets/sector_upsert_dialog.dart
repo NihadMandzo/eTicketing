@@ -52,9 +52,9 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
   SectorPreviewResponse? _preview;
 
   // TicketTypes are only manageable once the Sector already exists — a
-  // brand-new Sector has no SectorId yet for the FK to point at (see D7 in
-  // the ticket-types plan). Seeded from the parent SectorResponse (already
-  // included on GET /sectors*) and refreshed after each add/edit/delete.
+  // brand-new Sector has no SectorId yet for the FK to point at. Seeded from
+  // the parent SectorResponse (already included on GET /sectors*) and
+  // refreshed after each add/edit/delete.
   List<TicketTypeResponse> _ticketTypes = [];
   bool _isLoadingTicketTypes = false;
 
@@ -441,7 +441,8 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
                           ],
 
                           // Optional per-Sector price breakdown (e.g. Dijete/Student/Odrasli) —
-                          // only manageable once the Sector already exists (see D7).
+                          // only manageable once the Sector already exists (see the doc comment
+                          // on _ticketTypes above for why).
                           if (_isEditing) ...[
                             const SizedBox(height: 20),
                             const Divider(),

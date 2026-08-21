@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { ChangeDetectionStrategy, Component, OnDestroy, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { CatalogService } from '../../core/services/catalog.service';
@@ -15,8 +16,9 @@ import { PaginationBarComponent } from '../../components/pagination-bar/paginati
   styleUrl: './products.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ProductsComponent {
+export class ProductsComponent implements OnDestroy {
   private readonly catalogService = inject(CatalogService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   readonly categories = signal<Category[]>([]);
   readonly products = signal<Product[]>([]);
@@ -77,8 +79,8 @@ export class ProductsComponent {
     this.page.set(page);
     this.loadProducts();
     // Jumping pages without scrolling back up reads as "nothing happened"
-    // on a long results grid.
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // on a long results grid. Guarded — `window` doesn't exist during SSR.
+    if (this.isBrowser) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   onPageSizeChanged(size: number): void {
@@ -108,5 +110,9 @@ export class ProductsComponent {
           this.isLoading.set(false);
         },
       });
+  }
+
+  ngOnDestroy(): void {
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
   }
 }

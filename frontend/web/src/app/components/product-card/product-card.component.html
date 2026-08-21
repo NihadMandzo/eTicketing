@@ -14,7 +14,7 @@
     }
     <h3 class="product-title" [title]="product().name">{{ product().name }}</h3>
     <div class="product-footer">
-      <span class="product-mode">{{ product().ticketingMode === 'DailyEntry' ? 'Dnevna ulaznica' : product().ticketingMode === 'RecurringReservation' ? 'Mjesečna karta' : 'Događaj' }}</span>
+      <span class="product-mode">{{ modeLabel() }}</span>
       <span class="product-cta">Detalji →</span>
     </div>
   </div>

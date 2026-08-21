@@ -78,6 +78,19 @@ public class TicketTypeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateAsync_ForOtherOrganizationsSectorAsPlatformStaff_Succeeds()
+    {
+        // PlatformStaff (SuperAdmin/Admin) bypasses ownership entirely, per AuthorizeOwnership's
+        // own doc comment — this is the one branch of that check with no prior coverage.
+        var sector = await CreateOwnedSectorAsync();
+
+        var result = await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, BuildCaller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.SectorId.Should().Be(sector.Id);
+    }
+
+    [Fact]
     public async Task CreateAsync_ForUnknownSector_ReturnsNotFound()
     {
         var result = await _sut.CreateAsync(Guid.NewGuid(), new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
@@ -129,23 +142,15 @@ public class TicketTypeServiceTests : IDisposable
     [Fact]
     public async Task DeleteAsync_WhenTicketTypeHasTicketsSold_IsRejectedByTheDatabasesForeignKeyRestrict()
     {
-        // Regression-proofs TicketTypeConfiguration's OnDelete(Restrict) — a TicketType that
-        // already has Tickets sold against it must not be deletable out from under them.
+        // Regression-proofs TicketConfiguration's Ticket.TicketType relationship
+        // (OnDelete(ClientNoAction), which forces the database's own FK restrict instead of EF's
+        // client-side fixup — see that config's doc comment) — a TicketType that already has
+        // Tickets sold against it must not be deletable out from under them.
         var sector = await CreateOwnedSectorAsync();
         var created = await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
 
-        await _fixture.TicketRepository.AddAsync(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            SectorId = sector.Id,
-            TicketTypeId = created.Value!.Id,
-            OrderId = Guid.NewGuid(),
-            ProductId = _productId,
-            UserId = Guid.NewGuid(),
-            UserEmail = "buyer@example.com",
-            Status = TicketStatus.Confirmed,
-            PricePaid = 10,
-        });
+        await _fixture.TicketRepository.AddAsync(Ticket.ForSingleOccurrence(
+            sector.Id, created.Value!.Id, Guid.NewGuid(), _productId, Guid.NewGuid(), "buyer@example.com", 10));
         await _fixture.UnitOfWork.SaveChangesAsync();
 
         var act = async () => await _sut.DeleteAsync(sector.Id, created.Value.Id, OrgACaller());

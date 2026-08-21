@@ -13,6 +13,8 @@ import { TicketDetailModalComponent } from '../../components/ticket-detail-modal
 
 type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 
+const TICKETS_PAGE_SIZE = 20;
+
 function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors | null {
   const newPassword = control.get('newPassword')?.value;
   const confirmPassword = control.get('confirmPassword')?.value;
@@ -44,6 +46,11 @@ export class ProfileComponent {
   readonly activeTab = signal<'tickets' | 'settings'>('tickets');
   readonly tickets = signal<Ticket[]>([]);
   readonly isLoadingTickets = signal(true);
+  readonly isLoadingMoreTickets = signal(false);
+  // 0-indexed, per the locked PagedResult contract (see 01-domain.md).
+  private readonly ticketsPage = signal(0);
+  private readonly ticketsTotalCount = signal(0);
+  readonly hasMoreTickets = computed(() => this.tickets().length < this.ticketsTotalCount());
   readonly ticketFilter = signal<TicketFilter>('sve');
   // Upcoming/past split, mirrors mobile's Nadolazeće/Iskorištene tabs in
   // my_tickets_screen.dart — kept in sync so both platforms offer the exact
@@ -147,17 +154,33 @@ export class ProfileComponent {
       }
     });
 
-    this.purchaseService.getMyTickets().subscribe({
-      next: (result) => {
-        this.tickets.set(result.items);
-        this.isLoadingTickets.set(false);
+    this.loadTicketsPage(0);
+  }
 
-        const productIds = [...new Set(result.items.map((t) => t.productId))];
-        if (productIds.length === 0) return;
+  /** Appends page `page`'s tickets onto whatever's already loaded — `tickets()` is a running list
+   * across every page fetched so far, not just the current page, so "Prikaži još" never has to
+   * throw away what's already on screen. */
+  private loadTicketsPage(page: number): void {
+    const loadingSignal = page === 0 ? this.isLoadingTickets : this.isLoadingMoreTickets;
+    loadingSignal.set(true);
+
+    this.purchaseService.getMyTickets(page, TICKETS_PAGE_SIZE).subscribe({
+      next: (result) => {
+        this.tickets.update((existing) => (page === 0 ? result.items : [...existing, ...result.items]));
+        this.ticketsPage.set(page);
+        this.ticketsTotalCount.set(result.totalCount);
+        loadingSignal.set(false);
+
+        // Only fetch products this page actually introduced — productsById already carries
+        // whatever earlier pages resolved, so re-fetching those every "Prikaži još" click would be
+        // wasted requests for products already known.
+        const alreadyKnown = this.productsById();
+        const newProductIds = [...new Set(result.items.map((t) => t.productId))].filter((id) => !alreadyKnown[id]);
+        if (newProductIds.length === 0) return;
         forkJoin(
-          productIds.map((id) => this.catalogService.getProductById(id).pipe(catchError(() => of(null)))),
+          newProductIds.map((id) => this.catalogService.getProductById(id).pipe(catchError(() => of(null)))),
         ).subscribe((products) => {
-          const byId: Record<string, Product> = {};
+          const byId = { ...this.productsById() };
           for (const product of products) {
             if (product) byId[product.id] = product;
           }
@@ -165,9 +188,14 @@ export class ProfileComponent {
         });
       },
       error: () => {
-        this.isLoadingTickets.set(false);
+        loadingSignal.set(false);
       },
     });
+  }
+
+  loadMoreTickets(): void {
+    if (this.isLoadingMoreTickets() || !this.hasMoreTickets()) return;
+    this.loadTicketsPage(this.ticketsPage() + 1);
   }
 
   statusLabel(status: Ticket['status']): string {

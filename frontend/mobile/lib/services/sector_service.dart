@@ -38,4 +38,17 @@ class SectorService {
     if (!_isSuccess(response.statusCode)) _handleError(response);
     return HoldSectorResponse.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// POST /api/sectors/holds/{holdId}/release — best-effort early release of a still-live hold
+  /// (e.g. the buyer switched to a different spot/date, or a sibling hold in the same cart failed
+  /// to purchase). Deliberately swallows every failure — callers only ever want to give capacity
+  /// back on a best-effort basis, never to block on it or surface an error for a release the buyer
+  /// didn't directly ask for.
+  Future<void> release(String holdId) async {
+    try {
+      await apiClient.post('Sectors/holds/$holdId/release');
+    } catch (_) {
+      // Best-effort — an already-expired holdId, or a transient network error, is fine to ignore.
+    }
+  }
 }

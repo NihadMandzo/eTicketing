@@ -21,6 +21,7 @@ public static class SectorEndpoints
         group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
 
         group.MapPost("/{id:guid}/hold", Hold).RequireAuthorization().WithValidation<HoldSectorRequest>();
+        group.MapPost("/holds/{holdId}/release", ReleaseHold).RequireAuthorization();
     }
 
     private static async Task<IResult> GetPublished([AsParameters] SectorQuery query, ISectorService service, CancellationToken ct)
@@ -75,5 +76,11 @@ public static class SectorEndpoints
     {
         var result = await service.HoldAsync(id, request, http.User, ct);
         return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> ReleaseHold(string holdId, ISectorService service, CancellationToken ct)
+    {
+        var result = await service.ReleaseHoldAsync(holdId, ct);
+        return result.ToHttpResult(StatusCodes.Status204NoContent);
     }
 }

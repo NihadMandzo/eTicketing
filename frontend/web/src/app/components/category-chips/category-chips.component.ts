@@ -15,7 +15,6 @@ import { CategoryIconComponent } from '../category-icon/category-icon.component'
  */
 @Component({
   selector: 'app-category-chips',
-  standalone: true,
   imports: [CategoryIconComponent],
   templateUrl: './category-chips.component.html',
   styleUrl: './category-chips.component.css',

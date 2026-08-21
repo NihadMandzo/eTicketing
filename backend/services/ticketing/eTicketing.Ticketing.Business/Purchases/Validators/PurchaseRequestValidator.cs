@@ -15,6 +15,15 @@ public class PurchaseRequestValidator : AbstractValidator<PurchaseRequest>
         RuleFor(x => x.LineItems).NotEmpty();
         RuleForEach(x => x.LineItems).ChildRules(li => li.RuleFor(x => x.Quantity).GreaterThan(0));
 
+        // Request-shape-only half of the all-or-none TicketTypeId rule: within one request, every
+        // line must agree on whether it carries a TicketTypeId at all. This fails fast on an
+        // internally-inconsistent request without touching the DB; PurchaseService still separately
+        // checks that a non-null TicketTypeId actually belongs to the held Sector, which needs the
+        // Sector lookup and can't be checked here.
+        RuleFor(x => x.LineItems)
+            .Must(items => items.Select(li => li.TicketTypeId is null).Distinct().Count() <= 1)
+            .WithMessage("Svaka stavka narudžbe mora ili imati tip ulaznice ili ga sve moraju izostaviti.");
+
         // Cosmetic-only fields (see PurchaseRequest's doc comment) — still validated as real input
         // so a malformed request fails fast rather than reaching eTicketing.Payment.
         RuleFor(x => x.CardNumber).Matches(@"^\d{12,19}$").WithMessage("Broj kartice nije ispravan.");
