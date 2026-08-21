@@ -5,6 +5,7 @@ import '../models/requests/update_user_request.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
 
@@ -52,6 +53,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _submit() async {
     setState(() => _usernameError = null);
     if (!_formKey.currentState!.validate()) return;
+
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Spremi izmjene',
+      message: 'Da li ste sigurni da želite sačuvati izmjene svog profila?',
+      confirmLabel: 'Spremi',
+      destructive: false,
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _isLoading = true);
 
     try {

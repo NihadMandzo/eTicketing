@@ -6,13 +6,13 @@ namespace eTicketing.Catalog.Data.Repositories;
 
 public interface IProductRepository : IRepository<Product, Guid>
 {
-    /// <summary>Paged, FTS-filtered (name) search, optionally narrowed by organization, category
-    /// and/or status — backs ProductService.GetPublishedAsync/GetMineAsync/GetAllAsync.
-    /// organizationId/categoryId/status are passed as plain parameters rather than the
+    /// <summary>Paged, FTS-filtered (name) search, optionally narrowed by organization, category,
+    /// status and/or city — backs ProductService.GetPublishedAsync/GetMineAsync/GetAllAsync.
+    /// organizationId/categoryId/status/city are passed as plain parameters rather than the
     /// Business-layer ProductQuery type so Data doesn't need to reference Business (would be
     /// circular — Business already references Data).</summary>
     Task<PagedResult<Product>> SearchAsync(
-        BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, CancellationToken ct = default);
+        BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, City? city, CancellationToken ct = default);
 
     /// <summary>Distinct OrganizationIds among products whose CategoryId is in <paramref name="categoryIds"/>,
     /// any status — backs the org-list category multiselect filter (GET /products/organization-ids).</summary>

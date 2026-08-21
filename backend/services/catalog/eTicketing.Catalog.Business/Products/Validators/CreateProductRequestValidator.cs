@@ -14,5 +14,11 @@ public class CreateProductRequestValidator : AbstractValidator<UpsertProductRequ
         RuleFor(x => x.Name).NotEmpty().Length(2, 200);
         RuleFor(x => x.Description).MaximumLength(2000);
         RuleFor(x => x.CategoryId).GreaterThan(0);
+
+        // The organizer must place an exact map pin when creating/editing a product — required,
+        // same tier as Name/CategoryId, not merely validated-when-present.
+        RuleFor(x => x.Latitude).NotNull().InclusiveBetween(-90, 90).WithMessage("Lokacija je obavezna — postavite tačku na mapi.");
+        RuleFor(x => x.Longitude).NotNull().InclusiveBetween(-180, 180).WithMessage("Lokacija je obavezna — postavite tačku na mapi.");
+        RuleFor(x => x.City).NotNull().IsInEnum().WithMessage("Grad je obavezan.");
     }
 }

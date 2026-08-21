@@ -12,6 +12,7 @@ import '../services/catalog_service.dart';
 import '../services/organization_service.dart';
 import '../services/sector_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/product_location_map.dart';
 import '../widgets/purchase_widgets.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
@@ -356,6 +357,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                               color: tertiaryText,
                               height: 1.5,
                             ),
+                          ),
+                          const SizedBox(height: 20),
+                          ProductLocationMap(
+                            latitude: product.latitude,
+                            longitude: product.longitude,
+                            city: product.city,
                           ),
                           const SizedBox(height: 24),
                           const Text(

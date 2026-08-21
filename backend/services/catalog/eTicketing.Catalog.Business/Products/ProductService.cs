@@ -44,7 +44,8 @@ public class ProductService : IProductService
 
         var category = validation.Value!;
         return Result<ProductPreviewResponse>.Success(new ProductPreviewResponse(
-            request.Name, request.Description, request.Date, category.Id, category.Name, category.TicketingMode));
+            request.Name, request.Description, request.Date, category.Id, category.Name, category.TicketingMode,
+            request.Latitude!.Value, request.Longitude!.Value, request.City!.Value));
     }
 
     public async Task<Result<ProductResponse>> CreateAsync(UpsertProductRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -66,6 +67,9 @@ public class ProductService : IProductService
             CategoryId = request.CategoryId,
             OrganizationId = organizationId.Value,
             Status = PublishStatus.Draft,
+            Latitude = request.Latitude!.Value,
+            Longitude = request.Longitude!.Value,
+            City = request.City!.Value,
         };
 
         await _productRepository.AddAsync(product, ct);
@@ -111,6 +115,9 @@ public class ProductService : IProductService
         product.Date = request.Date;
         product.CategoryId = request.CategoryId;
         product.Category = validation.Value;
+        product.Latitude = request.Latitude!.Value;
+        product.Longitude = request.Longitude!.Value;
+        product.City = request.City!.Value;
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -213,7 +220,7 @@ public class ProductService : IProductService
 
     public async Task<Result<PagedResult<ProductResponse>>> GetPublishedAsync(ProductQuery query, CancellationToken ct = default)
     {
-        var paged = await _productRepository.SearchAsync(query, query.OrganizationId, query.CategoryId, PublishStatus.Published, ct);
+        var paged = await _productRepository.SearchAsync(query, query.OrganizationId, query.CategoryId, PublishStatus.Published, query.City, ct);
         return ToPagedResult(paged);
     }
 
@@ -232,13 +239,13 @@ public class ProductService : IProductService
         if (organizationId is null)
             return Result<PagedResult<ProductResponse>>.Failure(Error.Unauthorized("product.no_organization", "Nalog nije vezan za organizaciju."));
 
-        var paged = await _productRepository.SearchAsync(query, organizationId, query.CategoryId, query.Status, ct);
+        var paged = await _productRepository.SearchAsync(query, organizationId, query.CategoryId, query.Status, query.City, ct);
         return ToPagedResult(paged);
     }
 
     public async Task<Result<PagedResult<ProductResponse>>> GetAllAsync(ProductQuery query, CancellationToken ct = default)
     {
-        var paged = await _productRepository.SearchAsync(query, query.OrganizationId, query.CategoryId, query.Status, ct);
+        var paged = await _productRepository.SearchAsync(query, query.OrganizationId, query.CategoryId, query.Status, query.City, ct);
         return ToPagedResult(paged);
     }
 

@@ -100,10 +100,9 @@
   color: var(--muted-foreground);
 }
 
-.category-chips-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 36px;
+.category-cards-wrap {
+  max-width: 900px;
+  margin: 0 auto 36px;
 }
 
 .loading-text,

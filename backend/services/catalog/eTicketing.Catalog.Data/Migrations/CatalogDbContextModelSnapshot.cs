@@ -108,6 +108,9 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.Property<int>("CategoryId")
                         .HasColumnType("int");
 
+                    b.Property<int>("City")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -118,6 +121,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("float");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("float");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -137,6 +146,8 @@ namespace eTicketing.Catalog.Data.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("City");
+
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("Products");
@@ -146,9 +157,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000001"),
                             CategoryId = 1,
+                            City = 0,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 7, 15, 20, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Trodnevni festival na otvorenom sa regionalnim izvođačima.",
+                            Latitude = 43.856299999999997,
+                            Longitude = 18.4131,
                             Name = "Ljetni Muzički Festival",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
                             Status = 1,
@@ -158,9 +172,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000002"),
                             CategoryId = 1,
+                            City = 0,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 9, 5, 19, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Intimni akustični koncert u Vijećnici.",
+                            Latitude = 43.856299999999997,
+                            Longitude = 18.4131,
                             Name = "Akustična Večer u Vijećnici",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
                             Status = 1,
@@ -170,9 +187,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000003"),
                             CategoryId = 2,
+                            City = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 8, 20, 18, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Regionalni košarkaški turnir za klupske ekipe.",
+                            Latitude = 43.343800000000002,
+                            Longitude = 17.8078,
                             Name = "Košarkaški Kup Mostar",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
                             Status = 1,
@@ -182,9 +202,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000004"),
                             CategoryId = 2,
+                            City = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 10, 10, 9, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Gradski maraton kroz historijsku jezgru Mostara.",
+                            Latitude = 43.343800000000002,
+                            Longitude = 17.8078,
                             Name = "Maraton Mostar",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
                             Status = 1,
@@ -194,9 +217,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000005"),
                             CategoryId = 3,
+                            City = 0,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 11, 2, 9, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Konferencija o softverskom razvoju i startupima.",
+                            Latitude = 43.856299999999997,
+                            Longitude = 18.4131,
                             Name = "Tech Konferencija Sarajevo",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000001"),
                             Status = 1,
@@ -206,9 +232,12 @@ namespace eTicketing.Catalog.Data.Migrations
                         {
                             Id = new Guid("c3c3c3c3-0000-0000-0000-000000000006"),
                             CategoryId = 3,
+                            City = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Date = new DateTime(2026, 11, 20, 18, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Neformalno druženje lokalne startup zajednice.",
+                            Latitude = 43.343800000000002,
+                            Longitude = 17.8078,
                             Name = "Startup Meetup Mostar",
                             OrganizationId = new Guid("a1a1a1a1-0000-0000-0000-000000000002"),
                             Status = 1,

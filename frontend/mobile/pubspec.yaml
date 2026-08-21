@@ -39,6 +39,10 @@ dependencies:
   cookie_jar: ^4.0.8
   path_provider: ^2.1.4
   shared_preferences: ^2.3.2
+  # Read-only pin display on product detail screens — officially supported on Android/iOS,
+  # unlike desktop which has no google_maps_flutter implementation at all (see
+  # frontend/desktop's ProductLocationPicker, which embeds the Maps JS API via a webview instead).
+  google_maps_flutter: ^2.18.0
 
 dependency_overrides:
   # path_provider_foundation >=2.4.0 pulls in package:objective_c, whose native

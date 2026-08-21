@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -34,11 +36,15 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
 
   List<CategoryResponse> _categories = [];
   bool _isLoading = true;
+  StreamSubscription<void>? _refreshSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    // Refetch whenever a category is created/edited/deleted anywhere else in the app (e.g.
+    // CategoriesScreen) — see CategoryProvider.categoryRefreshBus.
+    _refreshSubscription = CategoryProvider.categoryRefreshBus.stream.listen((_) => _loadCategories());
   }
 
   Future<void> _loadCategories() async {
@@ -142,6 +148,7 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
 
   @override
   void dispose() {
+    _refreshSubscription?.cancel();
     _overlay?.remove();
     super.dispose();
   }

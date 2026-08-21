@@ -43,6 +43,14 @@ dependencies:
   shared_preferences: ^2.3.2
   crop_your_image: ^2.0.0
   #google_fonts: ^8.0.2
+  # Product-location pin picker/display (ProductLocationPicker) — google_maps_flutter has no
+  # desktop (Windows/Linux) implementation at all, and every native-webview plugin considered
+  # (webview_windows, flutter_inappwebview) either targets an incompatible Dart SDK or fails to
+  # compile against this machine's MSVC/STL toolchain. flutter_map is pure Dart — no native plugin
+  # code, so no platform-specific build step at all — and renders OpenStreetMap tiles instead of
+  # Google's; web/mobile keep Google Maps, only desktop's map looks visually different.
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
 
 dependency_overrides:
   # path_provider_foundation >=2.4.0 pulls in package:objective_c, whose native

@@ -7,7 +7,7 @@ import { categoryIconKey } from '../../core/utils/category-icon.util';
  * `iconUrl` image when the organizer has set one, otherwise a curated
  * icon picked by matching the category name (see `category-icon.util.ts`).
  * Renders bare (no circle/background) so callers can drop it into whatever
- * badge container they already have (see category-chips, product-card).
+ * badge container they already have (see category-cards, category-select, product-card).
  */
 @Component({
   selector: 'app-category-icon',
@@ -88,7 +88,7 @@ import { categoryIconKey } from '../../core/utils/category-icon.util';
     .category-icon-img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       border-radius: inherit;
     }
   `,

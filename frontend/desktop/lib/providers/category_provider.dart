@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -12,6 +13,21 @@ import 'base_provider.dart';
 
 class CategoryProvider extends BaseProvider<CategoryResponse, int> {
   CategoryProvider() : super('categories');
+
+  /// Fired after any successful category mutation (insert/update/delete/icon change) — every
+  /// screen/widget that independently fetches its own copy of the category list
+  /// (CategoryMultiSelectFilter, ProductUpsertDialog's category dropdown) subscribes to this in
+  /// initState() and refetches, so a category created/edited/deleted on CategoriesScreen shows up
+  /// there without the user having to reopen the app. CategoriesScreen itself doesn't need to
+  /// listen — it already calls _loadData() directly after its own mutations. A broadcast
+  /// `StreamController` (not a full state-management package, per this app's own convention — see
+  /// .claude/rules/21-frontend-desktop.md) is the minimal shape for a fire-and-forget
+  /// "something changed, refetch" signal.
+  static final categoryRefreshBus = StreamController<void>.broadcast();
+
+  static void _notifyChanged() {
+    if (!categoryRefreshBus.isClosed) categoryRefreshBus.add(null);
+  }
 
   Never _handleError(Response response) {
     ApiError apiError;
@@ -33,6 +49,7 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
+    _notifyChanged();
     return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -42,7 +59,16 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
+    _notifyChanged();
     return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// DELETE /api/categories/:id — overridden only to fire [categoryRefreshBus]; behavior is
+  /// otherwise identical to the inherited BaseProvider.delete.
+  @override
+  Future<void> delete(int id, {dynamic data}) async {
+    await super.delete(id, data: data);
+    _notifyChanged();
   }
 
   /// POST /api/categories/:id/icon (multipart) — first-time icon upload. Fails
@@ -59,6 +85,7 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
+    _notifyChanged();
     return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -72,6 +99,7 @@ class CategoryProvider extends BaseProvider<CategoryResponse, int> {
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
+    _notifyChanged();
     return CategoryResponse.fromJson(response.data as Map<String, dynamic>);
   }
 }

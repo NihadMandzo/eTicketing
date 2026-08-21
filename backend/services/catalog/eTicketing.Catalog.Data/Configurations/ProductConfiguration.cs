@@ -20,9 +20,10 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasForeignKey(p => p.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Hot filter paths for GET /products/all?OrganizationId=...&CategoryId=...
+        // Hot filter paths for GET /products/all?OrganizationId=...&CategoryId=...&City=...
         builder.HasIndex(p => p.OrganizationId);
         builder.HasIndex(p => p.CategoryId);
+        builder.HasIndex(p => p.City);
 
         builder.HasData(ProductSeeder.GetSeedData());
     }

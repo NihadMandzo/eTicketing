@@ -9,9 +9,11 @@ import '../models/search_objects/organization_user_search_object.dart';
 import '../models/search_objects/staff_query_search_object.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirm_dialog.dart';
 import 'widgets/delete_organization_admin_dialog.dart';
 import 'widgets/organization_admin_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/paginated_screen_body.dart';
 import 'widgets/role_multi_select_filter.dart';
 import 'widgets/set_staff_password_dialog.dart';
 import 'widgets/staff_user_upsert_dialog.dart';
@@ -188,38 +190,11 @@ class _UsersScreenState extends State<UsersScreen> {
       );
       if (deleteRequest == null || !mounted) return;
     } else {
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Obriši korisnika',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
-          content: Text(
-              'Da li ste sigurni da želite obrisati korisnika "${user.fullName}"?',
-              style: TextStyle(
-                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('Odustani',
-                  style: TextStyle(
-                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.errorDark,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Obriši'),
-            ),
-          ],
-        ),
+      final confirmed = await ConfirmDialog.show(
+        context,
+        title: 'Obriši korisnika',
+        message: 'Da li ste sigurni da želite obrisati korisnika "${user.fullName}"?',
+        confirmLabel: 'Obriši',
       );
 
       if (confirmed != true || !mounted) return;
@@ -279,13 +254,17 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // The whole page is one SingleChildScrollView (not header-fixed +
-    // internally-scrolling grid) — scrolling moves the title/stats/search out
-    // of view along with everything else, so the pagination bar is always
-    // reachable by scrolling the same way as the rest of the content.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+    // The pagination bar is pinned to the bottom of the viewport (see
+    // PaginatedScreenBody) — only the header/stats/search/grid above it scroll.
+    return PaginatedScreenBody(
+      pagination: PaginationBar(
+        currentPage: _currentPage,
+        totalPages: _totalPages,
+        onPageChanged: _goToPage,
+        pageSize: _pageSize,
+        onPageSizeChanged: _onPageSizeChanged,
+      ),
+      content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────
@@ -435,7 +414,7 @@ class _UsersScreenState extends State<UsersScreen> {
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 260,
-                mainAxisExtent: 380,
+                mainAxisExtent: 280,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -459,17 +438,6 @@ class _UsersScreenState extends State<UsersScreen> {
               },
             ),
 
-          // ── Pagination ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _currentPage,
-              totalPages: _totalPages,
-              onPageChanged: _goToPage,
-              pageSize: _pageSize,
-              onPageSizeChanged: _onPageSizeChanged,
-            ),
-          ),
         ],
       ),
     );

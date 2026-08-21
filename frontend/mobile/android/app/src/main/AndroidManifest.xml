@@ -38,6 +38,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Required by google_maps_flutter (ProductLocationMap, shown on all 3 product detail
+             screens). Value is a Gradle manifest placeholder, not a literal key — see
+             android/app/build.gradle.kts for where ${mapsApiKey} is resolved from (env var or
+             local.properties, never committed). Empty/unset means the map fails to load tiles
+             until a real key is provisioned. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${mapsApiKey}" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

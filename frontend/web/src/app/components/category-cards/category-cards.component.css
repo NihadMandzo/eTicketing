@@ -1,0 +1,67 @@
+.category-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--card);
+  color: var(--foreground);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.15s ease;
+}
+
+.category-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+/* "Slightly highlighted" — a visible but understated selected state (thin
+   primary ring + faint tint), not the old chip's full color-invert, since
+   this now marks the default/auto-selected category rather than an active
+   filter toggle among equals. */
+.category-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 6%, var(--card));
+}
+
+.category-card-image {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.category-card-image :first-child {
+  width: 44%;
+  height: 44%;
+}
+
+.category-card-title {
+  flex-shrink: 0;
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .category-cards {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+  }
+}

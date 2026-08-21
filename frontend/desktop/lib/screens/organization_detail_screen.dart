@@ -13,9 +13,11 @@ import '../providers/organization_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirm_dialog.dart';
 import 'widgets/entity_avatar.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/paginated_screen_body.dart';
 import 'widgets/product_upsert_dialog.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/user_grid_card.dart';
@@ -129,35 +131,11 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
   }
 
   Future<void> _deleteProduct(ProductResponse product) async {
-    final isDark = _isDark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Obriši proizvod',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
-        content: Text('Da li ste sigurni da želite obrisati proizvod "${product.name}"?',
-            style: TextStyle(color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Odustani',
-                style: TextStyle(color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Obriši'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši proizvod',
+      message: 'Da li ste sigurni da želite obrisati proizvod "${product.name}"?',
+      confirmLabel: 'Obriši',
     );
 
     if (confirmed != true || !mounted) return;
@@ -265,17 +243,29 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
           const SizedBox(width: 12),
         ],
       ),
-      // The whole page is one SingleChildScrollView (not header/stats/tabbar-
-      // fixed + internally-scrolling tab body) — scrolling moves the org
-      // header, stat cards, and tab selector out of view along with
-      // everything else, matching Categories/Organizations/Users. This is
-      // why TabBarView (a PageView under the hood, which needs a bounded
-      // height) is gone — TabController + TabBar stay only as the visual
-      // tab-selector strip, driving which single tab's content is rendered
-      // inline below it, no swipe gesture needed on a desktop app.
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+      // TabBarView (a PageView under the hood, which needs a bounded height) is
+      // gone — TabController + TabBar stay only as the visual tab-selector strip,
+      // driving which single tab's content is rendered inline below it, no swipe
+      // gesture needed on a desktop app. The pagination bar for whichever tab is
+      // active is pinned to the bottom of the viewport (see PaginatedScreenBody) —
+      // only the org header/stat cards/tab selector/grid above it scroll.
+      body: PaginatedScreenBody(
+        pagination: _tabController.index == 0
+            ? PaginationBar(
+                currentPage: _productsState.currentPage,
+                totalPages: _productsState.totalPages,
+                onPageChanged: (page) => _goToPage(_productsState, page, _loadProducts),
+                pageSize: _productsState.pageSize,
+                onPageSizeChanged: (size) => _onPageSizeChanged(_productsState, size, _loadProducts),
+              )
+            : PaginationBar(
+                currentPage: _usersState.currentPage,
+                totalPages: _usersState.totalPages,
+                onPageChanged: (page) => _goToPage(_usersState, page, _loadUsers),
+                pageSize: _usersState.pageSize,
+                onPageSizeChanged: (size) => _onPageSizeChanged(_usersState, size, _loadUsers),
+              ),
+        content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(isDark, textPrimary, textTertiary),
@@ -410,16 +400,6 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
               onDelete: () => _deleteProduct(_productsState.items[index]),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: PaginationBar(
-            currentPage: _productsState.currentPage,
-            totalPages: _productsState.totalPages,
-            onPageChanged: (page) => _goToPage(_productsState, page, _loadProducts),
-            pageSize: _productsState.pageSize,
-            onPageSizeChanged: (size) => _onPageSizeChanged(_productsState, size, _loadProducts),
-          ),
-        ),
       ],
     );
   }
@@ -442,23 +422,13 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
           _cardGrid(
             itemCount: _usersState.items.length,
             maxCrossAxisExtent: 260,
-            mainAxisExtent: 380,
+            mainAxisExtent: 280,
             // Read-only here — this is the platform-staff view of "who's in
             // this org"; editing/deleting org users lives on the desktop app's
             // own self-service Users screen (OrganizationSuperAdmin) and the
             // SuperAdmin platform Users screen, not this detail view.
             itemBuilder: (context, index) => UserGridCard(user: _usersState.items[index]),
           ),
-        Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: PaginationBar(
-            currentPage: _usersState.currentPage,
-            totalPages: _usersState.totalPages,
-            onPageChanged: (page) => _goToPage(_usersState, page, _loadUsers),
-            pageSize: _usersState.pageSize,
-            onPageSizeChanged: (size) => _onPageSizeChanged(_usersState, size, _loadUsers),
-          ),
-        ),
       ],
     );
   }

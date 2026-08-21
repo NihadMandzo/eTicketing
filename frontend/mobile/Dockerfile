@@ -19,6 +19,11 @@ COPY . .
 ARG MOBILE_API_BASE_URL=http://10.0.2.2:5000/api/
 ARG MOBILE_BUILD_MODE=release
 
+# Read by android/app/build.gradle.kts (System.getenv("MAPS_API_KEY")) to fill the
+# ${mapsApiKey} manifest placeholder google_maps_flutter needs — see AndroidManifest.xml.
+ARG GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+ENV MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+
 RUN flutter build apk --${MOBILE_BUILD_MODE} \
       --dart-define=API_BASE_URL=${MOBILE_API_BASE_URL}
 

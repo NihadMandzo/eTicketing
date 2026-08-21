@@ -1,0 +1,11 @@
+<select
+  class="filter-select"
+  aria-label="Filtriraj po kategoriji"
+  [value]="selectedCategoryId() ?? ''"
+  (change)="onChange($any($event.target).value)"
+>
+  <option value="">Sve kategorije</option>
+  @for (category of categories(); track category.id) {
+    <option [value]="category.id">{{ category.name }}</option>
+  }
+</select>

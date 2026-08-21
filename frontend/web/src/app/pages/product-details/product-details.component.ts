@@ -1,14 +1,16 @@
-import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DatePipe, isPlatformBrowser } from '@angular/common';
+import { ChangeDetectionStrategy, Component, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { GoogleMap, MapMarker } from '@angular/google-maps';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
+import { environment } from '../../../environments/environment';
 import { CatalogService } from '../../core/services/catalog.service';
 import { SectorService } from '../../core/services/sector.service';
 import { OrganizationService } from '../../core/services/organization.service';
 import { CartHoldGroup, CartService } from '../../core/services/cart.service';
-import { Product } from '../../core/models/catalog.models';
+import { CITY_LABELS, Product } from '../../core/models/catalog.models';
 import { Sector } from '../../core/models/sector.models';
 import { Organization } from '../../core/models/organization.models';
 
@@ -45,7 +47,7 @@ function toIsoDate(date: Date): string {
 
 @Component({
   selector: 'app-product-details',
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, GoogleMap, MapMarker],
   templateUrl: './product-details.component.html',
   styleUrl: './product-details.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,6 +59,16 @@ export class ProductDetailsComponent {
   private readonly sectorService = inject(SectorService);
   private readonly organizationService = inject(OrganizationService);
   private readonly cartService = inject(CartService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
+  readonly cityLabels = CITY_LABELS;
+
+  // The Maps JS API is loaded lazily, browser-only (SSR has no `window`/`document` to inject a
+  // <script> tag into, and there's nothing to render server-side anyway) — <google-map> only
+  // renders once this flips true, see loadGoogleMapsScript().
+  readonly mapsReady = signal(false);
+  readonly mapZoom = 15;
+  readonly mapOptions: google.maps.MapOptions = { disableDefaultUI: true, zoomControl: true, clickableIcons: false };
 
   readonly product = signal<Product | null>(null);
   readonly sectors = signal<Sector[]>([]);
@@ -127,7 +139,15 @@ export class ProductDetailsComponent {
     return this.sectors().find((s) => s.id === spotId)?.price ?? null;
   });
 
+  readonly mapCenter = computed<google.maps.LatLngLiteral | null>(() => {
+    const product = this.product();
+    if (!product) return null;
+    return { lat: product.latitude, lng: product.longitude };
+  });
+
   constructor() {
+    if (this.isBrowser) this.loadGoogleMapsScript();
+
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
       this.loadError.set('Proizvod nije pronađen.');
@@ -167,6 +187,31 @@ export class ProductDetailsComponent {
 
   private tomorrowIso(): string {
     return toIsoDate(tomorrow());
+  }
+
+  /** Loads the Google Maps JS API script exactly once per page (shared across every
+   * product-details view a buyer navigates to in one session), then flips mapsReady so the
+   * @if in the template renders <google-map>. Dynamic <script> injection, rather than a static
+   * tag in index.html, because the API key comes from environment.ts — a compile-time constant,
+   * not read from the Dockerfile's GOOGLE_MAPS_API_KEY build arg (that arg is reserved for future
+   * wiring, same "no-op today" status as WEB_API_BASE_URL) — and index.html has no template step
+   * to read it from either way. */
+  private loadGoogleMapsScript(): void {
+    if (typeof google !== 'undefined' && google.maps) {
+      this.mapsReady.set(true);
+      return;
+    }
+    const existing = document.getElementById('google-maps-script') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', () => this.mapsReady.set(true));
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${environment.googleMapsApiKey}`;
+    script.async = true;
+    script.onload = () => this.mapsReady.set(true);
+    document.head.appendChild(script);
   }
 
   /** Earliest bookable day: tomorrow if that already falls inside a sector's

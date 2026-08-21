@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { Category, PagedResult, Product, ProductQuery, toPublishStatus, toTicketingMode } from '../models/catalog.models';
+import { Category, PagedResult, Product, ProductQuery, toCity, toPublishStatus, toTicketingMode } from '../models/catalog.models';
 
 /**
  * `ticketingMode`/`status` arrive as integer ordinals, not names — see
@@ -17,6 +17,7 @@ function normalizeProduct(raw: Product): Product {
     ...raw,
     ticketingMode: toTicketingMode(raw.ticketingMode),
     status: toPublishStatus(raw.status),
+    city: toCity(raw.city),
   };
 }
 
@@ -52,6 +53,7 @@ export class CatalogService {
     if (query?.pageSize !== undefined) params['pageSize'] = String(query.pageSize);
     if (query?.fts) params['fts'] = query.fts;
     if (query?.categoryId != null) params['categoryId'] = String(query.categoryId);
+    if (query?.city) params['city'] = query.city;
 
     return this.http
       .get<PagedResult<Product>>(`${this.baseUrl}/products`, { params })

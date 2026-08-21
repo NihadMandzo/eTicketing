@@ -111,6 +111,9 @@ public class ProductServiceTests : IDisposable
         Description = "Opis",
         Date = DateTime.UtcNow.AddDays(5),
         CategoryId = categoryId,
+        Latitude = 43.8563,
+        Longitude = 18.4131,
+        City = City.Sarajevo,
     };
 
     // --- CreateAsync ---
@@ -368,6 +371,43 @@ public class ProductServiceTests : IDisposable
     {
         var result = await _sut.GetAllAsync(new ProductQuery { FTS = "Košarkaški" });
 
+        result.Value!.Items.Should().ContainSingle(p => p.Name == "Košarkaški Turnir");
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_FilteredByCity_ReturnsOnlyMatchingCityProducts()
+    {
+        var mostar = await _sut.CreateAsync(ValidRequest(_music.Id) with { City = City.Mostar }, OrgACaller());
+        await _sut.PublishAsync(mostar.Value!.Id, OrgACaller());
+
+        var result = await _sut.GetPublishedAsync(new ProductQuery { City = City.Mostar });
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Items.Should().OnlyContain(p => p.City == City.Mostar);
+        result.Value.Items.Should().Contain(p => p.Id == mostar.Value.Id);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_CityFilterNull_ReturnsAllCities()
+    {
+        var mostar = await _sut.CreateAsync(ValidRequest(_music.Id) with { City = City.Mostar }, OrgACaller());
+
+        var result = await _sut.GetAllAsync(new ProductQuery());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Items.Should().Contain(p => p.Id == mostar.Value!.Id);
+        result.Value.Items.Should().Contain(p => p.City == City.Sarajevo);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_CityAndCategoryBothSet_AppliesBothFilters()
+    {
+        // Same city (Sarajevo, the SeedCategoriesAndProducts default), different category —
+        // combined filter must narrow on both, not just one, regression-guarding the chained
+        // .Where() in ProductRepository.SearchAsync.
+        var result = await _sut.GetAllAsync(new ProductQuery { City = City.Sarajevo, CategoryId = _sport.Id });
+
+        result.IsSuccess.Should().BeTrue();
         result.Value!.Items.Should().ContainSingle(p => p.Name == "Košarkaški Turnir");
     }
 

@@ -1,4 +1,5 @@
 import '../api_enum.dart';
+import '../city.dart';
 import '../ticketing_mode.dart';
 
 class ProductImageResponse {
@@ -30,6 +31,9 @@ class ProductResponse {
   final TicketingMode ticketingMode;
   final String organizationId;
   final String status;
+  final double latitude;
+  final double longitude;
+  final City city;
   final List<ProductImageResponse> images;
   final DateTime createdAt;
 
@@ -43,6 +47,9 @@ class ProductResponse {
     required this.ticketingMode,
     required this.organizationId,
     required this.status,
+    required this.latitude,
+    required this.longitude,
+    required this.city,
     required this.images,
     required this.createdAt,
   });
@@ -63,6 +70,9 @@ class ProductResponse {
       ticketingMode: ticketingModeFromJson(json['ticketingMode']),
       organizationId: json['organizationId'] as String,
       status: publishStatusFromJson(json['status']),
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      city: cityFromJson(json['city']),
       images: (json['images'] as List? ?? [])
           .map((e) => ProductImageResponse.fromJson(e as Map<String, dynamic>))
           .toList(),

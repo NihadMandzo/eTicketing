@@ -127,6 +127,40 @@
   margin: 0;
 }
 
+.location-section {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 8px;
+}
+
+.location-section h2 {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+}
+
+.location-city {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.location-map {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.location-map-placeholder {
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 14px;
+}
+
 .details-side {
   min-width: 0;
 }

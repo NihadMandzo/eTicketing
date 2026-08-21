@@ -14,6 +14,7 @@ import '../../providers/category_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/image_validation.dart';
 import '../../utility/snackbar_service.dart';
+import '../../widgets/confirm_dialog.dart';
 import 'image_crop_dialog.dart';
 
 class CategoryUpsertDialog extends StatefulWidget {
@@ -102,6 +103,17 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_isEditing) {
+      final confirmed = await ConfirmDialog.show(
+        context,
+        title: 'Spremi izmjene',
+        message: 'Da li ste sigurni da želite sačuvati izmjene kategorije "${widget.category!.name}"?',
+        confirmLabel: 'Spremi',
+        destructive: false,
+      );
+      if (confirmed != true || !mounted) return;
+    }
 
     setState(() => _isSaving = true);
 

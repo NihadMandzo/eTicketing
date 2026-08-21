@@ -2,14 +2,33 @@ import { coerceEnum } from '../utils/api-enum.util';
 
 export type TicketingMode = 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 export type PublishStatus = 'Draft' | 'Published';
+export type City = 'Sarajevo' | 'Mostar' | 'BanjaLuka' | 'Tuzla' | 'Zenica' | 'Bihac' | 'Brcko' | 'Trebinje';
 
 // Declaration order must match eTicketing.Contracts.Persistence.TicketingMode
-// and .PublishStatus exactly — the wire value is the ordinal, see coerceEnum.
+// / .PublishStatus / .City exactly — the wire value is the ordinal, see coerceEnum.
 const TICKETING_MODES: readonly TicketingMode[] = ['SingleOccurrence', 'DailyEntry', 'RecurringReservation'];
 const PUBLISH_STATUSES: readonly PublishStatus[] = ['Draft', 'Published'];
+const CITIES: readonly City[] = ['Sarajevo', 'Mostar', 'BanjaLuka', 'Tuzla', 'Zenica', 'Bihac', 'Brcko', 'Trebinje'];
 
 export const toTicketingMode = (raw: unknown): TicketingMode => coerceEnum(raw, TICKETING_MODES, 'SingleOccurrence');
 export const toPublishStatus = (raw: unknown): PublishStatus => coerceEnum(raw, PUBLISH_STATUSES, 'Published');
+export const toCity = (raw: unknown): City => coerceEnum(raw, CITIES, 'Sarajevo');
+
+/** Bosnian display label for each City — used by the location filter dropdown and the
+ * product-details location row. */
+export const CITY_LABELS: Readonly<Record<City, string>> = {
+  Sarajevo: 'Sarajevo',
+  Mostar: 'Mostar',
+  BanjaLuka: 'Banja Luka',
+  Tuzla: 'Tuzla',
+  Zenica: 'Zenica',
+  Bihac: 'Bihać',
+  Brcko: 'Brčko',
+  Trebinje: 'Trebinje',
+};
+
+/** All cities, in wire-ordinal order — source for every city `<select>` in this app. */
+export const ALL_CITIES: readonly City[] = CITIES;
 
 export interface Category {
   id: number;
@@ -34,6 +53,9 @@ export interface Product {
   ticketingMode: TicketingMode;
   organizationId: string;
   status: PublishStatus;
+  latitude: number;
+  longitude: number;
+  city: City;
   images: ProductImage[];
   createdAt: string;
 }
@@ -43,6 +65,7 @@ export interface ProductQuery {
   pageSize?: number;
   fts?: string | null;
   categoryId?: number | null;
+  city?: City | null;
 }
 
 export interface PagedResult<T> {

@@ -29,6 +29,16 @@ public class Product : BaseEntity
 
     public PublishStatus Status { get; set; } = PublishStatus.Draft;
 
+    // The exact map pin placed by the organizer when the product was created — required at the
+    // request-validation layer (CreateProductRequestValidator), not nullable here: every Product
+    // carries a real location regardless of TicketingMode (unlike Date, which is mode-conditional).
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+
+    // Coarse city, independent of the exact pin above — drives the server-side location filter on
+    // GET /products* (a dropdown of cities is a much better filter UX than raw coordinates).
+    public City City { get; set; }
+
     // Gallery photos live in Azure Blob Storage ("product-images" container), not as a column
     // here — see ProductImage. Managed exclusively through the dedicated POST/DELETE
     // /products/{id}/images endpoints, never bundled into Create/Update (same convention as

@@ -21,9 +21,15 @@
   padding: 48px 24px 80px;
 }
 
+.filter-bar {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
 .search-row {
   position: relative;
-  margin-bottom: 20px;
 }
 
 .search-icon {
@@ -211,6 +217,10 @@
 
   .content-section {
     padding: 40px 16px 60px;
+  }
+
+  .filter-bar {
+    grid-template-columns: 1fr;
   }
 
   .products-grid {

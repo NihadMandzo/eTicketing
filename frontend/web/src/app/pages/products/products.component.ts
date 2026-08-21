@@ -3,15 +3,16 @@ import { ChangeDetectionStrategy, Component, OnDestroy, PLATFORM_ID, computed, i
 import { RouterLink } from '@angular/router';
 
 import { CatalogService } from '../../core/services/catalog.service';
-import { Category, Product, TicketingMode } from '../../core/models/catalog.models';
-import { CategoryChipsComponent } from '../../components/category-chips/category-chips.component';
+import { Category, City, Product, TicketingMode } from '../../core/models/catalog.models';
+import { CategorySelectComponent } from '../../components/category-select/category-select.component';
+import { LocationSelectComponent } from '../../components/location-select/location-select.component';
 import { ProductCardComponent } from '../../components/product-card/product-card.component';
 import { PaginationBarComponent } from '../../components/pagination-bar/pagination-bar.component';
 
 @Component({
   selector: 'app-products',
   standalone: true,
-  imports: [RouterLink, CategoryChipsComponent, ProductCardComponent, PaginationBarComponent],
+  imports: [RouterLink, CategorySelectComponent, LocationSelectComponent, ProductCardComponent, PaginationBarComponent],
   templateUrl: './products.component.html',
   styleUrl: './products.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,6 +24,7 @@ export class ProductsComponent implements OnDestroy {
   readonly categories = signal<Category[]>([]);
   readonly products = signal<Product[]>([]);
   readonly selectedCategoryId = signal<number | null>(null);
+  readonly selectedCity = signal<City | null>(null);
   readonly searchText = signal('');
   readonly isLoading = signal(true);
 
@@ -68,6 +70,12 @@ export class ProductsComponent implements OnDestroy {
     this.loadProducts();
   }
 
+  onCityChanged(city: City | null): void {
+    this.selectedCity.set(city);
+    this.page.set(0);
+    this.loadProducts();
+  }
+
   onSearchChanged(value: string): void {
     this.searchText.set(value);
     this.page.set(0);
@@ -96,6 +104,7 @@ export class ProductsComponent implements OnDestroy {
         page: this.page(),
         pageSize: this.pageSize(),
         categoryId: this.selectedCategoryId(),
+        city: this.selectedCity(),
         fts: this.searchText().trim() || null,
       })
       .subscribe({

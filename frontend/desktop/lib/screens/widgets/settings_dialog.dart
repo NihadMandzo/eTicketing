@@ -13,7 +13,6 @@ import '../../providers/api_exception.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
-import '../../theme/theme_controller.dart';
 import '../../utility/image_validation.dart';
 import 'image_crop_dialog.dart';
 
@@ -67,13 +66,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final _currentPwd = TextEditingController();
   final _newPwd = TextEditingController();
   final _confirmPwd = TextEditingController();
-  bool _emailNotif = true;
-  bool _pushNotif = false;
-  bool _eventReminders = true;
-  bool _weeklyReports = false;
-  String _language = 'bs';
-  String _timezone = 'Europe/Sarajevo';
-
   // ── Org form
   final _orgName = TextEditingController();
   final _orgDesc = TextEditingController();
@@ -106,8 +98,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   static const _profileTabs = [
     _TabDef('profile', 'Moj Profil', Icons.person_rounded),
     _TabDef('security', 'Sigurnost', Icons.lock_rounded),
-    _TabDef('notifications', 'Obavještenja', Icons.notifications_rounded),
-    _TabDef('preferences', 'Postavke', Icons.tune_rounded),
   ];
 
   // ── Org tabs
@@ -656,10 +646,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
     switch (_profileTab) {
       case 'security':
         return _buildSecurityTab();
-      case 'notifications':
-        return _buildNotificationsTab();
-      case 'preferences':
-        return _buildPreferencesTab();
       default:
         return _buildProfileTab();
     }
@@ -751,175 +737,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
           prefixIcon: Icons.lock_outline_rounded,
           obscure: true,
         ),
-        const SizedBox(height: 28),
-        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
-        const SizedBox(height: 20),
-        _sectionSubtitle('Dvofaktorska Autentifikacija'),
-        const SizedBox(height: 12),
-        _ToggleRow(
-          title: 'Omogući 2FA',
-          subtitle: 'Dodajte dodatni sloj sigurnosti vašem nalogu',
-          value: false,
-          onChanged: (_) {},
-        ),
       ],
     );
   }
 
-  Widget _buildNotificationsTab() {
-    final isDark = _isDark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('Postavke Obavještenja'),
-        const SizedBox(height: 16),
-        _ToggleRow(
-          icon: Icons.mail_outline_rounded,
-          iconBg: _primary.withValues(alpha: isDark ? 0.18 : 0.1),
-          iconColor: _primary,
-          title: 'Email Obavještenja',
-          subtitle: 'Primajte email notifikacije o važnim događajima',
-          value: _emailNotif,
-          onChanged: (v) => setState(() => _emailNotif = v),
-        ),
-        const SizedBox(height: 10),
-        _ToggleRow(
-          icon: Icons.notifications_outlined,
-          iconBg: AppColors.roleCyan.withValues(alpha: isDark ? 0.18 : 0.1),
-          iconColor: AppColors.roleCyan,
-          title: 'Push Obavještenja',
-          subtitle: 'Primajte obavještenja na vašem uređaju',
-          value: _pushNotif,
-          onChanged: (v) => setState(() => _pushNotif = v),
-        ),
-        const SizedBox(height: 10),
-        _ToggleRow(
-          icon: Icons.event_rounded,
-          iconBg: AppColors.rolePurple.withValues(alpha: isDark ? 0.18 : 0.1),
-          iconColor: AppColors.rolePurple,
-          title: 'Podsjetnike za Događaje',
-          subtitle: 'Budite obaviješteni o nadolazećim događajima',
-          value: _eventReminders,
-          onChanged: (v) => setState(() => _eventReminders = v),
-        ),
-        const SizedBox(height: 10),
-        _ToggleRow(
-          icon: Icons.bar_chart_rounded,
-          iconBg: AppColors.warning.withValues(alpha: isDark ? 0.18 : 0.1),
-          iconColor: AppColors.warningDark,
-          title: 'Sedmične Izvještaje',
-          subtitle: 'Dobijajte sedmične preglede performansi',
-          value: _weeklyReports,
-          onChanged: (v) => setState(() => _weeklyReports = v),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPreferencesTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('Izgled'),
-        const SizedBox(height: 16),
-        ValueListenableBuilder<ThemeMode>(
-          valueListenable: ThemeController.mode,
-          builder: (context, mode, _) {
-            final isDark = ThemeController.isDark(context);
-            return _ToggleRow(
-              icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-              iconBg: _kPrimary.withValues(alpha: 0.1),
-              iconColor: _kPrimary,
-              title: 'Tamni Način Rada',
-              subtitle: 'Prebacite između svijetle i tamne teme',
-              value: isDark,
-              onChanged: (v) => ThemeController.setMode(v ? ThemeMode.dark : ThemeMode.light),
-            );
-          },
-        ),
-        const SizedBox(height: 28),
-        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
-        const SizedBox(height: 20),
-        _sectionTitle('Opće Postavke'),
-        const SizedBox(height: 16),
-        _Grid(children: [
-          _DropdownField(
-            label: 'Jezik',
-            value: _language,
-            items: const {
-              'bs': 'Bosanski',
-              'en': 'English',
-              'hr': 'Hrvatski',
-              'sr': 'Srpski',
-            },
-            onChanged: (v) => setState(() => _language = v!),
-          ),
-          _DropdownField(
-            label: 'Vremenska Zona',
-            value: _timezone,
-            items: const {
-              'Europe/Sarajevo': 'Europe/Sarajevo (GMT+1)',
-              'Europe/Belgrade': 'Europe/Belgrade (GMT+1)',
-              'Europe/Zagreb': 'Europe/Zagreb (GMT+1)',
-              'UTC': 'UTC (GMT+0)',
-            },
-            onChanged: (v) => setState(() => _timezone = v!),
-          ),
-        ]),
-        const SizedBox(height: 28),
-        Divider(color: _isDark ? AppColors.darkBorder : AppColors.lightBorder),
-        const SizedBox(height: 20),
-        _sectionSubtitle('Zona Opasnosti'),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _isDark ? AppColors.errorBgDarkMode : AppColors.errorBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: _isDark
-                    ? AppColors.error.withValues(alpha: 0.4)
-                    : AppColors.errorBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Obriši Nalog',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _isDark ? AppColors.error : AppColors.errorDarkest,
-                  )),
-              const SizedBox(height: 6),
-              Text(
-                'Trajno obrišite svoj nalog i sve povezane podatke. '
-                'Ova akcija se ne može poništiti.',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: _isDark ? AppColors.error : AppColors.errorText),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.errorDark,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
-                  elevation: 0,
-                  textStyle: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                child: const Text('Obriši Nalog'),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   // ── Org content ───────────────────────────────────────────────────────────
 
@@ -1154,11 +975,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
           fontWeight: FontWeight.w700,
           color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary));
 
-  Widget _sectionSubtitle(String t) => Text(t,
-      style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: _isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary));
 }
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -1574,61 +1390,6 @@ class _FieldState extends State<_Field> {
   }
 }
 
-// ── Dropdown field ────────────────────────────────────────────────────────────
-
-class _DropdownField extends StatelessWidget {
-  final String label;
-  final String value;
-  final Map<String, String> items;
-  final ValueChanged<String?> onChanged;
-
-  const _DropdownField(
-      {required this.label,
-      required this.value,
-      required this.items,
-      required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = isDark ? AppColors.secondary : AppColors.primary;
-    final borderColor = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
-    return DropdownButtonFormField<String>(
-      value: value,
-      onChanged: onChanged,
-      style: TextStyle(
-          fontSize: 14,
-          color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
-      dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
-        filled: true,
-        fillColor: isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primary, width: 2),
-        ),
-      ),
-      items: items.entries
-          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-          .toList(),
-    );
-  }
-}
 
 // ── Two-column grid ───────────────────────────────────────────────────────────
 
@@ -1687,18 +1448,12 @@ class _Grid extends StatelessWidget {
 // ── Toggle row ────────────────────────────────────────────────────────────────
 
 class _ToggleRow extends StatelessWidget {
-  final IconData? icon;
-  final Color? iconBg;
-  final Color? iconColor;
   final String title;
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   const _ToggleRow({
-    this.icon,
-    this.iconBg,
-    this.iconColor,
     required this.title,
     required this.subtitle,
     required this.value,
@@ -1718,18 +1473,6 @@ class _ToggleRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (icon != null) ...[
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 20, color: iconColor),
-            ),
-            const SizedBox(width: 14),
-          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1751,7 +1494,7 @@ class _ToggleRow extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: primary,
+            activeThumbColor: primary,
           ),
         ],
       ),
