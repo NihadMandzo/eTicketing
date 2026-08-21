@@ -12,6 +12,7 @@ import 'organization_detail_screen.dart';
 import 'widgets/category_multi_select_filter.dart';
 import 'widgets/entity_avatar.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/paginated_screen_body.dart';
 import 'widgets/organization_upsert_dialog.dart';
 import '../main.dart';
 
@@ -223,14 +224,17 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final placeholderColor = isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
 
-    // The whole page is one SingleChildScrollView (not header-fixed +
-    // internally-scrolling grid) — scrolling moves the title/search/count out
-    // of view along with everything else, so the pagination bar is always
-    // reachable by scrolling the same way as the rest of the content, not
-    // hidden behind a separately-scrolled grid region.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+    // The pagination bar is pinned to the bottom of the viewport (see
+    // PaginatedScreenBody) — only the header/search/count/grid above it scroll.
+    return PaginatedScreenBody(
+      pagination: PaginationBar(
+        currentPage: _currentPage,
+        totalPages: _totalPages,
+        onPageChanged: _goToPage,
+        pageSize: _pageSize,
+        onPageSizeChanged: _onPageSizeChanged,
+      ),
+      content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────
@@ -419,17 +423,6 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
               },
             ),
 
-          // ── Pagination ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _currentPage,
-              totalPages: _totalPages,
-              onPageChanged: _goToPage,
-              pageSize: _pageSize,
-              onPageSizeChanged: _onPageSizeChanged,
-            ),
-          ),
         ],
       ),
     );

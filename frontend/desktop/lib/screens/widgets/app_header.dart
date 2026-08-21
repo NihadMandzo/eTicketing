@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/responses/user_profile.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_controller.dart';
 
 class AppHeader extends StatefulWidget {
   final UserProfile user;
@@ -344,6 +345,15 @@ class _DropdownCard extends StatelessWidget {
 
           Divider(height: 1, thickness: 1, color: borderColor),
 
+          // Dark/light mode — the only place this toggle lives now (moved out of the
+          // Postavke dialog's removed "preferences" tab, see settings_dialog.dart).
+          const Padding(
+            padding: EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: _ThemeToggleRow(),
+          ),
+
+          Divider(height: 1, thickness: 1, color: borderColor),
+
           // Logout
           _DropdownAction(
             icon: Icons.logout_rounded,
@@ -356,6 +366,48 @@ class _DropdownCard extends StatelessWidget {
           const SizedBox(height: 4),
         ],
       ),
+    );
+  }
+}
+
+// ─── Dark/light mode toggle row ────────────────────────────────────────────────
+
+class _ThemeToggleRow extends StatelessWidget {
+  const _ThemeToggleRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.mode,
+      builder: (context, mode, _) {
+        final isDark = ThemeController.isDark(context);
+        final primary = isDark ? AppColors.secondary : AppColors.primary;
+        final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            children: [
+              Icon(
+                isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                size: 18,
+                color: primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Tamni Način Rada',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textPrimary),
+                ),
+              ),
+              Switch(
+                value: isDark,
+                activeThumbColor: primary,
+                onChanged: (v) => ThemeController.setMode(v ? ThemeMode.dark : ThemeMode.light),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

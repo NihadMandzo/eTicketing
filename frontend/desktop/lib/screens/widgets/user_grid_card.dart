@@ -75,17 +75,19 @@ class _UserGridCardState extends State<UserGridCard> {
               : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Avatar + name ──
+              // ── Avatar + name ── smaller avatar (48, was 64) and tighter gaps
+              // than other card-grid screens — this card is deliberately more
+              // compact than Category/Organization/Product cards, same info.
               Center(
                 child: Column(
                   children: [
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
@@ -94,22 +96,22 @@ class _UserGridCardState extends State<UserGridCard> {
                               ? [AppColors.secondary, AppColors.primary]
                               : [AppColors.primary, AppColors.primaryDark],
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         _initials(u.fullName),
                         style: TextStyle(
                           color: isDark ? AppColors.darkBackground : Colors.white,
-                          fontSize: 20,
+                          fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(
                       u.fullName,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
@@ -118,14 +120,14 @@ class _UserGridCardState extends State<UserGridCard> {
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
 
               // ── Badges ──
               Center(
                 child: Wrap(
                   alignment: WrapAlignment.center,
-                  spacing: 6,
-                  runSpacing: 6,
+                  spacing: 5,
+                  runSpacing: 5,
                   children: [
                     _Badge(
                       icon: LucideIcons.shield,
@@ -146,7 +148,7 @@ class _UserGridCardState extends State<UserGridCard> {
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
               // ── Contact info ── plain (not Expanded/Flexible) — the card now
               // has a fixed pixel height (see the grid's mainAxisExtent), not an
@@ -158,12 +160,12 @@ class _UserGridCardState extends State<UserGridCard> {
               // fixed height headroom is what actually guarantees no overflow.
               Row(
                 children: [
-                  Icon(LucideIcons.mail, size: 13, color: textTertiary),
-                  const SizedBox(width: 6),
+                  Icon(LucideIcons.mail, size: 12, color: textTertiary),
+                  const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       u.email,
-                      style: TextStyle(fontSize: 12, color: textTertiary),
+                      style: TextStyle(fontSize: 11, color: textTertiary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -171,15 +173,15 @@ class _UserGridCardState extends State<UserGridCard> {
                 ],
               ),
               if (u.phoneNumber != null && u.phoneNumber!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Row(
                   children: [
-                    Icon(LucideIcons.phone, size: 13, color: textTertiary),
-                    const SizedBox(width: 6),
+                    Icon(LucideIcons.phone, size: 12, color: textTertiary),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         u.phoneNumber!,
-                        style: TextStyle(fontSize: 12, color: textTertiary),
+                        style: TextStyle(fontSize: 11, color: textTertiary),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -187,15 +189,15 @@ class _UserGridCardState extends State<UserGridCard> {
                   ],
                 ),
               ],
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Row(
                 children: [
-                  Icon(LucideIcons.atSign, size: 13, color: textTertiary),
-                  const SizedBox(width: 6),
+                  Icon(LucideIcons.atSign, size: 12, color: textTertiary),
+                  const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       u.username,
-                      style: TextStyle(fontSize: 12, color: textTertiary),
+                      style: TextStyle(fontSize: 11, color: textTertiary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -211,7 +213,7 @@ class _UserGridCardState extends State<UserGridCard> {
 
               // ── Action buttons ──
               if (hasActions) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     if (widget.onEdit != null)
@@ -223,7 +225,7 @@ class _UserGridCardState extends State<UserGridCard> {
                           onTap: widget.onEdit!,
                         ),
                       ),
-                    if (widget.onEdit != null && widget.onDelete != null) const SizedBox(width: 8),
+                    if (widget.onEdit != null && widget.onDelete != null) const SizedBox(width: 6),
                     if (widget.onDelete != null)
                       Expanded(
                         child: _CardActionButton(
@@ -239,7 +241,7 @@ class _UserGridCardState extends State<UserGridCard> {
               // Stacked below Edit/Delete, not crammed into the same row —
               // three narrow buttons wouldn't fit this card's width cleanly.
               if (widget.onSetPassword != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 _CardActionButton(
                   icon: LucideIcons.keyRound,
                   label: 'Promijeni Lozinku',

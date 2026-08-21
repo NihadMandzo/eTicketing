@@ -13,6 +13,7 @@ import '../widgets/confirm_dialog.dart';
 import 'widgets/delete_organization_admin_dialog.dart';
 import 'widgets/organization_admin_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
+import 'widgets/paginated_screen_body.dart';
 import 'widgets/role_multi_select_filter.dart';
 import 'widgets/set_staff_password_dialog.dart';
 import 'widgets/staff_user_upsert_dialog.dart';
@@ -253,13 +254,17 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // The whole page is one SingleChildScrollView (not header-fixed +
-    // internally-scrolling grid) — scrolling moves the title/stats/search out
-    // of view along with everything else, so the pagination bar is always
-    // reachable by scrolling the same way as the rest of the content.
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+    // The pagination bar is pinned to the bottom of the viewport (see
+    // PaginatedScreenBody) — only the header/stats/search/grid above it scroll.
+    return PaginatedScreenBody(
+      pagination: PaginationBar(
+        currentPage: _currentPage,
+        totalPages: _totalPages,
+        onPageChanged: _goToPage,
+        pageSize: _pageSize,
+        onPageSizeChanged: _onPageSizeChanged,
+      ),
+      content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────
@@ -409,7 +414,7 @@ class _UsersScreenState extends State<UsersScreen> {
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 260,
-                mainAxisExtent: 380,
+                mainAxisExtent: 280,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -433,17 +438,6 @@ class _UsersScreenState extends State<UsersScreen> {
               },
             ),
 
-          // ── Pagination ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: PaginationBar(
-              currentPage: _currentPage,
-              totalPages: _totalPages,
-              onPageChanged: _goToPage,
-              pageSize: _pageSize,
-              onPageSizeChanged: _onPageSizeChanged,
-            ),
-          ),
         ],
       ),
     );

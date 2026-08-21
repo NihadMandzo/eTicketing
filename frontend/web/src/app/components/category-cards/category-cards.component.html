@@ -7,7 +7,7 @@
       [attr.aria-pressed]="selectedCategoryId() === category.id"
       (click)="select(category.id)"
     >
-      <span class="category-card-image" [style.background-color]="colorFor(i)">
+      <span class="category-card-image">
         <app-category-icon [name]="category.name" [iconUrl]="category.iconUrl" />
       </span>
       <span class="category-card-title">{{ category.name }}</span>

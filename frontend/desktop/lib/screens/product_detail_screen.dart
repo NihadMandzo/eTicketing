@@ -294,76 +294,76 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           const SizedBox(width: 12),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(isDark, textPrimary, textTertiary, primary),
-            const SizedBox(height: 28),
-            _buildImagesSection(isDark, textPrimary, textTertiary, primary),
-            const SizedBox(height: 28),
-            Row(
+      // 70/30 split above ~900px (left: title/images/location+date/description/map,
+      // right: Sektori, each scrolling independently); a single stacked column below
+      // that, matching the same breakpoint-driven responsiveness pattern used
+      // elsewhere in this app (see .claude/rules/21-frontend-desktop.md).
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final leftContent = _buildLeftColumn(isDark, textPrimary, textTertiary, primary);
+          final rightContent = _buildSectorsSection(isDark, textPrimary, textTertiary, primary);
+
+          if (constraints.maxWidth >= 900) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Sektori', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary)),
-                const Spacer(),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [primary, isDark ? AppColors.primary : AppColors.primaryDark]),
-                    borderRadius: BorderRadius.circular(10),
+                Expanded(
+                  flex: 7,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: leftContent,
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => _openSectorDialog(),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.plus, color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text('Dodaj Sektor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    ),
+                ),
+                VerticalDivider(width: 1, thickness: 1, color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                Expanded(
+                  flex: 3,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: rightContent,
                   ),
                 ),
               ],
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                leftContent,
+                const SizedBox(height: 28),
+                rightContent,
+              ],
             ),
-            const SizedBox(height: 16),
-            if (_isLoadingSectors)
-              SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: primary)))
-            else if (_sectors.isEmpty)
-              SizedBox(
-                height: 160,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(LucideIcons.layers, size: 40, color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
-                      const SizedBox(height: 10),
-                      Text('Nema sektora', style: TextStyle(color: textTertiary, fontSize: 15)),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ..._sectors.map((s) => _SectorTile(
-                    sector: s,
-                    isDark: isDark,
-                    onEdit: () => _openSectorDialog(sector: s),
-                    onPublish: () => _publishSector(s),
-                    onDelete: () => _deleteSector(s),
-                  )),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildHeader(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
+  // ── Left column: Title → Images → Location+Date → Description → Map ──────────
+
+  Widget _buildLeftColumn(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTitleSection(isDark, textPrimary, textTertiary, primary),
+        const SizedBox(height: 20),
+        _buildImagesSection(isDark, textPrimary, textTertiary, primary),
+        const SizedBox(height: 20),
+        _buildLocationDateRow(isDark, textPrimary, textTertiary, primary),
+        if (_product.description.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          _buildDescriptionSection(isDark, textPrimary, textTertiary),
+        ],
+        const SizedBox(height: 20),
+        _buildMapSection(isDark, textPrimary, textTertiary),
+      ],
+    );
+  }
+
+  Widget _buildTitleSection(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
     final statusColor = _product.isPublished ? AppColors.success : AppColors.warning;
     final statusColorDark = _product.isPublished ? AppColors.successDark : AppColors.warningDark;
 
@@ -377,6 +377,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(_product.name, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary)),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -411,37 +413,143 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (_product.description.isNotEmpty)
-            Text(_product.description, style: TextStyle(fontSize: 14, color: textTertiary, height: 1.4)),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.mapPin, size: 15, color: textTertiary),
-              const SizedBox(width: 6),
-              Text('Lokacija: ${_product.city.label}', style: TextStyle(fontSize: 13, color: textTertiary)),
-            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationDateRow(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
+    final locationCard = _InfoCard(
+      icon: LucideIcons.mapPin,
+      label: 'Lokacija',
+      value: _product.city.label,
+      isDark: isDark,
+      primary: primary,
+    );
+
+    if (_product.date == null) return locationCard;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: locationCard),
+        const SizedBox(width: 14),
+        Expanded(
+          child: _InfoCard(
+            icon: LucideIcons.calendarDays,
+            label: 'Datum',
+            value: _formatDateTime(_product.date!),
+            isDark: isDark,
+            primary: primary,
           ),
-          const SizedBox(height: 8),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDescriptionSection(bool isDark, Color textPrimary, Color textTertiary) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Opis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
+          const SizedBox(height: 10),
+          Text(_product.description, style: TextStyle(fontSize: 14, color: textTertiary, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapSection(bool isDark, Color textPrimary, Color textTertiary) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Lokacija na mapi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
+          const SizedBox(height: 10),
           ProductLocationPicker(
             initialLatitude: _product.latitude,
             initialLongitude: _product.longitude,
             editable: false,
           ),
-          if (_product.date != null) ...[
-            const SizedBox(height: 10),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(LucideIcons.calendarDays, size: 15, color: textTertiary),
-                const SizedBox(width: 6),
-                Text(_formatDateTime(_product.date!), style: TextStyle(fontSize: 13, color: textTertiary)),
-              ],
-            ),
-          ],
         ],
       ),
+    );
+  }
+
+  // ── Right column: Sektori ────────────────────────────────────────────────────
+
+  Widget _buildSectorsSection(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Sektori', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary)),
+            const Spacer(),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [primary, isDark ? AppColors.primary : AppColors.primaryDark]),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _openSectorDialog(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.plus, color: Colors.white, size: 16),
+                        SizedBox(width: 6),
+                        Text('Dodaj Sektor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_isLoadingSectors)
+          SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: primary)))
+        else if (_sectors.isEmpty)
+          SizedBox(
+            height: 160,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.layers, size: 40, color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+                  const SizedBox(height: 10),
+                  Text('Nema sektora', style: TextStyle(color: textTertiary, fontSize: 15)),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._sectors.map((s) => _SectorTile(
+                sector: s,
+                isDark: isDark,
+                onEdit: () => _openSectorDialog(sector: s),
+                onPublish: () => _publishSector(s),
+                onDelete: () => _deleteSector(s),
+              )),
+      ],
     );
   }
 
@@ -483,6 +591,67 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   onTap: _addImage,
                 ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small labeled info tile — used for the Location + Date row on the product
+/// detail screen's left column, side by side when both are present.
+class _InfoCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+  final Color primary;
+
+  const _InfoCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isDark,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(fontSize: 11, color: textTertiary)),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
