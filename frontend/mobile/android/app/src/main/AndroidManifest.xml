@@ -1,8 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Needed in every build type (the Flutter-generated debug/profile
+         manifests only cover dev tooling): the app talks to the Gateway over
+         the network on every screen. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="mobile"
+        android:label="eKarta"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <!-- The backend (Gateway) is plain HTTP with no TLS termination in
+             this dev/thesis setup — see ApiConfig.baseUrl, which always
+             builds an http:// URL (10.0.2.2 emulator alias, or a LAN IP
+             passed via a dart-define for a real device). Android blocks
+             cleartext traffic by default since API 28, so without this flag
+             every request is killed by the OS before it leaves the device,
+             surfacing as a generic "cannot load" error with nothing in the
+             Gateway logs. Revisit this once the Gateway terminates TLS. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

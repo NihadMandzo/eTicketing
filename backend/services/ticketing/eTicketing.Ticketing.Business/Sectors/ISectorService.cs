@@ -38,4 +38,12 @@ public interface ISectorService
     /// PeriodYear/PeriodMonth. Any authenticated user may hold (RequireAuthorization() with no
     /// specific role at the endpoint) — the ownership concept doesn't apply to buyers.</summary>
     Task<Result<HoldSectorResponse>> HoldAsync(Guid sectorId, HoldSectorRequest request, ClaimsPrincipal user, CancellationToken ct = default);
+
+    /// <summary>Best-effort early release of a still-live hold — e.g. the buyer switched to a
+    /// different spot/date before completing checkout, or one hold in a multi-hold cart failed so
+    /// the others must be given back rather than left to expire on their own TTL. A thin wrapper
+    /// over ISectorCapacityLock.ReleaseAsync: always succeeds even for an unknown/already-expired
+    /// holdId (same no-op semantics as ReleaseAsync itself), since the caller only ever wants
+    /// "make sure this hold isn't holding capacity any more", never confirmation it existed.</summary>
+    Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default);
 }

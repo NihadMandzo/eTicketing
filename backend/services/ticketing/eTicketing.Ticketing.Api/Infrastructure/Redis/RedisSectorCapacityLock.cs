@@ -1,3 +1,4 @@
+using System.Globalization;
 using eTicketing.Ticketing.Business.Sectors;
 using StackExchange.Redis;
 
@@ -47,8 +48,13 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         """;
 
     private readonly IConnectionMultiplexer _redis;
+    private readonly ILogger<RedisSectorCapacityLock> _logger;
 
-    public RedisSectorCapacityLock(IConnectionMultiplexer redis) => _redis = redis;
+    public RedisSectorCapacityLock(IConnectionMultiplexer redis, ILogger<RedisSectorCapacityLock> logger)
+    {
+        _redis = redis;
+        _logger = logger;
+    }
 
     private IDatabase Db => _redis.GetDatabase();
 
@@ -58,6 +64,25 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
             : $"sector:{sectorId}:date:{date:yyyy-MM-dd}:capacity";
 
     private static string BuildHoldInfoKey(string holdId) => $"holdinfo:{holdId}";
+
+    /// <summary>Reverses BuildCounterKey — "sector:{sectorId}:capacity" or
+    /// "sector:{sectorId}:date:{yyyy-MM-dd}:capacity" — back into (SectorId, Date). Returns null if
+    /// the key doesn't match either shape (should never happen for a key this class itself wrote).</summary>
+    private static (Guid SectorId, DateOnly? Date)? TryParseCounterKey(string counterKey)
+    {
+        var parts = counterKey.Split(':');
+        if (parts.Length == 3 && parts[0] == "sector" && parts[2] == "capacity" && Guid.TryParse(parts[1], out var sectorId))
+            return (sectorId, null);
+
+        if (parts.Length == 5 && parts[0] == "sector" && parts[2] == "date" && parts[4] == "capacity"
+            && Guid.TryParse(parts[1], out var dailySectorId)
+            && DateOnly.TryParseExact(parts[3], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        {
+            return (dailySectorId, date);
+        }
+
+        return null;
+    }
 
     public async Task<HoldResult> TryHoldAsync(Guid sectorId, int capacity, int quantity, DateOnly? date, TimeSpan ttl, CancellationToken ct = default)
     {
@@ -79,6 +104,27 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         await Db.StringSetAsync(BuildHoldInfoKey(holdId), counterKey, ttl);
 
         return new HoldResult(true, holdId, expiresAt.UtcDateTime);
+    }
+
+    public async Task<HeldReservation?> PeekAsync(string holdId, CancellationToken ct = default)
+    {
+        var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
+        if (counterKey.IsNullOrEmpty)
+            return null;
+
+        var current = await Db.HashGetAsync(counterKey.ToString(), holdId);
+        if (current.IsNullOrEmpty)
+            return null;
+
+        var parsed = TryParseCounterKey(counterKey.ToString()!);
+        if (parsed is null)
+        {
+            _logger.LogError("holdinfo:{HoldId} pointed at counter key {CounterKey}, which does not match either known shape", holdId, counterKey.ToString());
+            return null;
+        }
+
+        var quantity = int.Parse(current.ToString().Split(':')[0], CultureInfo.InvariantCulture);
+        return new HeldReservation(parsed.Value.SectorId, parsed.Value.Date, quantity);
     }
 
     public async Task ConfirmAsync(string holdId, CancellationToken ct = default)
@@ -104,6 +150,12 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         // "permanently confirmed" hold, letting a later TryHoldAsync oversell already-sold
         // capacity. Remove the TTL on the counter key itself so a confirmed hold survives forever.
         await Db.KeyPersistAsync(counterKey.ToString());
+
+        // Once confirmed, this holdId must stop resolving via PeekAsync — otherwise a replayed
+        // purchase request (same holdId re-submitted after the first attempt already charged and
+        // confirmed) would see the same hold as still "live" and charge again. Deleting the
+        // holdinfo pointer makes PeekAsync return null for it from now on, same as an expired hold.
+        await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
     }
 
     public async Task ReleaseAsync(string holdId, CancellationToken ct = default)

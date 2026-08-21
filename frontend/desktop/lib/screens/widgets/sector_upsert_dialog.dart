@@ -6,9 +6,12 @@ import '../../models/enums/ticketing_mode.dart';
 import '../../models/requests/sector_upsert_request.dart';
 import '../../models/responses/sector_preview_response.dart';
 import '../../models/responses/sector_response.dart';
+import '../../models/responses/ticket_type_response.dart';
 import '../../providers/sector_provider.dart';
+import '../../providers/ticket_type_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/snackbar_service.dart';
+import 'ticket_type_upsert_dialog.dart';
 
 /// Create/edit dialog for Sector — same preview→create pattern as
 /// ProductUpsertDialog. Fields beyond Name/Capacity/Price are driven by the
@@ -48,6 +51,13 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
   bool _hasPreviewed = false;
   SectorPreviewResponse? _preview;
 
+  // TicketTypes are only manageable once the Sector already exists — a
+  // brand-new Sector has no SectorId yet for the FK to point at. Seeded from
+  // the parent SectorResponse (already included on GET /sectors*) and
+  // refreshed after each add/edit/delete.
+  List<TicketTypeResponse> _ticketTypes = [];
+  bool _isLoadingTicketTypes = false;
+
   bool get _isEditing => widget.sector != null;
   bool get _isDailyEntry => widget.ticketingMode == TicketingMode.dailyEntry;
   bool get _isRecurringReservation => widget.ticketingMode == TicketingMode.recurringReservation;
@@ -65,8 +75,55 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
       _priceCtrl.text = s.price.toString();
       _periodYear = s.periodYear;
       _periodMonth = s.periodMonth;
+      _ticketTypes = s.ticketTypes;
     } else if (_isRecurringReservation) {
       _capacityCtrl.text = '1';
+    }
+  }
+
+  Future<void> _reloadTicketTypes() async {
+    if (!_isEditing) return;
+    setState(() => _isLoadingTicketTypes = true);
+    try {
+      final ticketTypes = await TicketTypeProvider(widget.sector!.id).getBySector();
+      if (mounted) setState(() => _ticketTypes = ticketTypes);
+    } catch (e) {
+      if (mounted) handleApiError(e);
+    } finally {
+      if (mounted) setState(() => _isLoadingTicketTypes = false);
+    }
+  }
+
+  Future<void> _openTicketTypeDialog({TicketTypeResponse? existing}) async {
+    await showDialog(
+      context: context,
+      builder: (_) => TicketTypeUpsertDialog(
+        sectorId: widget.sector!.id,
+        ticketType: existing,
+        onSaved: _reloadTicketTypes,
+      ),
+    );
+  }
+
+  Future<void> _deleteTicketType(TicketTypeResponse ticketType) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Obriši vrstu ulaznice'),
+        content: Text('Da li ste sigurni da želite obrisati "${ticketType.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Otkaži')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Obriši')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await TicketTypeProvider(widget.sector!.id).delete(ticketType.id);
+      await _reloadTicketTypes();
+    } catch (e) {
+      if (mounted) handleApiError(e);
     }
   }
 
@@ -381,6 +438,85 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
                           if (_hasPreviewed && _preview != null) ...[
                             const SizedBox(height: 16),
                             _PreviewCard(preview: _preview!, isDark: isDark),
+                          ],
+
+                          // Optional per-Sector price breakdown (e.g. Dijete/Student/Odrasli) —
+                          // only manageable once the Sector already exists (see the doc comment
+                          // on _ticketTypes above for why).
+                          if (_isEditing) ...[
+                            const SizedBox(height: 20),
+                            const Divider(),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text('Vrste ulaznica',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary)),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => _openTicketTypeDialog(),
+                                  icon: Icon(LucideIcons.plus, size: 14, color: _primary),
+                                  label: Text('Dodaj', style: TextStyle(fontSize: 12, color: _primary, fontWeight: FontWeight.w600)),
+                                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'Opciono — ako nema nijedne vrste, sektor koristi jedinstvenu cijenu iznad.',
+                              style: TextStyle(fontSize: 11, color: textTertiary),
+                            ),
+                            const SizedBox(height: 10),
+                            if (_isLoadingTicketTypes)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+                              )
+                            else if (_ticketTypes.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text('Nema definisanih vrsta ulaznica.', style: TextStyle(fontSize: 12, color: textTertiary)),
+                              )
+                            else
+                              Column(
+                                children: [
+                                  for (final ticketType in _ticketTypes)
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(ticketType.name,
+                                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary)),
+                                          ),
+                                          Text('${ticketType.price.toStringAsFixed(2)} KM',
+                                              style: TextStyle(fontSize: 13, color: textTertiary)),
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () => _openTicketTypeDialog(existing: ticketType),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Icon(LucideIcons.pencil, size: 14, color: textTertiary),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () => _deleteTicketType(ticketType),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(4),
+                                              child: Icon(LucideIcons.trash2, size: 14, color: AppColors.error),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
                           ],
                           const SizedBox(height: 4),
                         ],

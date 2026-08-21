@@ -1,46 +1,93 @@
 <header class="top-navbar">
   <div class="navbar-container">
-    <a routerLink="/" class="logo">
-      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
-        <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>
-        <path d="M13 5v2"></path>
-        <path d="M13 17v2"></path>
-        <path d="M13 11v2"></path>
-      </svg>
-      <span class="logo-text">Kuda</span>
+    <a routerLink="/" class="logo" aria-label="eKarta — početna">
+      <img src="/logo.png" alt="eKarta" class="logo-image" />
     </a>
-    
-    <div class="auth-buttons">
+
+    <div class="account">
       <button
         type="button"
-        class="theme-toggle"
-        (click)="toggleTheme()"
-        [attr.aria-label]="theme() === 'dark' ? 'Uključi svijetli način rada' : 'Uključi tamni način rada'"
+        class="menu-trigger"
+        [class.open]="menuOpen()"
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="menuOpen()"
+        aria-haspopup="menu"
+        aria-controls="account-menu"
+        [attr.aria-label]="menuOpen() ? 'Zatvori meni' : 'Otvori meni'"
       >
-        @if (theme() === 'dark') {
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2"></path>
-            <path d="M12 20v2"></path>
-            <path d="m4.93 4.93 1.41 1.41"></path>
-            <path d="m17.66 17.66 1.41 1.41"></path>
-            <path d="M2 12h2"></path>
-            <path d="M20 12h2"></path>
-            <path d="m6.34 17.66-1.41 1.41"></path>
-            <path d="m19.07 4.93-1.41 1.41"></path>
-          </svg>
+        <!-- Below 768px the trigger collapses to just this icon; above it,
+             the icon is hidden and the name + chevron show instead. -->
+        <span class="hamburger" aria-hidden="true">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </span>
+
+        @if (isAuthenticated()) {
+          <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+          <span class="trigger-name">{{ displayName() }}</span>
         } @else {
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
-          </svg>
+          <span class="trigger-name">Meni</span>
         }
+
+        <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
-      @if (isAuthenticated()) {
-        <a routerLink="/profil" class="btn btn-ghost user-link">{{ currentUser()?.firstName }}</a>
-        <button type="button" class="btn btn-primary" (click)="logout()">Odjava</button>
-      } @else {
-        <a routerLink="/prijava" class="btn btn-ghost">Prijava</a>
-        <a routerLink="/registracija" class="btn btn-primary">Registracija</a>
+
+      @if (menuOpen()) {
+        <div class="menu" id="account-menu" role="menu">
+          @if (isAuthenticated()) {
+            <div class="menu-header">
+              <span class="avatar large" aria-hidden="true">{{ initial() }}</span>
+              <span class="menu-identity">
+                <strong>{{ displayName() }}</strong>
+                <small>{{ currentUser()?.email }}</small>
+              </span>
+            </div>
+
+            <a routerLink="/profil" class="menu-item" role="menuitem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Moj profil
+            </a>
+          }
+
+          <button type="button" class="menu-item" role="menuitem" (click)="toggleTheme()">
+            @if (theme() === 'dark') {
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2" /><path d="M12 20v2" />
+                <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+                <path d="M2 12h2" /><path d="M20 12h2" />
+                <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+              </svg>
+              Svijetli način
+            } @else {
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+              </svg>
+              Tamni način
+            }
+          </button>
+
+          @if (isAuthenticated()) {
+            <div class="menu-divider"></div>
+            <button type="button" class="menu-item danger" role="menuitem" (click)="logout()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" /><path d="M21 12H9" />
+              </svg>
+              Odjava
+            </button>
+          } @else {
+            <div class="menu-divider"></div>
+            <a routerLink="/prijava" class="menu-item" role="menuitem">Prijava</a>
+            <a routerLink="/registracija" class="menu-item accent" role="menuitem">Registracija</a>
+          }
+        </div>
       }
     </div>
   </div>

@@ -10,18 +10,19 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const primary = Color(0xFF0D7C66);
-  static const primaryDark = Color(0xFF0A6B57);
-  static const secondary = Color(0xFF41C9B4);
-  static const accent = Color(0xFFFF6F3C);
+  // Brand — eKarta green palette (#1D5B3A dark / #6FAE4A mid / #8DC63F
+  // bright), replacing the earlier teal/coral scheme.
+  static const primary = Color(0xFF1D5B3A);
+  static const primaryDark = Color(0xFF164A2F);
+  static const secondary = Color(0xFF6FAE4A);
+  static const accent = Color(0xFF8DC63F);
 
   // Light surfaces / text
   static const lightBackground = Color(0xFFFAFAFA);
   static const lightSurface = Color(0xFFFFFFFF);
   static const lightSurfaceSubtle = Color(0xFFF9FAFB);
   static const lightSurfaceMuted = Color(0xFFF3F4F6);
-  static const lightSurfaceTint = Color(0xFFF0FDF9);
+  static const lightSurfaceTint = Color(0xFFF0FDF4);
   static const lightInputFill = Color(0xFFFAFAFA);
   static const lightBorder = Color(0xFFE5E7EB);
   static const lightBorderInput = Color(0xFFD1D5DB);
@@ -37,7 +38,7 @@ class AppColors {
   static const darkBackground = Color(0xFF0A0F0D);
   static const darkSurface = Color(0xFF111816);
   static const darkSurfaceMuted = Color(0xFF17221E);
-  static const darkSurfaceTint = Color(0xFF14201C);
+  static const darkSurfaceTint = Color(0xFF141F16);
   static const darkInputFill = Color(0xFF17221E);
   static const darkBorder = Color(0xFF2A3B36);
   static const darkBorderInput = Color(0xFF3D5049);

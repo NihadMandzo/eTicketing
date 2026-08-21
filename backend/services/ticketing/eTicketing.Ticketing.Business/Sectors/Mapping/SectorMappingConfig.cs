@@ -7,6 +7,8 @@ public class SectorMappingConfig : IRegister
 {
     public void Register(TypeAdapterConfig config)
     {
-        config.NewConfig<Sector, SectorResponse>();
+        config.NewConfig<TicketType, TicketTypeResponse>();
+        config.NewConfig<Sector, SectorResponse>()
+            .Map(dest => dest.TicketTypes, src => src.TicketTypes.OrderBy(t => t.CreatedAt));
     }
 }

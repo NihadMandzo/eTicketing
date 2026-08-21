@@ -20,8 +20,8 @@ import 'image_crop_dialog.dart';
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
 
-const Color _kPrimary = Color(0xFF0D7C66);
-const Color _kPrimaryDark = Color(0xFF0a6b57);
+const Color _kPrimary = AppColors.primary;
+const Color _kPrimaryDark = AppColors.primaryDark;
 
 // ─── Entry point: call this to open the dialog ────────────────────────────────
 

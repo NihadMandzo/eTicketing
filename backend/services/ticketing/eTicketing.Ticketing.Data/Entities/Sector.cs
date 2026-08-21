@@ -42,4 +42,9 @@ public class Sector : BaseEntity
     // DailyEntry only: which calendar month this flat capacity+price row covers. Null otherwise.
     public int? PeriodYear { get; set; }
     public int? PeriodMonth { get; set; } // 1-12
+
+    // Optional named price tiers (e.g. Odrasli/Djeca/Studenti) sharing this Sector's Capacity —
+    // see TicketType's own doc comment. Empty for most Sectors, which keep today's single-price
+    // behavior unchanged.
+    public ICollection<TicketType> TicketTypes { get; set; } = new List<TicketType>();
 }

@@ -10,6 +10,12 @@ public static class ClaimsPrincipalExtensions
     public static Guid GetUserId(this ClaimsPrincipal user)
         => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    // JwtTokenGenerator (eTicketing.Identity) already mints ClaimTypes.Email into every token, so
+    // Ticketing can denormalize Ticket.UserEmail straight off the caller's claims — no cross-
+    // service call to Identity needed on the purchase-critical path.
+    public static string GetEmail(this ClaimsPrincipal user)
+        => user.FindFirstValue(ClaimTypes.Email)!;
+
     public static string GetRole(this ClaimsPrincipal user)
         => user.FindFirstValue(ClaimTypes.Role)!;
 

@@ -1,0 +1,21 @@
+<a [routerLink]="['/dogadjaji', product().id]" class="product-card">
+  <div class="product-image">
+    @if (coverImageUrl(); as url) {
+      <img [src]="url" [alt]="product().name" />
+    }
+    <div class="product-badge">
+      <app-category-icon class="product-badge-icon" [name]="product().categoryName" />
+      {{ product().categoryName }}
+    </div>
+  </div>
+  <div class="product-content">
+    @if (formattedDate(); as date) {
+      <div class="product-date">{{ date }}</div>
+    }
+    <h3 class="product-title" [title]="product().name">{{ product().name }}</h3>
+    <div class="product-footer">
+      <span class="product-mode">{{ modeLabel() }}</span>
+      <span class="product-cta">Detalji →</span>
+    </div>
+  </div>
+</a>

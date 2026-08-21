@@ -1,4 +1,5 @@
 import '../enums/ticketing_mode.dart';
+import 'ticket_type_response.dart';
 
 class SectorResponse {
   final String id;
@@ -11,6 +12,7 @@ class SectorResponse {
   final int? periodYear; // DailyEntry only
   final int? periodMonth; // DailyEntry only, 1-12
   final DateTime createdAt;
+  final List<TicketTypeResponse> ticketTypes;
 
   const SectorResponse({
     required this.id,
@@ -23,6 +25,7 @@ class SectorResponse {
     this.periodYear,
     this.periodMonth,
     required this.createdAt,
+    this.ticketTypes = const [],
   });
 
   bool get isPublished => status == 1;
@@ -44,6 +47,9 @@ class SectorResponse {
       periodYear: json['periodYear'] as int?,
       periodMonth: json['periodMonth'] as int?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      ticketTypes: (json['ticketTypes'] as List? ?? [])
+          .map((e) => TicketTypeResponse.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

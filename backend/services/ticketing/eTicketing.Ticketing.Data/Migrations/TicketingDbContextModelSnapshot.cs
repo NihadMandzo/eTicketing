@@ -129,6 +129,9 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("PdfBlobName")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
@@ -146,6 +149,9 @@ namespace eTicketing.Ticketing.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<Guid?>("SubscriptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("TicketTypeId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -170,15 +176,49 @@ namespace eTicketing.Ticketing.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OrderId");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("SectorId");
 
                     b.HasIndex("SubscriptionId");
 
+                    b.HasIndex("TicketTypeId");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("Tickets");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<Guid>("SectorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectorId");
+
+                    b.ToTable("TicketTypes");
                 });
 
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.Subscription", b =>
@@ -203,11 +243,34 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.HasOne("eTicketing.Ticketing.Data.Entities.Subscription", "Subscription")
                         .WithMany()
                         .HasForeignKey("SubscriptionId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.ClientNoAction);
+
+                    b.HasOne("eTicketing.Ticketing.Data.Entities.TicketType", "TicketType")
+                        .WithMany()
+                        .HasForeignKey("TicketTypeId")
+                        .OnDelete(DeleteBehavior.ClientNoAction);
 
                     b.Navigation("Sector");
 
                     b.Navigation("Subscription");
+
+                    b.Navigation("TicketType");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketType", b =>
+                {
+                    b.HasOne("eTicketing.Ticketing.Data.Entities.Sector", "Sector")
+                        .WithMany("TicketTypes")
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Sector");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.Sector", b =>
+                {
+                    b.Navigation("TicketTypes");
                 });
 #pragma warning restore 612, 618
         }

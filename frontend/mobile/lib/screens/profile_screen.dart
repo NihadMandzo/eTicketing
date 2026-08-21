@@ -5,12 +5,16 @@ import '../models/responses/user_response.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_controller.dart';
-import '../widgets/coming_soon_screen.dart';
 import '../widgets/initials_avatar.dart';
 import '../widgets/responsive_page.dart';
 import 'change_password_screen.dart';
+import 'contact_screen.dart';
 import 'edit_profile_screen.dart';
+import 'help_screen.dart';
 import 'login_screen.dart';
+import 'my_tickets_screen.dart';
+import 'privacy_screen.dart';
+import 'terms_screen.dart';
 
 /// The "Profil" tab body inside [MainShell] — account summary + personal
 /// info/change-password/order-history entry points, the light/dark toggle,
@@ -81,13 +85,46 @@ class ProfileScreen extends StatelessWidget {
                         label: 'Historija narudžbi',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const ComingSoonScreen(
-                              title: 'Historija narudžbi',
-                              icon: Icons.receipt_long_outlined,
-                              message: 'Historija vaših narudžbi će uskoro biti dostupna ovdje.',
+                            builder: (_) => Scaffold(
+                              appBar: AppBar(title: const Text('Historija narudžbi')),
+                              body: const SafeArea(child: MyTicketsScreen()),
                             ),
                           ),
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Legal/static pages — mirrors web's footer pages
+                // (Pomoć/Uslovi/Privatnost/Kontakt), which had no mobile
+                // equivalent before.
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      _ProfileRow(
+                        icon: Icons.help_outline_rounded,
+                        label: 'Pomoć',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpScreen())),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.description_outlined,
+                        label: 'Uslovi korištenja',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TermsScreen())),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.privacy_tip_outlined,
+                        label: 'Politika privatnosti',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivacyScreen())),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.mail_outline_rounded,
+                        label: 'Kontakt',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ContactScreen())),
                       ),
                     ],
                   ),

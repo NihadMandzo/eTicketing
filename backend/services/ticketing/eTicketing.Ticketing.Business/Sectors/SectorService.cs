@@ -73,7 +73,7 @@ public class SectorService : ISectorService
 
     public async Task<Result<SectorResponse>> PublishAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var sector = await _sectorRepository.GetByIdAsync(id, ct);
+        var sector = await _sectorRepository.GetByIdWithTicketTypesAsync(id, ct);
         if (sector is null)
             return Result<SectorResponse>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 
@@ -89,7 +89,7 @@ public class SectorService : ISectorService
 
     public async Task<Result<SectorResponse>> UpdateAsync(Guid id, UpsertSectorRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var sector = await _sectorRepository.GetByIdAsync(id, ct);
+        var sector = await _sectorRepository.GetByIdWithTicketTypesAsync(id, ct);
         if (sector is null)
             return Result<SectorResponse>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 
@@ -194,6 +194,12 @@ public class SectorService : ISectorService
             return Result<HoldSectorResponse>.Failure(Error.Conflict("sector.no_capacity", "Nema dovoljno slobodnog kapaciteta."));
 
         return Result<HoldSectorResponse>.Success(new HoldSectorResponse(hold.HoldId!, hold.ExpiresAt!.Value));
+    }
+
+    public async Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default)
+    {
+        await _capacityLock.ReleaseAsync(holdId, ct);
+        return Result.Success();
     }
 
     /// <summary>Shared by PreviewAsync/CreateAsync/UpdateAsync so preview and the real write path

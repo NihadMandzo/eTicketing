@@ -1,0 +1,130 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgb(0 0 0 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgb(255 255 255 / 20%);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.header-band {
+  padding: 28px 24px 20px;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: white;
+}
+
+.header-band h3 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+
+.header-band p {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(255 255 255 / 80%);
+}
+
+.body {
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.qr-placeholder {
+  width: 140px;
+  height: 140px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+}
+
+.qr-placeholder svg {
+  width: 100px;
+  height: 100px;
+}
+
+.code-label {
+  margin: 14px 0 2px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.code-value {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.info-rows {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 10px;
+  font-size: 13px;
+}
+
+.info-row span:first-child {
+  color: var(--muted-foreground);
+}
+
+.info-row span:last-child {
+  font-weight: var(--font-weight-semibold);
+}
+
+.wallet-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 2px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-weight: var(--font-weight-bold);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.wallet-message {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}

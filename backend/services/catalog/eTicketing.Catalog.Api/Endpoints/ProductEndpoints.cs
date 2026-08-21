@@ -12,6 +12,7 @@ public static class ProductEndpoints
         var group = app.MapGroup("/products").WithTags("Products");
 
         group.MapGet("", GetPublished).AllowAnonymous().WithValidation<ProductQuery>();
+        group.MapGet("/{id:guid}", GetById).AllowAnonymous();
         group.MapGet("/mine", GetMine).RequireAuthorization("Organizer").WithValidation<ProductQuery>();
         group.MapGet("/all", GetAll).RequireAuthorization("PlatformStaff").WithValidation<ProductQuery>();
         group.MapGet("/organization-ids", GetOrganizationIds).RequireAuthorization("PlatformStaff");
@@ -36,6 +37,12 @@ public static class ProductEndpoints
     private static async Task<IResult> GetPublished([AsParameters] ProductQuery query, IProductService service, CancellationToken ct)
     {
         var result = await service.GetPublishedAsync(query, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetById(Guid id, IProductService service, CancellationToken ct)
+    {
+        var result = await service.GetByIdAsync(id, ct);
         return result.ToHttpResult();
     }
 

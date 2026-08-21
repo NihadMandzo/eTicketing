@@ -1,0 +1,54 @@
+<!-- The page-size selector must outlive the pager: gating the whole bar on
+     `totalPages() > 1` meant picking a size large enough to fit everything on
+     one page removed the only control that could change it back. -->
+@if (totalPages() > 1 || showPageSize()) {
+  <div class="pagination-bar">
+    @if (totalPages() > 1) {
+    <div class="pager">
+      <button
+        type="button"
+        class="nav-btn"
+        [disabled]="currentPage() === 0"
+        (click)="goToPage(currentPage() - 1)"
+        aria-label="Prethodna stranica"
+      >
+        ‹
+      </button>
+      @for (page of pageNumbers(); track $index) {
+        @if (page === null) {
+          <span class="ellipsis">…</span>
+        } @else {
+          <button
+            type="button"
+            class="page-btn"
+            [class.active]="page === currentPage()"
+            (click)="goToPage(page)"
+          >
+            {{ page + 1 }}
+          </button>
+        }
+      }
+      <button
+        type="button"
+        class="nav-btn"
+        [disabled]="currentPage() >= totalPages() - 1"
+        (click)="goToPage(currentPage() + 1)"
+        aria-label="Sljedeća stranica"
+      >
+        ›
+      </button>
+    </div>
+    }
+
+    @if (showPageSize()) {
+      <div class="page-size">
+        <label for="page-size-select">Po stranici:</label>
+        <select id="page-size-select" (change)="onPageSizeChange($any($event.target).value)">
+          @for (option of pageSizeOptions(); track option) {
+            <option [value]="option" [selected]="option === pageSize()">{{ option }}</option>
+          }
+        </select>
+      </div>
+    }
+  </div>
+}

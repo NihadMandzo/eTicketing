@@ -1,132 +1,84 @@
 <div class="products-page">
   <section class="page-header">
     <div class="container">
-      <h1>Događaji</h1>
-      <p class="page-subtitle">Pronađite savršen događaj za vas</p>
+      <h1>Pregled ponude</h1>
+      <p class="page-subtitle">Sve kategorije ulaznica na jednom mjestu</p>
     </div>
   </section>
 
   <section class="content-section">
     <div class="container">
-      <div class="filters-section">
-        <div class="filter-group">
-          <label for="category-filter">Kategorija</label>
-          <select id="category-filter" class="filter-select">
-            <option>Sve kategorije</option>
-            <option>Koncerti</option>
-            <option>Pozorište</option>
-            <option>Sport</option>
-            <option>Festival</option>
-            <option>Ostalo</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label for="city-filter">Grad</label>
-          <select id="city-filter" class="filter-select">
-            <option>Svi gradovi</option>
-            <option>Sarajevo</option>
-            <option>Banja Luka</option>
-            <option>Mostar</option>
-            <option>Tuzla</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label for="date-filter">Datum</label>
-          <input type="date" id="date-filter" class="filter-input">
-        </div>
+      <div class="search-row">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Pretražite..."
+          [value]="searchText()"
+          (input)="onSearchChanged($any($event.target).value)"
+        />
       </div>
 
-      <div class="products-grid">
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Uskoro</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">15 Februar 2026</div>
-            <h3 class="product-title">Koncert uživo</h3>
-            <p class="product-location">Sarajevo, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 50 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
-        </div>
+      <app-category-chips
+        [categories]="categories()"
+        [selectedCategoryId]="selectedCategoryId()"
+        (categorySelected)="onCategorySelected($event)"
+      />
 
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Popularno</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">20 Februar 2026</div>
-            <h3 class="product-title">Pozorišna predstava</h3>
-            <p class="product-location">Banja Luka, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 30 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
-        </div>
+      <p class="result-count">{{ resultCountLabel() }}</p>
 
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Novo</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">25 Februar 2026</div>
-            <h3 class="product-title">Sportski događaj</h3>
-            <p class="product-location">Mostar, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 40 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
+      @if (isLoading()) {
+        <p class="loading-text">Učitavanje...</p>
+      } @else if (products().length === 0) {
+        <p class="empty-text">Nema rezultata za odabrane filtere.</p>
+      } @else if (effectiveMode() === 'SingleOccurrence') {
+        <div class="products-grid">
+          @for (product of products(); track product.id) {
+            <app-product-card [product]="product" />
+          }
         </div>
+      } @else if (effectiveMode() === 'DailyEntry') {
+        <div class="daily-entry-list">
+          @for (product of products(); track product.id) {
+            <a class="daily-entry-card" [routerLink]="['/dogadjaji', product.id]">
+              <div class="daily-entry-image">
+                @if (product.images[0]; as img) {
+                  <img [src]="img.url" [alt]="product.name" />
+                }
+              </div>
+              <div class="daily-entry-content">
+                <div class="daily-entry-badge">{{ product.categoryName }}</div>
+                <h3>{{ product.name }}</h3>
+                <p class="daily-entry-description">{{ product.description }}</p>
+                <span class="daily-entry-cta">Odaberi datum i kupi →</span>
+              </div>
+            </a>
+          }
+        </div>
+      } @else {
+        <div class="parking-grid">
+          @for (product of products(); track product.id) {
+            <a class="parking-card" [routerLink]="['/dogadjaji', product.id]">
+              <div class="parking-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M6 17l1.5-8h9L18 17M9 9V5h6v4"/><circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/></svg>
+              </div>
+              <h3>{{ product.name }}</h3>
+              <p class="parking-description">{{ product.description }}</p>
+              <span class="parking-cta">Odaberi mjesto →</span>
+            </a>
+          }
+        </div>
+      }
 
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Uskoro</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">1 Mart 2026</div>
-            <h3 class="product-title">Festival muzike</h3>
-            <p class="product-location">Tuzla, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 60 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Popularno</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">5 Mart 2026</div>
-            <h3 class="product-title">Stand-up komedija</h3>
-            <p class="product-location">Sarajevo, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 25 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-image">
-            <div class="product-badge">Novo</div>
-          </div>
-          <div class="product-content">
-            <div class="product-date">10 Mart 2026</div>
-            <h3 class="product-title">Kulturni događaj</h3>
-            <p class="product-location">Banja Luka, BH</p>
-            <div class="product-footer">
-              <span class="product-price">Od 35 KM</span>
-              <button class="btn btn-sm btn-primary">Detalji</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      @if (!isLoading() && products().length > 0) {
+        <app-pagination-bar
+          [currentPage]="page()"
+          [totalPages]="totalPages()"
+          [pageSize]="pageSize()"
+          (pageChanged)="onPageChanged($event)"
+          (pageSizeChanged)="onPageSizeChanged($event)"
+        />
+      }
     </div>
   </section>
 </div>
