@@ -6,6 +6,7 @@ import '../models/responses/category_response.dart';
 import '../models/search_objects/base_search_object.dart';
 import '../providers/category_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirm_dialog.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/category_upsert_dialog.dart';
 import '../main.dart';
@@ -77,45 +78,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Future<void> _deleteCategory(CategoryResponse category) async {
-    final isDark = _isDark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Obriši kategoriju',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: isDark
-                    ? AppColors.darkTextPrimary
-                    : AppColors.lightTextPrimary)),
-        content: Text(
-            'Da li ste sigurni da želite obrisati kategoriju "${category.name}"?',
-            style: TextStyle(
-                color: isDark
-                    ? AppColors.darkTextSecondary
-                    : AppColors.lightTextSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Odustani',
-                style: TextStyle(
-                    color: isDark
-                        ? AppColors.darkTextTertiary
-                        : AppColors.lightTextTertiary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Obriši'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši kategoriju',
+      message: 'Da li ste sigurni da želite obrisati kategoriju "${category.name}"?',
+      confirmLabel: 'Obriši',
     );
 
     if (confirmed != true || !mounted) return;

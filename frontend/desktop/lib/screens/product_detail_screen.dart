@@ -14,6 +14,8 @@ import '../providers/sector_provider.dart';
 import '../theme/app_colors.dart';
 import '../utility/image_validation.dart';
 import '../utility/snackbar_service.dart';
+import '../widgets/confirm_dialog.dart';
+import 'widgets/product_location_picker.dart';
 import 'widgets/product_upsert_dialog.dart';
 import 'widgets/sector_upsert_dialog.dart';
 import '../main.dart';
@@ -90,6 +92,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _publishProduct() async {
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Objavi proizvod',
+      message: 'Da li ste sigurni da želite objaviti proizvod "${_product.name}"? Postat će vidljiv svim kupcima.',
+      confirmLabel: 'Objavi',
+      destructive: false,
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _isPublishing = true);
     try {
       final updated = await ProductProvider().publish(_product.id);
@@ -156,7 +167,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Future<void> _deleteImage(ProductImageResponse image) async {
     if (_isMutatingImage) return;
 
-    final confirmed = await _confirm('Obriši sliku', 'Da li ste sigurni da želite obrisati ovu sliku?');
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši sliku',
+      message: 'Da li ste sigurni da želite obrisati ovu sliku?',
+      confirmLabel: 'Obriši',
+    );
     if (confirmed != true || !mounted) return;
 
     setState(() => _isMutatingImage = true);
@@ -177,7 +193,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _deleteProduct() async {
-    final confirmed = await _confirm('Obriši proizvod', 'Da li ste sigurni da želite obrisati proizvod "${_product.name}"?');
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši proizvod',
+      message: 'Da li ste sigurni da želite obrisati proizvod "${_product.name}"?',
+      confirmLabel: 'Obriši',
+    );
     if (confirmed != true || !mounted) return;
 
     try {
@@ -202,6 +223,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _publishSector(SectorResponse sector) async {
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Objavi sektor',
+      message: 'Da li ste sigurni da želite objaviti sektor "${sector.name}"? Postat će vidljiv svim kupcima.',
+      confirmLabel: 'Objavi',
+      destructive: false,
+    );
+    if (confirmed != true || !mounted) return;
+
     try {
       await _sectorProvider.publish(sector.id);
       if (mounted) {
@@ -214,7 +244,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _deleteSector(SectorResponse sector) async {
-    final confirmed = await _confirm('Obriši sektor', 'Da li ste sigurni da želite obrisati sektor "${sector.name}"?');
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši sektor',
+      message: 'Da li ste sigurni da želite obrisati sektor "${sector.name}"?',
+      confirmLabel: 'Obriši',
+    );
     if (confirmed != true || !mounted) return;
 
     try {
@@ -223,36 +258,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } catch (e) {
       if (mounted) handleApiError(e);
     }
-  }
-
-  Future<bool?> _confirm(String title, String message) {
-    final isDark = _isDark;
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title,
-            style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)),
-        content: Text(message,
-            style: TextStyle(color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Odustani', style: TextStyle(color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorDark,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Obriši'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -409,6 +414,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           const SizedBox(height: 12),
           if (_product.description.isNotEmpty)
             Text(_product.description, style: TextStyle(fontSize: 14, color: textTertiary, height: 1.4)),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.mapPin, size: 15, color: textTertiary),
+              const SizedBox(width: 6),
+              Text('Lokacija: ${_product.city.label}', style: TextStyle(fontSize: 13, color: textTertiary)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ProductLocationPicker(
+            initialLatitude: _product.latitude,
+            initialLongitude: _product.longitude,
+            editable: false,
+          ),
           if (_product.date != null) ...[
             const SizedBox(height: 10),
             Row(

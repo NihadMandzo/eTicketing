@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/city.dart';
 import '../models/responses/category_response.dart';
 import '../models/responses/product_response.dart';
 import '../models/ticketing_mode.dart';
@@ -33,6 +34,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   List<CategoryResponse> _categories = [];
   int? _selectedCategoryId;
+  City? _selectedCity;
   List<ProductResponse> _products = [];
   int _totalCount = 0;
   bool _isLoading = true;
@@ -64,6 +66,7 @@ class _EventsScreenState extends State<EventsScreen> {
           pageSize: 30,
           fts: _searchCtrl.text.trim(),
           categoryId: _selectedCategoryId,
+          city: _selectedCity,
         ),
       ]);
       if (!mounted) return;
@@ -96,6 +99,11 @@ class _EventsScreenState extends State<EventsScreen> {
 
   void _selectCategory(int? id) {
     setState(() => _selectedCategoryId = id);
+    _load();
+  }
+
+  void _selectCity(City? city) {
+    setState(() => _selectedCity = city);
     _load();
   }
 
@@ -132,24 +140,35 @@ class _EventsScreenState extends State<EventsScreen> {
               ),
             ),
           ),
-          SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            child: Row(
               children: [
-                _CategoryChip(label: 'Sve', icon: Icons.apps_rounded, selected: _selectedCategoryId == null, onTap: () => _selectCategory(null)),
-                for (final category in _categories)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: _CategoryChip(
-                      label: category.name,
-                      icon: categoryIcon(category.name),
-                      iconUrl: category.iconUrl,
-                      selected: _selectedCategoryId == category.id,
-                      onTap: () => _selectCategory(category.id),
-                    ),
+                Expanded(
+                  child: _FilterDropdown<int?>(
+                    hint: 'Sve kategorije',
+                    value: _selectedCategoryId,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Sve kategorije')),
+                      for (final category in _categories)
+                        DropdownMenuItem(value: category.id, child: Text(category.name, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: _selectCategory,
                   ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _FilterDropdown<City?>(
+                    hint: 'Sve lokacije',
+                    value: _selectedCity,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Sve lokacije')),
+                      for (final city in City.values)
+                        DropdownMenuItem(value: city, child: Text(cityLabel(city), overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: _selectCity,
+                  ),
+                ),
               ],
             ),
           ),
@@ -202,41 +221,41 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 }
 
-class _CategoryChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String? iconUrl;
-  final bool selected;
-  final VoidCallback onTap;
+/// Category/location filter dropdown — replaces the old pill-chip row (single-select only fit a
+/// handful of categories on screen at once; a dropdown scales to any number of categories/cities
+/// and leaves room for both filters side by side). Styled to match the search field just above it
+/// (filled, no border, 12px radius), matching this app's mockup component language.
+class _FilterDropdown<T> extends StatelessWidget {
+  final String hint;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T> onChanged;
 
-  const _CategoryChip({required this.label, required this.icon, this.iconUrl, required this.selected, required this.onTap});
+  const _FilterDropdown({required this.hint, required this.value, required this.items, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-    final labelColor = selected ? Colors.white : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary);
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? primary : (isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5)),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            iconUrl != null
-                ? CategoryIconGlyph(name: label, iconUrl: iconUrl, size: 16, color: labelColor)
-                : Icon(icon, size: 16, color: labelColor),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: labelColor),
-            ),
-          ],
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          hint: Text(hint, style: const TextStyle(fontSize: 13)),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+          ),
+          items: items,
+          onChanged: (v) => onChanged(v as T),
         ),
       ),
     );

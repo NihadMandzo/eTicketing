@@ -38,6 +38,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Required by google_maps_flutter (ProductLocationMap, shown on all 3 product detail
+             screens). Placeholder — swap for a real Maps SDK for Android key with Android app
+             restriction before shipping; the map otherwise fails to load tiles. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="YOUR_GOOGLE_MAPS_API_KEY" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

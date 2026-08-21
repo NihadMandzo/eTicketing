@@ -11,6 +11,7 @@ import '../../providers/sector_provider.dart';
 import '../../providers/ticket_type_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/snackbar_service.dart';
+import '../../widgets/confirm_dialog.dart';
 import 'ticket_type_upsert_dialog.dart';
 
 /// Create/edit dialog for Sector — same preview→create pattern as
@@ -106,18 +107,13 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
   }
 
   Future<void> _deleteTicketType(TicketTypeResponse ticketType) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Obriši vrstu ulaznice'),
-        content: Text('Da li ste sigurni da želite obrisati "${ticketType.name}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Otkaži')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Obriši')),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši vrstu ulaznice',
+      message: 'Da li ste sigurni da želite obrisati "${ticketType.name}"?',
+      confirmLabel: 'Obriši',
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     try {
       await TicketTypeProvider(widget.sector!.id).delete(ticketType.id);

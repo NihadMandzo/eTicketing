@@ -7,6 +7,7 @@ import '../models/search_objects/organization_search_object.dart';
 import '../providers/product_organization_ids_provider.dart';
 import '../providers/organization_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirm_dialog.dart';
 import 'organization_detail_screen.dart';
 import 'widgets/category_multi_select_filter.dart';
 import 'widgets/entity_avatar.dart';
@@ -146,49 +147,11 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
   }
 
   Future<void> _deleteOrganization(OrganizationResponse org) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Obriši organizaciju',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-            ),
-          ),
-          content: Text(
-            'Da li ste sigurni da želite obrisati organizaciju "${org.name}"?',
-            style: TextStyle(
-              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                'Odustani',
-                style: TextStyle(
-                  color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.errorDark,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Obriši'),
-            ),
-          ],
-        );
-      },
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Obriši organizaciju',
+      message: 'Da li ste sigurni da želite obrisati organizaciju "${org.name}"?',
+      confirmLabel: 'Obriši',
     );
 
     if (confirmed != true || !mounted) return;

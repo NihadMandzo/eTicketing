@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../main.dart';
+import '../../models/enums/city.dart';
 import '../../models/enums/ticketing_mode.dart';
 import '../../models/requests/product_upsert_request.dart';
 import '../../models/responses/category_response.dart';
@@ -12,6 +15,8 @@ import '../../providers/category_provider.dart';
 import '../../providers/product_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/snackbar_service.dart';
+import '../../widgets/confirm_dialog.dart';
+import 'product_location_picker.dart';
 
 /// Create/edit dialog for Product — follows the backend's preview→create
 /// pattern (see .claude/rules/01-domain.md): a brand-new product must be
@@ -43,10 +48,14 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
   bool _isLoadingCategories = true;
   int? _selectedCategoryId;
   DateTime? _selectedDate;
+  City? _selectedCity;
+  double? _latitude;
+  double? _longitude;
 
   bool _isSaving = false;
   bool _hasPreviewed = false;
   ProductPreviewResponse? _preview;
+  StreamSubscription<void>? _categoryRefreshSubscription;
 
   bool get _isEditing => widget.product != null;
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -72,12 +81,19 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
       _descCtrl.text = p.description;
       _selectedCategoryId = p.categoryId;
       _selectedDate = p.date;
+      _selectedCity = p.city;
+      _latitude = p.latitude;
+      _longitude = p.longitude;
     }
     _loadCategories();
+    // Refetch whenever a category is created/edited/deleted anywhere else in the app — see
+    // CategoryProvider.categoryRefreshBus.
+    _categoryRefreshSubscription = CategoryProvider.categoryRefreshBus.stream.listen((_) => _loadCategories());
   }
 
   @override
   void dispose() {
+    _categoryRefreshSubscription?.cancel();
     _nameCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
@@ -151,7 +167,24 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
         description: _descCtrl.text.trim(),
         date: _needsDate ? _selectedDate : null,
         categoryId: _selectedCategoryId!,
+        latitude: _latitude,
+        longitude: _longitude,
+        city: _selectedCity,
       );
+
+  /// Mirrors the backend's CreateProductRequestValidator: Latitude/Longitude/City are required,
+  /// same tier as Name/Category — the organizer must place an exact pin, not just pick a city.
+  bool _validateLocation() {
+    if (_latitude == null || _longitude == null) {
+      SnackbarService.showError('Lokacija je obavezna — postavite tačku na mapi.');
+      return false;
+    }
+    if (_selectedCity == null) {
+      SnackbarService.showError('Grad je obavezan.');
+      return false;
+    }
+    return true;
+  }
 
   Future<void> _doPreview() async {
     if (!_formKey.currentState!.validate()) return;
@@ -163,6 +196,7 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
       SnackbarService.showError('Datum je obavezan za ovaj tip kategorije.');
       return;
     }
+    if (!_validateLocation()) return;
 
     setState(() => _isSaving = true);
     try {
@@ -199,7 +233,19 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
         SnackbarService.showError('Datum je obavezan za ovaj tip kategorije.');
         return;
       }
+      if (!_validateLocation()) return;
     }
+
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: _isEditing ? 'Spremi izmjene' : 'Sačuvaj proizvod',
+      message: _isEditing
+          ? 'Da li ste sigurni da želite sačuvati izmjene proizvoda "${_nameCtrl.text.trim()}"?'
+          : 'Da li ste sigurni da želite sačuvati proizvod "${_nameCtrl.text.trim()}" kao nacrt?',
+      confirmLabel: 'Spremi',
+      destructive: false,
+    );
+    if (confirmed != true || !mounted) return;
 
     setState(() => _isSaving = true);
     try {
@@ -359,6 +405,32 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
                                   color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
                             ),
                           ],
+                          const SizedBox(height: 14),
+                          _FieldLabel('Grad *'),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<City>(
+                            initialValue: _selectedCity,
+                            decoration: _inputDecoration('Odaberite grad'),
+                            style: TextStyle(fontSize: 14, color: textPrimary),
+                            items: City.values.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
+                            onChanged: (city) => setState(() {
+                              _selectedCity = city;
+                              _resetPreview();
+                            }),
+                            validator: (v) => v == null ? 'Grad je obavezan' : null,
+                          ),
+                          const SizedBox(height: 14),
+                          _FieldLabel('Lokacija (tačka na mapi) *'),
+                          const SizedBox(height: 6),
+                          ProductLocationPicker(
+                            initialLatitude: _latitude,
+                            initialLongitude: _longitude,
+                            onLocationChanged: (lat, lng) => setState(() {
+                              _latitude = lat;
+                              _longitude = lng;
+                              _resetPreview();
+                            }),
+                          ),
                           if (_needsDate) ...[
                             const SizedBox(height: 14),
                             _FieldLabel('Datum i Vrijeme *'),
@@ -564,6 +636,7 @@ class _PreviewCard extends StatelessWidget {
               if (preview.date != null)
                 Text('Datum: ${_formatDateTime(preview.date!)}', style: TextStyle(fontSize: 12, color: textTertiary)),
               Text('Vrsta: ${preview.ticketingMode.label}', style: TextStyle(fontSize: 12, color: textTertiary)),
+              Text('Grad: ${preview.city.label}', style: TextStyle(fontSize: 12, color: textTertiary)),
             ],
           ),
         ],

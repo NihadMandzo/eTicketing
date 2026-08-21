@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../core/api_client.dart';
 import '../models/api_error.dart';
+import '../models/city.dart';
 import '../models/responses/category_response.dart';
 import '../models/responses/paged_result.dart';
 import '../models/responses/product_response.dart';
@@ -38,12 +39,19 @@ class CatalogService {
   }
 
   /// GET /api/products — Published only, public.
-  Future<PagedResult<ProductResponse>> getProducts({int page = 0, int pageSize = 20, String? fts, int? categoryId}) async {
+  Future<PagedResult<ProductResponse>> getProducts({
+    int page = 0,
+    int pageSize = 20,
+    String? fts,
+    int? categoryId,
+    City? city,
+  }) async {
     final response = await apiClient.get('Products', queryParameters: {
       'page': page,
       'pageSize': pageSize,
       if (fts != null && fts.isNotEmpty) 'fts': fts,
       if (categoryId != null) 'categoryId': categoryId,
+      if (city != null) 'city': cityToJson(city),
     });
     if (!_isSuccess(response.statusCode)) _handleError(response);
     return PagedResult.fromJson(response.data as Map<String, dynamic>, ProductResponse.fromJson);

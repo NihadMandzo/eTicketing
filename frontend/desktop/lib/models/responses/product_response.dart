@@ -1,3 +1,4 @@
+import '../enums/city.dart';
 import '../enums/ticketing_mode.dart';
 import 'product_image_response.dart';
 
@@ -11,6 +12,9 @@ class ProductResponse {
   final TicketingMode ticketingMode;
   final String organizationId;
   final int status; // 0 = Draft, 1 = Published (PublishStatus, serialized as a plain int)
+  final double latitude;
+  final double longitude;
+  final City city;
   final List<ProductImageResponse> images;
   final DateTime createdAt;
 
@@ -24,6 +28,9 @@ class ProductResponse {
     required this.ticketingMode,
     required this.organizationId,
     required this.status,
+    required this.latitude,
+    required this.longitude,
+    required this.city,
     this.images = const [],
     required this.createdAt,
   });
@@ -46,6 +53,9 @@ class ProductResponse {
       ticketingMode: TicketingMode.fromValue(json['ticketingMode'] as int? ?? 0),
       organizationId: json['organizationId'] as String,
       status: json['status'] as int? ?? 0,
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      city: City.fromValue(json['city'] as int? ?? 0),
       images: (json['images'] as List<dynamic>?)
               ?.map((i) => ProductImageResponse.fromJson(i as Map<String, dynamic>))
               .toList() ??

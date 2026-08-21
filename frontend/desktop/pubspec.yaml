@@ -43,6 +43,13 @@ dependencies:
   shared_preferences: ^2.3.2
   crop_your_image: ^2.0.0
   #google_fonts: ^8.0.2
+  # Embeds the Google Maps JS API (same page used on web) for the product-location pin
+  # picker/display — google_maps_flutter has no desktop (Windows/Linux) implementation at all.
+  # Windows-only: flutter_inappwebview_windows is the only federated implementation this package
+  # ships for desktop (no Linux backend) — webview_windows was considered but is incompatible
+  # with this project's Dart 3.10 SDK (its pubspec still pins `sdk: <3.0.0`, unmaintained since
+  # Feb 2024). On Linux builds the location picker/display falls back to manual lat/lng fields.
+  flutter_inappwebview: ^6.1.5
 
 dependency_overrides:
   # path_provider_foundation >=2.4.0 pulls in package:objective_c, whose native

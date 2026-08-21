@@ -12,6 +12,7 @@ import '../services/catalog_service.dart';
 import '../services/organization_service.dart';
 import '../services/sector_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/product_location_map.dart';
 import '../widgets/purchase_widgets.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
@@ -396,6 +397,12 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
                               text: 'Organizator: ${_organization!.name}',
                             ),
                           ],
+                          const SizedBox(height: 20),
+                          ProductLocationMap(
+                            latitude: product.latitude,
+                            longitude: product.longitude,
+                            city: product.city,
+                          ),
                           const SizedBox(height: 20),
                           const Text(
                             'Odaberite datum posjete',

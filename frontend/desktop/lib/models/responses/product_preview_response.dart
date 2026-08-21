@@ -1,3 +1,4 @@
+import '../enums/city.dart';
 import '../enums/ticketing_mode.dart';
 
 /// Mirrors the backend's ProductPreviewResponse — returned by POST /products/preview, never
@@ -11,6 +12,9 @@ class ProductPreviewResponse {
   final int categoryId;
   final String categoryName;
   final TicketingMode ticketingMode;
+  final double latitude;
+  final double longitude;
+  final City city;
 
   const ProductPreviewResponse({
     required this.name,
@@ -19,6 +23,9 @@ class ProductPreviewResponse {
     required this.categoryId,
     required this.categoryName,
     required this.ticketingMode,
+    required this.latitude,
+    required this.longitude,
+    required this.city,
   });
 
   factory ProductPreviewResponse.fromJson(Map<String, dynamic> json) => ProductPreviewResponse(
@@ -28,5 +35,8 @@ class ProductPreviewResponse {
         categoryId: json['categoryId'] as int? ?? 0,
         categoryName: json['categoryName'] as String? ?? '',
         ticketingMode: TicketingMode.fromValue(json['ticketingMode'] as int? ?? 0),
+        latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+        longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+        city: City.fromValue(json['city'] as int? ?? 0),
       );
 }

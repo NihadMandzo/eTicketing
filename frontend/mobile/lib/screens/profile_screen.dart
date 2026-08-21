@@ -5,6 +5,7 @@ import '../models/responses/user_response.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_controller.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/initials_avatar.dart';
 import '../widgets/responsive_page.dart';
 import 'change_password_screen.dart';
@@ -154,16 +155,11 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Odjava'),
-        content: const Text('Da li se želite odjaviti?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Odustani')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Odjavi se')),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'Odjava',
+      message: 'Da li se želite odjaviti?',
+      confirmLabel: 'Odjavi se',
     );
     if (confirmed != true) return;
 
