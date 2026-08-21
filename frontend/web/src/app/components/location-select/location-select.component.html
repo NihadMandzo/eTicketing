@@ -1,0 +1,11 @@
+<select
+  class="filter-select"
+  aria-label="Filtriraj po gradu"
+  [value]="selectedCity() ?? ''"
+  (change)="onChange($any($event.target).value)"
+>
+  <option value="">Sve lokacije</option>
+  @for (city of cities; track city) {
+    <option [value]="city">{{ labels[city] }}</option>
+  }
+</select>

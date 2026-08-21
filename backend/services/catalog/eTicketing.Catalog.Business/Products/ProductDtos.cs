@@ -18,6 +18,9 @@ public record ProductResponse(
     TicketingMode TicketingMode,
     Guid OrganizationId,
     PublishStatus Status,
+    double Latitude,
+    double Longitude,
+    City City,
     IReadOnlyList<ProductImageResponse> Images,
     DateTime CreatedAt);
 
@@ -31,18 +34,26 @@ public record ProductPreviewResponse(
     DateTime? Date,
     int CategoryId,
     string CategoryName,
-    TicketingMode TicketingMode);
+    TicketingMode TicketingMode,
+    double Latitude,
+    double Longitude,
+    City City);
 
 /// <summary>Same shape for create and update — OrganizationId is never taken from this request,
 /// always from the caller's JWT claim (see ProductService.CreateAsync). Images are managed
 /// exclusively through the dedicated POST/DELETE /products/{id}/images endpoints, never bundled
-/// in here — same convention as Category's icon.</summary>
+/// in here — same convention as Category's icon. Latitude/Longitude/City are nullable here (so
+/// "not sent" is distinguishable from "0,0"/"first enum value") but required in practice — see
+/// CreateProductRequestValidator: the organizer must place an exact pin at creation time.</summary>
 public record UpsertProductRequest
 {
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public DateTime? Date { get; init; }
     public int CategoryId { get; init; }
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+    public City? City { get; init; }
 }
 
 public sealed record ProductQuery : BaseSearchObject
@@ -50,6 +61,10 @@ public sealed record ProductQuery : BaseSearchObject
     public Guid? OrganizationId { get; init; }
     public int? CategoryId { get; init; }
     public PublishStatus? Status { get; init; }
+
+    // Optional — narrows results to a single city (see Product.City), unlike CategoryId/Status
+    // this filter is available on the public GET /products endpoint too.
+    public City? City { get; init; }
 }
 
 /// <summary>Internal-only shape returned by GET /internal/products/{id} — never routed through

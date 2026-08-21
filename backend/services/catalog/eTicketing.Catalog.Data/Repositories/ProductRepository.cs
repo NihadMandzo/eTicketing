@@ -10,7 +10,7 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
     public ProductRepository(CatalogDbContext context) : base(context) { }
 
     public Task<PagedResult<Product>> SearchAsync(
-        BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, CancellationToken ct = default)
+        BaseSearchObject query, Guid? organizationId, int? categoryId, PublishStatus? status, City? city, CancellationToken ct = default)
         => Query()
             .AsNoTracking()
             .Include(p => p.Category)
@@ -19,6 +19,7 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
             .Where(p => organizationId == null || p.OrganizationId == organizationId)
             .Where(p => categoryId == null || p.CategoryId == categoryId)
             .Where(p => status == null || p.Status == status)
+            .Where(p => city == null || p.City == city)
             .OrderByDescending(p => p.CreatedAt)
             .ToPagedResultAsync(query.Page, query.PageSize, ct);
 

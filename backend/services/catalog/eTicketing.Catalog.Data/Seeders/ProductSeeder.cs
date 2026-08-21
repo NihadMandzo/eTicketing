@@ -19,6 +19,12 @@ public static class ProductSeeder
     private static readonly Guid SarajevoEventsId = Guid.Parse("a1a1a1a1-0000-0000-0000-000000000001");
     private static readonly Guid MostarSportArenaId = Guid.Parse("a1a1a1a1-0000-0000-0000-000000000002");
 
+    // City-center coordinates, used as a reasonable default pin for seed data only.
+    private const double SarajevoLatitude = 43.8563;
+    private const double SarajevoLongitude = 18.4131;
+    private const double MostarLatitude = 43.3438;
+    private const double MostarLongitude = 17.8078;
+
     public static Product[] GetSeedData() =>
     [
         new Product
@@ -30,6 +36,9 @@ public static class ProductSeeder
             CategoryId = 1, // Muzika
             OrganizationId = SarajevoEventsId,
             Status = PublishStatus.Published,
+            Latitude = SarajevoLatitude,
+            Longitude = SarajevoLongitude,
+            City = City.Sarajevo,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },
@@ -42,6 +51,9 @@ public static class ProductSeeder
             CategoryId = 1, // Muzika
             OrganizationId = SarajevoEventsId,
             Status = PublishStatus.Published,
+            Latitude = SarajevoLatitude,
+            Longitude = SarajevoLongitude,
+            City = City.Sarajevo,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },
@@ -54,6 +66,9 @@ public static class ProductSeeder
             CategoryId = 2, // Sport
             OrganizationId = MostarSportArenaId,
             Status = PublishStatus.Published,
+            Latitude = MostarLatitude,
+            Longitude = MostarLongitude,
+            City = City.Mostar,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },
@@ -66,6 +81,9 @@ public static class ProductSeeder
             CategoryId = 2, // Sport
             OrganizationId = MostarSportArenaId,
             Status = PublishStatus.Published,
+            Latitude = MostarLatitude,
+            Longitude = MostarLongitude,
+            City = City.Mostar,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },
@@ -78,6 +96,9 @@ public static class ProductSeeder
             CategoryId = 3, // Tehnologija
             OrganizationId = SarajevoEventsId,
             Status = PublishStatus.Published,
+            Latitude = SarajevoLatitude,
+            Longitude = SarajevoLongitude,
+            City = City.Sarajevo,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },
@@ -90,6 +111,9 @@ public static class ProductSeeder
             CategoryId = 3, // Tehnologija
             OrganizationId = MostarSportArenaId,
             Status = PublishStatus.Published,
+            Latitude = MostarLatitude,
+            Longitude = MostarLongitude,
+            City = City.Mostar,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp,
         },

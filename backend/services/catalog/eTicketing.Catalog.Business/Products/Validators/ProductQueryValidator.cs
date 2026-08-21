@@ -8,5 +8,8 @@ public class ProductQueryValidator : AbstractValidator<ProductQuery>
     public ProductQueryValidator()
     {
         Include(new BaseSearchObjectValidator<ProductQuery>());
+
+        // Optional filter — only validated when present, unlike the required City on create/update.
+        RuleFor(x => x.City).IsInEnum().When(x => x.City.HasValue);
     }
 }

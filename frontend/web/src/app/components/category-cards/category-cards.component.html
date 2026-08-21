@@ -1,0 +1,16 @@
+<div class="category-cards">
+  @for (category of categories(); track category.id; let i = $index) {
+    <button
+      type="button"
+      class="category-card"
+      [class.active]="selectedCategoryId() === category.id"
+      [attr.aria-pressed]="selectedCategoryId() === category.id"
+      (click)="select(category.id)"
+    >
+      <span class="category-card-image" [style.background-color]="colorFor(i)">
+        <app-category-icon [name]="category.name" [iconUrl]="category.iconUrl" />
+      </span>
+      <span class="category-card-title">{{ category.name }}</span>
+    </button>
+  }
+</div>

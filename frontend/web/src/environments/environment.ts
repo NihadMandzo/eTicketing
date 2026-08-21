@@ -5,4 +5,8 @@
 export const environment = {
   production: true,
   apiBaseUrl: 'http://localhost:5000/api',
+  // Baked in at Docker build time via the GOOGLE_MAPS_API_KEY build arg (see Dockerfile) — the
+  // placeholder below renders a grey "for development purposes only" map until a real key is
+  // provisioned. Needs the Maps JavaScript API enabled, HTTP-referrer restricted to this origin.
+  googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY',
 };

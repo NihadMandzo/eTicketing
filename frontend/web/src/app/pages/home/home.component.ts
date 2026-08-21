@@ -3,13 +3,13 @@ import { RouterLink } from '@angular/router';
 
 import { CatalogService } from '../../core/services/catalog.service';
 import { Category, Product } from '../../core/models/catalog.models';
-import { CategoryChipsComponent } from '../../components/category-chips/category-chips.component';
+import { CategoryCardsComponent } from '../../components/category-cards/category-cards.component';
 import { ProductCardComponent } from '../../components/product-card/product-card.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, CategoryChipsComponent, ProductCardComponent],
+  imports: [RouterLink, CategoryCardsComponent, ProductCardComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,13 +24,21 @@ export class HomeComponent {
 
   constructor() {
     this.catalogService.getCategories().subscribe({
-      next: (categories) => this.categories.set(categories),
-      error: () => this.categories.set([]),
+      next: (categories) => {
+        this.categories.set(categories);
+        // No "Sve kategorije" catch-all here (see CategoryCardsComponent) — the first real
+        // category is the default selection, lightly highlighted in the card grid.
+        this.selectedCategoryId.set(categories[0]?.id ?? null);
+        this.loadProducts();
+      },
+      error: () => {
+        this.categories.set([]);
+        this.loadProducts();
+      },
     });
-    this.loadProducts();
   }
 
-  onCategorySelected(categoryId: number | null): void {
+  onCategorySelected(categoryId: number): void {
     this.selectedCategoryId.set(categoryId);
     this.loadProducts();
   }

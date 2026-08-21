@@ -15,6 +15,11 @@ COPY . .
 ARG WEB_API_BASE_URL=http://localhost:5000/api
 ENV WEB_API_BASE_URL=${WEB_API_BASE_URL}
 
+# Same "reserved" status as WEB_API_BASE_URL above — src/environments/*.ts still hardcodes a
+# placeholder key today; wire this ARG into a real build-time substitution alongside that one.
+ARG GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+ENV GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+
 RUN npm run build
 
 # ---- Runtime stage -----------------------------------------------------------

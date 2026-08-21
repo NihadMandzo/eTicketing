@@ -54,6 +54,25 @@
               <p>{{ product.description }}</p>
             </div>
           }
+
+          <div class="location-section">
+            <h2>Lokacija</h2>
+            <p class="location-city">{{ cityLabels[product.city] }}</p>
+            @if (mapsReady() && mapCenter(); as center) {
+              <google-map
+                class="location-map"
+                height="320px"
+                width="100%"
+                [center]="center"
+                [zoom]="mapZoom"
+                [options]="mapOptions"
+              >
+                <map-marker [position]="center" />
+              </google-map>
+            } @else {
+              <div class="location-map location-map-placeholder">Učitavanje mape...</div>
+            }
+          </div>
         </div>
       </div>
 
