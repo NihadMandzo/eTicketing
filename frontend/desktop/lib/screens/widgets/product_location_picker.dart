@@ -45,6 +45,23 @@ class _ProductLocationPickerState extends State<ProductLocationPicker> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
 
+  // Without this, editing a product's location and saving leaves this (read-only,
+  // no-Key, same-tree-position) widget's State reused as-is — Flutter never re-runs the field
+  // initializer above, so the map keeps showing the pre-edit pin until the screen fully remounts.
+  @override
+  void didUpdateWidget(covariant ProductLocationPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialLatitude != oldWidget.initialLatitude ||
+        widget.initialLongitude != oldWidget.initialLongitude) {
+      final updated = LatLng(
+        widget.initialLatitude ?? _defaultLatitude,
+        widget.initialLongitude ?? _defaultLongitude,
+      );
+      setState(() => _position = updated);
+      _mapController.move(updated, _mapController.camera.zoom);
+    }
+  }
+
   void _handleTap(TapPosition _, LatLng point) {
     if (!widget.editable) return;
     setState(() => _position = point);

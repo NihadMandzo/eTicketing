@@ -15,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../utility/image_validation.dart';
 import '../utility/snackbar_service.dart';
 import '../widgets/confirm_dialog.dart';
+import 'widgets/product_delete_helper.dart';
 import 'widgets/product_location_picker.dart';
 import 'widgets/product_upsert_dialog.dart';
 import 'widgets/sector_upsert_dialog.dart';
@@ -193,20 +194,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _deleteProduct() async {
-    final confirmed = await ConfirmDialog.show(
-      context,
-      title: 'Obriši proizvod',
-      message: 'Da li ste sigurni da želite obrisati proizvod "${_product.name}"?',
-      confirmLabel: 'Obriši',
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await ProductProvider().delete(_product.id);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (mounted) handleApiError(e);
-    }
+    final deleted = await confirmAndDeleteProduct(context, _product);
+    if (!deleted || !mounted) return;
+    Navigator.of(context).pop();
   }
 
   void _openSectorDialog({SectorResponse? sector}) {

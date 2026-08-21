@@ -6,5 +6,5 @@ export const environment = {
   production: false,
   apiBaseUrl: 'http://localhost:5000/api',
   // Same placeholder-key caveat as environment.ts — set a real key locally to see a real map.
-  googleMapsApiKey: 'AIzaSyAE_ihJ2prQ0tJCNq2h0_LjPwDRk08VmxY',
+  googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY',
 };

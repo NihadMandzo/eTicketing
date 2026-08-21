@@ -11,10 +11,10 @@ import '../models/search_objects/product_search_object.dart';
 import '../providers/category_provider.dart';
 import '../providers/product_provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/confirm_dialog.dart';
 import 'product_detail_screen.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/paginated_screen_body.dart';
+import 'widgets/product_delete_helper.dart';
 import 'widgets/product_upsert_dialog.dart';
 import '../main.dart';
 
@@ -153,25 +153,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _deleteProduct(ProductResponse product) async {
-    final confirmed = await ConfirmDialog.show(
-      context,
-      title: 'Obriši proizvod',
-      message: 'Da li ste sigurni da želite obrisati proizvod "${product.name}"?',
-      confirmLabel: 'Obriši',
-    );
-    if (confirmed != true || !mounted) return;
+    final deleted = await confirmAndDeleteProduct(context, product);
+    if (!deleted || !mounted) return;
 
-    try {
-      await _provider.delete(product.id);
-      if (!mounted) return;
-
-      if (_products.length == 1 && _currentPage > 0) {
-        setState(() => _currentPage--);
-      }
-      await _loadData();
-    } catch (e) {
-      if (mounted) handleApiError(e);
+    if (_products.length == 1 && _currentPage > 0) {
+      setState(() => _currentPage--);
     }
+    await _loadData();
   }
 
   void _goToPage(int page) {

@@ -192,8 +192,10 @@ export class ProductDetailsComponent {
   /** Loads the Google Maps JS API script exactly once per page (shared across every
    * product-details view a buyer navigates to in one session), then flips mapsReady so the
    * @if in the template renders <google-map>. Dynamic <script> injection, rather than a static
-   * tag in index.html, because the API key comes from environment.ts (baked per-build via the
-   * GOOGLE_MAPS_API_KEY Docker ARG) and index.html has no template step to read it from. */
+   * tag in index.html, because the API key comes from environment.ts — a compile-time constant,
+   * not read from the Dockerfile's GOOGLE_MAPS_API_KEY build arg (that arg is reserved for future
+   * wiring, same "no-op today" status as WEB_API_BASE_URL) — and index.html has no template step
+   * to read it from either way. */
   private loadGoogleMapsScript(): void {
     if (typeof google !== 'undefined' && google.maps) {
       this.mapsReady.set(true);
