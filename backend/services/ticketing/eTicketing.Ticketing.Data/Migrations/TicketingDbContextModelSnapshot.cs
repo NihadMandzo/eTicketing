@@ -174,6 +174,12 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<DateOnly?>("ValidTo")
                         .HasColumnType("date");
 
+                    b.Property<DateTime?>("ValidatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ValidatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");

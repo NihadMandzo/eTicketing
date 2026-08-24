@@ -15,6 +15,20 @@ class TicketResponse {
   final DateTime? validTo;
   final DateTime createdAt;
 
+  /// The signed code this ticket's QR encodes — what an organizer's scanner
+  /// reads back at the gate.
+  final String qrPayload;
+
+  /// Ready-to-render `data:image/png;base64,...` QR, produced server-side by
+  /// eTicketing.Ticketing. Rendered there rather than here so this app and the
+  /// Angular web app share one QR implementation and neither needs a QR
+  /// package of its own.
+  final String qrImage;
+
+  /// Null until eTicketing.PdfGeneration finishes; at that point [status] is
+  /// 'Ready' too.
+  final String? pdfUrl;
+
   const TicketResponse({
     required this.id,
     required this.orderId,
@@ -29,6 +43,9 @@ class TicketResponse {
     this.validFrom,
     this.validTo,
     required this.createdAt,
+    this.qrPayload = '',
+    this.qrImage = '',
+    this.pdfUrl,
   });
 
   factory TicketResponse.fromJson(Map<String, dynamic> json) {
@@ -51,6 +68,9 @@ class TicketResponse {
       validFrom: json['validFrom'] != null ? DateTime.tryParse(json['validFrom'] as String) : null,
       validTo: json['validTo'] != null ? DateTime.tryParse(json['validTo'] as String) : null,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      qrPayload: json['qrPayload'] as String? ?? '',
+      qrImage: json['qrImage'] as String? ?? '',
+      pdfUrl: json['pdfUrl'] as String?,
     );
   }
 }

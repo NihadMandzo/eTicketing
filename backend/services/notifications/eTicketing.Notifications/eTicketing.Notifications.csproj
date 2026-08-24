@@ -15,5 +15,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Storage\eTicketing.Shared.Storage.csproj" />
   </ItemGroup>
 </Project>

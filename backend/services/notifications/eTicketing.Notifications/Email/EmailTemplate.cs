@@ -6,5 +6,7 @@ public enum EmailTemplate
     OrganizationCreated,
     OrganizationAdminDeleted,
     PasswordReset,
-    AdminPasswordChanged
+    AdminPasswordChanged,
+    TicketsReady,
+    ProductChanged
 }

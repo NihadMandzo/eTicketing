@@ -3,6 +3,15 @@
          manifests only cover dev tooling): the app talks to the Gateway over
          the network on every screen. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required by mobile_scanner for the organizer's gate-validation screen
+         (ScanTicketScreen). Buyers never hit that screen, so the runtime
+         prompt only appears for OrganizationAdmin/OrganizationSuperAdmin
+         accounts, the first time they open the Validacija tab. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Declared optional so the Play listing doesn't exclude camera-less
+         devices: everyone can still buy and show tickets, and gate staff have
+         the "Unesi kod ručno" fallback. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="eKarta"
         android:name="${applicationName}"

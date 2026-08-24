@@ -31,7 +31,7 @@ public class SectorServiceTests : IDisposable
     private void MockProduct(Guid productId, Guid organizationId, TicketingMode mode) =>
         _fixture.CatalogClient
             .Setup(c => c.GetProductAsync(productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CatalogProductResponse(productId, organizationId, PublishStatus.Published, mode));
+            .ReturnsAsync(new CatalogProductResponse(productId, organizationId, PublishStatus.Published, mode, "Test proizvod", null, City.Sarajevo));
 
     private static ClaimsPrincipal BuildCaller(string role, Guid? organizationId = null)
     {

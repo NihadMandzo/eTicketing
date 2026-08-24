@@ -1,15 +1,19 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/responses/ticket_response.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
 
-/// Mockup screen 6 — the QR "ticket stub" card. The QR itself is a static
-/// placeholder (a `qr_code_2` glyph, not a real scannable code and not the
-/// `qr_flutter` package) since Ticketing has no real gate-scanning consumer
-/// yet — showing a fake-but-scannable-looking pattern would be more
-/// misleading than an honest placeholder icon, same principle as
-/// `ComingSoonScreen`. The ticket code shown is the real `Ticket.Id`.
+/// Mockup screen 6 — the QR "ticket stub" card.
+///
+/// The QR is real and scannable: `ticket.qrImage` is a `data:` PNG rendered
+/// server-side by eTicketing.Ticketing, decoded straight into [Image.memory].
+/// Rendering it there rather than here means this app needs no QR package, and
+/// the code shown is byte-identical to the one in the emailed PDF and the one
+/// an organizer's scanner expects.
 class TicketQrScreen extends StatelessWidget {
   final TicketResponse ticket;
   final String productName;
@@ -52,13 +56,25 @@ class TicketQrScreen extends StatelessWidget {
     return '${_formatDate(date)} · $hh:$mm h';
   }
 
+  /// Strips the `data:image/png;base64,` prefix off the server's data URI.
+  /// Returns null if the field is empty or malformed, which the widget below
+  /// renders as an honest placeholder rather than a broken image box.
+  Uint8List? get _qrBytes {
+    final commaIndex = ticket.qrImage.indexOf(',');
+    if (commaIndex < 0) return null;
+    try {
+      return base64Decode(ticket.qrImage.substring(commaIndex + 1));
+    } on FormatException {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark
         ? AppColors.darkTextTertiary
         : AppColors.lightTextTertiary;
-    final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ulaznica')),
@@ -110,23 +126,13 @@ class TicketQrScreen extends StatelessWidget {
                         padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                         child: Column(
                           children: [
-                            Container(
-                              width: 160,
-                              height: 160,
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.darkBorder
-                                      : AppColors.lightBorder,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.qr_code_2_rounded,
-                                size: 120,
-                                color: isDark
-                                    ? AppColors.darkTextPrimary
-                                    : AppColors.lightTextPrimary,
+                            _QrPanel(bytes: _qrBytes, isDark: isDark),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Skenirajte na ulazu',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: tertiaryText,
                               ),
                             ),
                             const SizedBox(height: 14),
@@ -173,28 +179,12 @@ class TicketQrScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Nije dostupno.')),
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: primary, width: 2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Dodaj u Wallet',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                Text(
+                  ticket.status == 'Used'
+                      ? 'Ova ulaznica je već iskorištena i više ne vrijedi za ulaz.'
+                      : 'PDF ulaznica je poslana na vaš email.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: tertiaryText),
                 ),
               ],
             ),
@@ -209,8 +199,57 @@ class TicketQrScreen extends StatelessWidget {
     'Processing' => 'U obradi',
     'Ready' => 'Spremna',
     'Cancelled' => 'Otkazana',
+    'Used' => 'Iskorištena',
     _ => status,
   };
+}
+
+/// The QR plate. Always white-backed regardless of theme: the PNG is pure
+/// black-on-white and most scanners expect dark modules on a light field, so
+/// letting the dark surface show through would make a valid ticket unreadable
+/// at the gate.
+class _QrPanel extends StatelessWidget {
+  final Uint8List? bytes;
+  final bool isDark;
+
+  const _QrPanel({required this.bytes, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final tertiaryText = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
+
+    return Container(
+      width: 180,
+      height: 180,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: bytes == null
+          ? Center(
+              child: Text(
+                'QR kod nije dostupan',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: tertiaryText),
+              ),
+            )
+          : Image.memory(
+              bytes!,
+              // The QR is drawn at a fixed module size server-side; nearest-
+              // neighbour keeps the modules crisp when scaled up instead of
+              // blurring their edges the way the default filtering does.
+              filterQuality: FilterQuality.none,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
+    );
+  }
 }
 
 class _InfoLine extends StatelessWidget {

@@ -24,6 +24,9 @@ public sealed class FakeBlobStorageService : IBlobStorageService
         return Task.FromResult(GetPublicUrl(containerName, blobName));
     }
 
+    public Task<byte[]?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default) =>
+        Task.FromResult(_blobs.TryGetValue(Key(containerName, blobName), out var bytes) ? bytes : null);
+
     public Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default)
     {
         if (ThrowOnDelete) throw new InvalidOperationException("Simulated blob storage outage.");

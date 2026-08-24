@@ -1,6 +1,7 @@
 using eTicketing.Notifications.Messaging;
 using eTicketing.Notifications.Options;
 using eTicketing.Notifications.Sending;
+using eTicketing.Shared.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
@@ -60,6 +61,15 @@ public static class NotificationsServiceCollectionExtensions
                 });
                 pb.AddTimeout(TimeSpan.FromSeconds(10));
             });
+
+        // Ticket PDFs are attached to the purchase-confirmation email as inline base64, so this
+        // consumer has to read them back out of blob storage itself. Not the WebApplicationBuilder
+        // AddAzureBlobStorage extension — this is a Worker host, same as PdfGeneration.
+        builder.Services.AddOptions<BlobStorageOptions>()
+            .Bind(builder.Configuration.GetSection(BlobStorageOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.ConnectionString), "BlobStorage:ConnectionString mora biti podešen.")
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IBlobStorageService, AzureBlobStorageService>();
 
         builder.Services.AddSingleton<NotificationDispatcher>();
         builder.Services.AddHostedService<RabbitMqConsumerService>();

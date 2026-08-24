@@ -14,15 +14,24 @@ namespace eTicketing.Notifications.Tests.Messaging;
 
 public class NotificationDispatcherTests
 {
+    /// <summary>Must match NotificationDispatcher's own private constant — the container the
+    /// dispatcher reads ticket PDFs back out of.</summary>
+    private const string TicketPdfContainer = "ticket-pdfs";
+
     private readonly Mock<IEmailSender> _emailSenderMock = new();
+    private readonly FakeBlobStorageService _blobStorage = new();
     private readonly ListLogger<NotificationDispatcher> _logger = new();
     private readonly NotificationDispatcher _sut;
 
     public NotificationDispatcherTests()
     {
         var frontendOptions = MsOptions.Create(new FrontendOptions { WebBaseUrl = "http://localhost:4200" });
-        _sut = new NotificationDispatcher(_emailSenderMock.Object, frontendOptions, _logger);
+        _sut = new NotificationDispatcher(_emailSenderMock.Object, _blobStorage, frontendOptions, _logger);
     }
+
+    /// <summary>Stand-in for the bytes PdfGeneration uploaded — distinct per ticket so a test can
+    /// prove each attachment carries its OWN file, not just the right count.</summary>
+    private static byte[] PdfBytesFor(Guid ticketId) => [.. "%PDF-1.4 "u8, .. ticketId.ToByteArray()];
 
     private static ReadOnlyMemory<byte> Serialize<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value);
 
@@ -95,6 +104,114 @@ public class NotificationDispatcherTests
         _emailSenderMock.Verify(s => s.SendAsync(
             It.Is<EmailMessage>(m => m.ToEmail == "jane@example.com"),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForTicketPdfReady_SendsOneEmailWithOneAttachmentPerTicket()
+    {
+        var evt = TicketPdfReadyEvent(2);
+
+        await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "buyer@example.com"
+                && m.HtmlBody.Contains("Ljetni Festival")
+                && m.Attachments.Count == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForTicketPdfReady_AttachesEachBlobsBytesUnderItsOwnFileName()
+    {
+        // Guards the 2026-08-24 fix: attachments must carry the PDF bytes read out of blob storage,
+        // not a URL for Brevo to fetch. The URL form was accepted by Brevo and reported delivered,
+        // but never reached recipients.
+        var evt = TicketPdfReadyEvent(2);
+
+        await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.Attachments.Select(a => a.Name).SequenceEqual(evt.Tickets.Select(t => t.FileName))
+                && m.Attachments.Select(a => Convert.ToBase64String(a.Content))
+                    .SequenceEqual(evt.Tickets.Select(t => Convert.ToBase64String(PdfBytesFor(t.TicketId))))),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForTicketPdfReady_SendsRealPdfBytesNotAUrl()
+    {
+        var evt = TicketPdfReadyEvent(1);
+        // Hoisted out of the expression tree below — a u8 literal is a ReadOnlySpan, which can't
+        // appear inside one.
+        var pdfMagic = "%PDF-"u8.ToArray();
+
+        await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m => m.Attachments.Single().Content.Take(5).SequenceEqual(pdfMagic)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForTicketPdfReady_WithAMissingBlob_StillSendsTheEmailWithoutThatAttachment()
+    {
+        // A vanished PDF must not cost the buyer the whole email — the ticket codes are in the body.
+        var evt = TicketPdfReadyEvent(2, seedBlobs: false);
+        _blobStorage.Seed(TicketPdfContainer, evt.Tickets[0].BlobName, PdfBytesFor(evt.Tickets[0].TicketId));
+
+        await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m => m.Attachments.Count == 1
+                && m.Attachments[0].Name == evt.Tickets[0].FileName),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _logger.Messages.Should().Contain(m => m.Contains("ne postoji"));
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForProductChanged_SendsToTheAlreadyResolvedRecipient()
+    {
+        // Ticketing already fanned this out per buyer — Notifications does no lookup of its own.
+        var evt = new ProductChangedNotification(Guid.NewGuid(), "Ljetni Festival", "ana@example.com",
+            [new ProductFieldChange("Datum i vrijeme", "01.09.2026. 20:00", "02.09.2026. 20:00")]);
+
+        await _sut.DispatchAsync(EventNames.ProductChanged, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "ana@example.com"
+                && m.HtmlBody.Contains("02.09.2026. 20:00")
+                && m.Attachments.Count == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private TicketPdfReady TicketPdfReadyEvent(int ticketCount, bool seedBlobs = true)
+    {
+        var orderId = Guid.NewGuid();
+        var tickets = Enumerable.Range(0, ticketCount).Select(i =>
+        {
+            var ticketId = Guid.NewGuid();
+            return new TicketPdf(
+                ticketId,
+                $"{orderId:N}/{ticketId:N}.pdf",
+                $"ulaznica-{i}.pdf",
+                "VIP", i == 0 ? "Odrasli" : "Djeca", 50);
+        }).ToList();
+
+        if (seedBlobs)
+        {
+            foreach (var t in tickets)
+            {
+                _blobStorage.Seed(TicketPdfContainer, t.BlobName, PdfBytesFor(t.TicketId));
+            }
+        }
+
+        return new TicketPdfReady(
+            orderId, Guid.NewGuid(), Guid.NewGuid(), "buyer@example.com",
+            "Ljetni Festival", new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc), "Sarajevo",
+            50 * ticketCount, tickets);
     }
 
     [Fact]

@@ -26,4 +26,11 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// owning TicketingMode (e.g. for Ticketing's internal ownership/mode lookup), Images backs
     /// ProductService.ToResponse's ImageUrls and the image upload/delete/product-delete paths.</summary>
     Task<Product?> GetByIdWithCategoryAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Batch form of <see cref="GetByIdWithCategoryAsync"/> without Images — backs the
+    /// internal POST /internal/products/by-ids lookup eTicketing.Ticketing uses to label the
+    /// organizer's gate-validation list. Images are deliberately not included: that caller only
+    /// needs Name/Date/TicketingMode, and pulling up to 5 image rows per product for it would be
+    /// pure waste.</summary>
+    Task<List<Product>> GetByIdsWithCategoryAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
 }

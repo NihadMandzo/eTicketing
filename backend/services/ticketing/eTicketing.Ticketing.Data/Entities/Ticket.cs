@@ -2,12 +2,16 @@ using eTicketing.Contracts.Persistence;
 
 namespace eTicketing.Ticketing.Data.Entities;
 
+/// <summary>Persisted as the integer ordinal (System.Text.Json default) and mirrored by ordinal in
+/// every frontend enum table — frontend/web's TICKET_STATUSES and frontend/mobile's
+/// ticketStatusNames. Append new values only; never reorder or remove.</summary>
 public enum TicketStatus
 {
     Processing,
     Confirmed,
     Ready,     // PDF generated (Sprint 4 flow)
-    Cancelled
+    Cancelled,
+    Used       // Scanned and admitted at the gate — terminal, see MarkValidated
 }
 
 /// <summary>
@@ -57,6 +61,13 @@ public class Ticket : BaseEntity
 
     // Set once eTicketing.PdfGeneration finishes, Status → Ready.
     public string? PdfBlobName { get; set; }
+
+    // Set exactly once, by MarkValidated, when an organizer scans this ticket at the gate. Private
+    // setters for the same reason ValidDate/ValidFrom/ValidTo have them: the only way to write
+    // either is through the one method that also flips Status to Used, so a validated ticket can
+    // never exist with a timestamp but a still-admittable status (or vice versa).
+    public DateTime? ValidatedAt { get; private set; }
+    public Guid? ValidatedByUserId { get; private set; }
 
     // Parameterless constructor stays available (private, not public) for EF Core materialization
     // and the object-initializer syntax the three factories below use — nothing outside this class
@@ -117,4 +128,15 @@ public class Ticket : BaseEntity
             ValidFrom = validFrom,
             ValidTo = validTo,
         };
+
+    /// <summary>Admits this ticket at the gate: records who scanned it and when, and moves it to
+    /// the terminal <see cref="TicketStatus.Used"/> so a second scan of the same QR is rejected.
+    /// Callers must already hold the per-ticket Redis validation lock and must already have
+    /// checked the ticket is currently admittable — this method does not re-check, it commits.</summary>
+    public void MarkValidated(Guid byUserId, DateTime at)
+    {
+        Status = TicketStatus.Used;
+        ValidatedAt = at;
+        ValidatedByUserId = byUserId;
+    }
 }

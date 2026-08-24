@@ -27,6 +27,7 @@ public static class CatalogServiceCollectionExtensions
 
         builder.Services.AddScoped<ICategoryService, CategoryService>();
         builder.Services.AddScoped<IProductService, ProductService>();
+        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
         builder.Services.AddValidatorsFromAssembly(typeof(ICategoryService).Assembly);
         // Mapster's IRegister configs (CategoryMappingConfig, ProductMappingConfig) are scanned
         // into TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in

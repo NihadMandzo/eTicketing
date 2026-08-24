@@ -47,6 +47,11 @@ public interface IProductService
     /// verify Sector-creation ownership and to read the product's Category.TicketingMode.</summary>
     Task<Result<ProductInternalResponse>> GetInternalAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Internal-only batch form of <see cref="GetInternalAsync"/> — one call for every
+    /// product an organizer is validating tickets against today, instead of one call per product.
+    /// Unknown ids are simply absent from the result rather than an error.</summary>
+    Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+
     /// <summary>Uploads one gallery photo (up to 5 per product, see ProductImageValidation.MaxCount)
     /// to Azure Blob Storage ("product-images" container). Ownership-checked.</summary>
     Task<Result<ProductResponse>> UploadImageAsync(Guid id, IFormFile image, ClaimsPrincipal user, CancellationToken ct = default);

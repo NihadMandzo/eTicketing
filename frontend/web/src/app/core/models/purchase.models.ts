@@ -1,10 +1,18 @@
 import { coerceEnum } from '../utils/api-enum.util';
 
-export type TicketStatus = 'Processing' | 'Confirmed' | 'Ready' | 'Cancelled';
+export type TicketStatus = 'Processing' | 'Confirmed' | 'Ready' | 'Cancelled' | 'Used';
 
 // Declaration order must match eTicketing.Ticketing.Data.Entities.TicketStatus
-// exactly — the wire value is the ordinal, see coerceEnum.
-const TICKET_STATUSES: readonly TicketStatus[] = ['Processing', 'Confirmed', 'Ready', 'Cancelled'];
+// exactly — the wire value is the ordinal, see coerceEnum. 'Used' is appended
+// (never inserted) for the same reason: an organizer scanning a ticket at the
+// gate moves it to that terminal status.
+const TICKET_STATUSES: readonly TicketStatus[] = [
+  'Processing',
+  'Confirmed',
+  'Ready',
+  'Cancelled',
+  'Used',
+];
 
 export const toTicketStatus = (raw: unknown): TicketStatus => coerceEnum(raw, TICKET_STATUSES, 'Confirmed');
 
@@ -35,6 +43,16 @@ export interface Ticket {
   validFrom: string | null;
   validTo: string | null;
   createdAt: string;
+  /** The signed code this ticket's QR encodes — what a gate scanner reads back. */
+  qrPayload: string;
+  /**
+   * Ready-to-render `data:image/png;base64,...` QR, produced server-side by
+   * eTicketing.Ticketing. Rendered there rather than here so web and mobile
+   * share one QR implementation and neither needs a QR library of its own.
+   */
+  qrImage: string;
+  /** Null until eTicketing.PdfGeneration finishes; at that point status is 'Ready' too. */
+  pdfUrl: string | null;
 }
 
 export interface PurchaseResponse {

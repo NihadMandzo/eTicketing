@@ -10,6 +10,7 @@ public sealed class EmailMessageBuilder
     private string? _toName;
     private string? _subject;
     private string? _htmlBody;
+    private readonly List<EmailAttachment> _attachments = [];
 
     public EmailMessageBuilder WithTo(string email, string? name = null)
     {
@@ -24,6 +25,14 @@ public sealed class EmailMessageBuilder
         return this;
     }
 
+    /// <summary>Attaches a file Brevo will fetch by URL at send time — see EmailAttachment.
+    /// Repeatable: one purchase can produce several ticket PDFs, all on the same email.</summary>
+    public EmailMessageBuilder WithAttachment(string name, byte[] content)
+    {
+        _attachments.Add(new EmailAttachment(name, content));
+        return this;
+    }
+
     /// <summary>Each EmailTemplate value has exactly one paired *Data record — a wrong pairing
     /// throws InvalidCastException immediately (caught by that template's own unit test).</summary>
     public EmailMessageBuilder WithTemplate(EmailTemplate template, object data)
@@ -35,6 +44,8 @@ public sealed class EmailMessageBuilder
             EmailTemplate.OrganizationAdminDeleted => OrganizationAdminDeletedTemplate.Render((OrganizationAdminDeletedData)data),
             EmailTemplate.PasswordReset => PasswordResetTemplate.Render((PasswordResetData)data),
             EmailTemplate.AdminPasswordChanged => AdminPasswordChangedTemplate.Render((AdminPasswordChangedData)data),
+            EmailTemplate.TicketsReady => TicketsReadyTemplate.Render((TicketsReadyData)data),
+            EmailTemplate.ProductChanged => ProductChangedTemplate.Render((ProductChangedData)data),
             _ => throw new ArgumentOutOfRangeException(nameof(template), template, "Nepoznat email template.")
         };
 
@@ -53,6 +64,6 @@ public sealed class EmailMessageBuilder
         if (_htmlBody is null)
             throw new InvalidOperationException("WithTemplate mora biti pozvan prije Build().");
 
-        return new EmailMessage(_toEmail, _toName, _subject ?? string.Empty, _htmlBody);
+        return new EmailMessage(_toEmail, _toName, _subject ?? string.Empty, _htmlBody, _attachments);
     }
 }

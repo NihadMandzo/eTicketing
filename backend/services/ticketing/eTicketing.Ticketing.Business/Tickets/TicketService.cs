@@ -3,7 +3,6 @@ using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Security;
-using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 
 namespace eTicketing.Ticketing.Business.Tickets;
@@ -11,8 +10,13 @@ namespace eTicketing.Ticketing.Business.Tickets;
 public class TicketService : ITicketService
 {
     private readonly ITicketRepository _ticketRepository;
+    private readonly TicketResponseFactory _responseFactory;
 
-    public TicketService(ITicketRepository ticketRepository) => _ticketRepository = ticketRepository;
+    public TicketService(ITicketRepository ticketRepository, TicketResponseFactory responseFactory)
+    {
+        _ticketRepository = ticketRepository;
+        _responseFactory = responseFactory;
+    }
 
     public async Task<Result<PagedResult<TicketResponse>>> GetMineAsync(TicketQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
@@ -20,18 +24,13 @@ public class TicketService : ITicketService
 
         return Result<PagedResult<TicketResponse>>.Success(new PagedResult<TicketResponse>
         {
-            Items = paged.Items.Select(ToResponse).ToList(),
+            // TicketRepository.SearchByUserAsync already .Includes Sector/TicketType, so the
+            // factory's navigation-based overload resolves SectorName/TicketTypeName without a
+            // per-row query.
+            Items = paged.Items.Select(_responseFactory.Create).ToList(),
             TotalCount = paged.TotalCount,
             Page = paged.Page,
             PageSize = paged.PageSize,
         });
     }
-
-    // Manual mapping (not Mapster) — SectorName/TicketTypeName come from navigations
-    // (TicketRepository.SearchByUserAsync already .Includes Sector/TicketType), not flat fields.
-    private static TicketResponse ToResponse(Ticket ticket) =>
-        new(
-            ticket.Id, ticket.OrderId, ticket.SectorId, ticket.Sector?.Name ?? "", ticket.ProductId,
-            ticket.TicketTypeId, ticket.TicketType?.Name,
-            ticket.Status, ticket.PricePaid, ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo, ticket.CreatedAt);
 }

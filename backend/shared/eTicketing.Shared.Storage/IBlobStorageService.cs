@@ -12,6 +12,11 @@ public interface IBlobStorageService
     /// <summary>Uploads (overwriting if the blob already exists) and returns the blob's public URL.</summary>
     Task<string> UploadAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default);
 
+    /// <summary>Reads a blob back as bytes, or null if it no longer exists. Needed because
+    /// eTicketing.Notifications attaches ticket PDFs to Brevo as inline base64 content rather than
+    /// as a URL for Brevo to fetch — see BrevoEmailSender for why the URL form was abandoned.</summary>
+    Task<byte[]?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default);
+
     /// <summary>Deletes the blob if it exists — a no-op, not an error, if it doesn't (mirrors hard-delete cleanup on entity delete).</summary>
     Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default);
 
