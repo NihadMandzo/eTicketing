@@ -2,9 +2,11 @@ using System.Text;
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.PdfGeneration.Documents;
+using eTicketing.PdfGeneration.Options;
 using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Tests.TestSupport;
 using FluentAssertions;
+using MsOptions = Microsoft.Extensions.Options.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using QuestPDF.Infrastructure;
@@ -22,13 +24,20 @@ public class TicketPdfGeneratorTests
     static TicketPdfGeneratorTests()
     {
         // Normally set once in PdfGenerationServiceCollectionExtensions; QuestPDF refuses to render
-        // a single page without it, and these tests bypass the composition root.
+        // a single page without it, and these tests bypass the composition root. Same for the
+        // embedded Manrope/IBM Plex Mono faces the ticket design is built on — without them
+        // QuestPDF would substitute silently and every layout assertion below would still pass.
         QuestPDF.Settings.License = LicenseType.Community;
+        TicketTheme.EnsureFontsRegistered();
     }
 
     public TicketPdfGeneratorTests()
     {
-        _sut = new TicketPdfGenerator(_catalogClient.Object, _blobStorage, NullLogger<TicketPdfGenerator>.Instance);
+        _sut = new TicketPdfGenerator(
+            _catalogClient.Object,
+            _blobStorage,
+            MsOptions.Create(new TicketSupportOptions { Email = "podrska@ekarta.ba", Phone = "+387 33 555 120" }),
+            NullLogger<TicketPdfGenerator>.Instance);
         MockProduct(TicketingMode.SingleOccurrence, new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc));
     }
 

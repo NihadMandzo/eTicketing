@@ -17,6 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Embedded rather than copied to disk: the runtime image ships only Liberation, and the
+         ticket design depends on Manrope's 400-800 weight range. Both faces are OFL 1.1 (licences
+         alongside the .ttf files). -->
+    <EmbeddedResource Include="Documents\Fonts\*.ttf" />
+    <EmbeddedResource Include="Documents\logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
     <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Storage\eTicketing.Shared.Storage.csproj" />
   </ItemGroup>

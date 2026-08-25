@@ -1,7 +1,9 @@
 using eTicketing.Contracts.Events;
 using eTicketing.PdfGeneration.External;
+using eTicketing.PdfGeneration.Options;
 using eTicketing.PdfGeneration.Qr;
 using eTicketing.Shared.Storage;
+using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
 
 namespace eTicketing.PdfGeneration.Documents;
@@ -30,12 +32,18 @@ public class TicketPdfGenerator : ITicketPdfGenerator
 
     private readonly ICatalogClient _catalogClient;
     private readonly IBlobStorageService _blobStorage;
+    private readonly TicketSupportInfo _support;
     private readonly ILogger<TicketPdfGenerator> _logger;
 
-    public TicketPdfGenerator(ICatalogClient catalogClient, IBlobStorageService blobStorage, ILogger<TicketPdfGenerator> logger)
+    public TicketPdfGenerator(
+        ICatalogClient catalogClient,
+        IBlobStorageService blobStorage,
+        IOptions<TicketSupportOptions> support,
+        ILogger<TicketPdfGenerator> logger)
     {
         _catalogClient = catalogClient;
         _blobStorage = blobStorage;
+        _support = new TicketSupportInfo(support.Value.Email, support.Value.Phone);
         _logger = logger;
     }
 
@@ -57,7 +65,8 @@ public class TicketPdfGenerator : ITicketPdfGenerator
         foreach (var ticket in order.Tickets)
         {
             var qrPng = QrCodeRenderer.Render(ticket.QrPayload);
-            var document = new TicketDocument(order, ticket, product.Name, product.Date, product.City.ToString(), qrPng);
+            var document = new TicketDocument(
+                order, ticket, product.Name, product.Date, product.City.ToString(), qrPng, _support);
 
             var pdfBytes = document.GeneratePdf();
 

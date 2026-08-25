@@ -21,8 +21,16 @@ public static class PdfGenerationServiceCollectionExtensions
         // first GeneratePdf call, so it goes here rather than lazily in the generator.
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // Manrope / IBM Plex Mono are embedded in this assembly and must be known to QuestPDF
+        // before the first render. Registering at startup surfaces a packaging mistake as a
+        // failure to boot rather than as a silently font-substituted ticket.
+        TicketTheme.EnsureFontsRegistered();
+
         builder.Services.AddOptions<RabbitMqOptions>()
             .Bind(builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+
+        builder.Services.AddOptions<TicketSupportOptions>()
+            .Bind(builder.Configuration.GetSection(TicketSupportOptions.SectionName));
 
         // Not the WebApplicationBuilder-based AddAzureBlobStorage extension — this is a Worker
         // host, so the two registrations that helper makes are done by hand here.

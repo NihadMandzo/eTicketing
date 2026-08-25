@@ -171,6 +171,10 @@ services:
       # Ticket PDFs are uploaded to the "ticket-pdfs" container; notifications-service reads them
       # back out to attach them to the confirmation email.
       BlobStorage__ConnectionString: "${AZURE_STORAGE_CONNECTION_STRING:?Set AZURE_STORAGE_CONNECTION_STRING in .env}"
+      # Printed in the footer of every ticket. The phone is optional — left unset, the ticket shows
+      # the address alone rather than a number nobody answers.
+      TicketSupport__Email: "${SUPPORT_EMAIL:-podrska@ekarta.ba}"
+      TicketSupport__Phone: "${SUPPORT_PHONE:-}"
       # TicketPurchased carries no product name/date (Ticketing only stores a ProductId) — the PDF
       # gets them from Catalog's internal endpoint.
       Services__Catalog: "http://catalog-service:8080"
