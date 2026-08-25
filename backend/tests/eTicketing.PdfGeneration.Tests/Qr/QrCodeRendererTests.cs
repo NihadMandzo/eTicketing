@@ -1,4 +1,4 @@
-using eTicketing.PdfGeneration.Qr;
+using eTicketing.Shared.TicketPdf;
 using FluentAssertions;
 
 namespace eTicketing.PdfGeneration.Tests.Qr;

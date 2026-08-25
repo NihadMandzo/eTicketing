@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 
 import { Ticket } from '../../core/models/purchase.models';
+import { environment } from '../../../environments/environment';
 
 const FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -52,6 +53,11 @@ export class TicketDetailModalComponent implements AfterViewInit, OnDestroy {
   readonly closed = output<void>();
 
   readonly isUsed = computed(() => this.ticket().status === 'Used');
+
+  // Ticket PDFs are never stored — Ticketing renders the sheet per request — so the link is a plain
+  // API URL that works from the moment the ticket exists, with no "generating…" state to wait out.
+  // Opened as a top-level navigation, which carries the httpOnly session cookie (SameSite=Lax/None).
+  readonly pdfUrl = computed(() => `${environment.apiBaseUrl}/tickets/${this.ticket().id}/pdf`);
 
   readonly validityLine = computed(() => {
     const t = this.ticket();

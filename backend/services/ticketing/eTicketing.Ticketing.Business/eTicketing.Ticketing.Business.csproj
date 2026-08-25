@@ -5,7 +5,7 @@
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
     <!-- For GetPublicUrl only (TicketResponseFactory turns Ticket.PdfBlobName into a downloadable
          URL). Same reference Catalog/Identity already take for icon/logo URLs. -->
-    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Storage\eTicketing.Shared.Storage.csproj" />
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.TicketPdf\eTicketing.Shared.TicketPdf.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,7 +20,7 @@ public class TicketPdfCompletionServiceTests : IDisposable
     public TicketPdfCompletionServiceTests() => _sut = _fixture.CreateTicketPdfCompletionService();
 
     [Fact]
-    public async Task ApplyAsync_StampsEveryTicketInTheOrderAndMovesThemToReady()
+    public async Task ApplyAsync_MovesEveryTicketInTheOrderToReady()
     {
         var orderId = Guid.NewGuid();
         var first = await SeedTicketAsync(orderId);
@@ -31,24 +31,6 @@ public class TicketPdfCompletionServiceTests : IDisposable
         var tickets = _fixture.DbContext.Tickets.Where(t => t.OrderId == orderId).ToList();
         tickets.Should().HaveCount(2);
         tickets.Should().OnlyContain(t => t.Status == TicketStatus.Ready);
-        tickets.Should().OnlyContain(t => t.PdfBlobName != null);
-    }
-
-    [Fact]
-    public async Task ApplyAsync_MakesPdfUrlResolvableOnTicketResponse()
-    {
-        // The stamp is only worth anything because it's what turns PdfUrl from null into a real
-        // download link — assert the end the buyer actually sees, not just the column.
-        var orderId = Guid.NewGuid();
-        var ticket = await SeedTicketAsync(orderId);
-
-        await _sut.ApplyAsync(Event(orderId, ticket.Id));
-
-        var stamped = await _fixture.DbContext.Tickets.FindAsync(ticket.Id);
-        var response = _fixture.ResponseFactory.Create(stamped!, "VIP", null);
-
-        response.PdfUrl.Should().Be(
-            $"https://fake-storage.blob.core.windows.net/{TicketResponseFactory.PdfContainerName}/{stamped!.PdfBlobName}");
     }
 
     [Fact]
@@ -63,11 +45,10 @@ public class TicketPdfCompletionServiceTests : IDisposable
 
         var reloaded = await _fixture.DbContext.Tickets.FindAsync(ticket.Id);
         reloaded!.Status.Should().Be(TicketStatus.Ready);
-        reloaded.PdfBlobName.Should().Be($"{orderId:N}/{ticket.Id:N}.pdf");
     }
 
     [Fact]
-    public async Task ApplyAsync_ForATicketAlreadyScannedAtTheGate_RecordsThePdfButKeepsUsedStatus()
+    public async Task ApplyAsync_ForATicketAlreadyScannedAtTheGate_KeepsUsedStatus()
     {
         // Possible for a same-day at-the-door purchase: the buyer walks in before the PDF worker
         // catches up. Used is terminal — resurrecting it to Ready would make the ticket admittable
@@ -79,7 +60,6 @@ public class TicketPdfCompletionServiceTests : IDisposable
 
         var reloaded = await _fixture.DbContext.Tickets.FindAsync(ticket.Id);
         reloaded!.Status.Should().Be(TicketStatus.Used);
-        reloaded.PdfBlobName.Should().NotBeNull();
     }
 
     [Fact]
@@ -131,7 +111,7 @@ public class TicketPdfCompletionServiceTests : IDisposable
         new(orderId, Guid.NewGuid(), Guid.NewGuid(), "buyer@example.com",
             "Test proizvod", null, "Sarajevo", 50 * ticketIds.Length,
             ticketIds.Select(id => new TicketPdf(
-                id, $"{orderId:N}/{id:N}.pdf",
+                id, "%PDF-1.4 fake"u8.ToArray(),
                 $"ulaznica-{id.ToString("N")[..8]}.pdf", "VIP", null, 50)).ToList());
 
     private async Task<Ticket> SeedTicketAsync(Guid orderId, TicketStatus status = TicketStatus.Confirmed)

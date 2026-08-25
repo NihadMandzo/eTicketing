@@ -14,22 +14,17 @@ namespace eTicketing.Notifications.Tests.Messaging;
 
 public class NotificationDispatcherTests
 {
-    /// <summary>Must match NotificationDispatcher's own private constant — the container the
-    /// dispatcher reads ticket PDFs back out of.</summary>
-    private const string TicketPdfContainer = "ticket-pdfs";
-
     private readonly Mock<IEmailSender> _emailSenderMock = new();
-    private readonly FakeBlobStorageService _blobStorage = new();
     private readonly ListLogger<NotificationDispatcher> _logger = new();
     private readonly NotificationDispatcher _sut;
 
     public NotificationDispatcherTests()
     {
         var frontendOptions = MsOptions.Create(new FrontendOptions { WebBaseUrl = "http://localhost:4200" });
-        _sut = new NotificationDispatcher(_emailSenderMock.Object, _blobStorage, frontendOptions, _logger);
+        _sut = new NotificationDispatcher(_emailSenderMock.Object, frontendOptions, _logger);
     }
 
-    /// <summary>Stand-in for the bytes PdfGeneration uploaded — distinct per ticket so a test can
+    /// <summary>Stand-in for the bytes PdfGeneration rendered — distinct per ticket so a test can
     /// prove each attachment carries its OWN file, not just the right count.</summary>
     private static byte[] PdfBytesFor(Guid ticketId) => [.. "%PDF-1.4 "u8, .. ticketId.ToByteArray()];
 
@@ -124,9 +119,9 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task DispatchAsync_ForTicketPdfReady_AttachesEachBlobsBytesUnderItsOwnFileName()
     {
-        // Guards the 2026-08-24 fix: attachments must carry the PDF bytes read out of blob storage,
-        // not a URL for Brevo to fetch. The URL form was accepted by Brevo and reported delivered,
-        // but never reached recipients.
+        // Guards the 2026-08-24 fix: attachments must carry the PDF bytes, not a URL for Brevo to
+        // fetch. The URL form was accepted by Brevo and reported delivered, but never reached
+        // recipients.
         var evt = TicketPdfReadyEvent(2);
 
         await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
@@ -155,22 +150,6 @@ public class NotificationDispatcherTests
     }
 
     [Fact]
-    public async Task DispatchAsync_ForTicketPdfReady_WithAMissingBlob_StillSendsTheEmailWithoutThatAttachment()
-    {
-        // A vanished PDF must not cost the buyer the whole email — the ticket codes are in the body.
-        var evt = TicketPdfReadyEvent(2, seedBlobs: false);
-        _blobStorage.Seed(TicketPdfContainer, evt.Tickets[0].BlobName, PdfBytesFor(evt.Tickets[0].TicketId));
-
-        await _sut.DispatchAsync(EventNames.TicketPdfReady, Serialize(evt));
-
-        _emailSenderMock.Verify(s => s.SendAsync(
-            It.Is<EmailMessage>(m => m.Attachments.Count == 1
-                && m.Attachments[0].Name == evt.Tickets[0].FileName),
-            It.IsAny<CancellationToken>()), Times.Once);
-        _logger.Messages.Should().Contain(m => m.Contains("ne postoji"));
-    }
-
-    [Fact]
     public async Task DispatchAsync_ForProductChanged_SendsToTheAlreadyResolvedRecipient()
     {
         // Ticketing already fanned this out per buyer — Notifications does no lookup of its own.
@@ -187,7 +166,7 @@ public class NotificationDispatcherTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private TicketPdfReady TicketPdfReadyEvent(int ticketCount, bool seedBlobs = true)
+    private static TicketPdfReady TicketPdfReadyEvent(int ticketCount)
     {
         var orderId = Guid.NewGuid();
         var tickets = Enumerable.Range(0, ticketCount).Select(i =>
@@ -195,18 +174,10 @@ public class NotificationDispatcherTests
             var ticketId = Guid.NewGuid();
             return new TicketPdf(
                 ticketId,
-                $"{orderId:N}/{ticketId:N}.pdf",
+                PdfBytesFor(ticketId),
                 $"ulaznica-{i}.pdf",
                 "VIP", i == 0 ? "Odrasli" : "Djeca", 50);
         }).ToList();
-
-        if (seedBlobs)
-        {
-            foreach (var t in tickets)
-            {
-                _blobStorage.Seed(TicketPdfContainer, t.BlobName, PdfBytesFor(t.TicketId));
-            }
-        }
 
         return new TicketPdfReady(
             orderId, Guid.NewGuid(), Guid.NewGuid(), "buyer@example.com",

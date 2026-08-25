@@ -43,11 +43,7 @@
         </div>
       </div>
 
-      @if (ticket().pdfUrl; as pdfUrl) {
-        <a class="pdf-btn" [href]="pdfUrl" target="_blank" rel="noopener">Preuzmi PDF</a>
-      } @else {
-        <p class="pdf-pending">PDF ulaznica se generiše — stiže i na vaš email.</p>
-      }
+      <a class="pdf-btn" [href]="pdfUrl()" target="_blank" rel="noopener">Preuzmi PDF</a>
     </div>
   </div>
 </div>

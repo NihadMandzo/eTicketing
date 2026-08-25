@@ -131,6 +131,6 @@ public class TicketPurchasedDispatcherTests
         new(order.OrderId, order.ProductId, order.UserId, order.UserEmail,
             "Ljetni Festival", DateTime.UtcNow, "Sarajevo", order.TotalPaid,
             order.Tickets.Select(t => new TicketPdf(
-                t.TicketId, $"{order.OrderId:N}/{t.TicketId:N}.pdf",
+                t.TicketId, "%PDF-1.4 fake"u8.ToArray(),
                 "ulaznica.pdf", "VIP", null, 50)).ToList());
 }

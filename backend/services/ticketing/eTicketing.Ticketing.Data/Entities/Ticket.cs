@@ -59,9 +59,6 @@ public class Ticket : BaseEntity
     public Guid? SubscriptionId { get; private set; }
     public Subscription? Subscription { get; set; }
 
-    // Set once eTicketing.PdfGeneration finishes, Status → Ready.
-    public string? PdfBlobName { get; set; }
-
     // Set exactly once, by MarkValidated, when an organizer scans this ticket at the gate. Private
     // setters for the same reason ValidDate/ValidFrom/ValidTo have them: the only way to write
     // either is through the one method that also flips Status to Used, so a validated ticket can

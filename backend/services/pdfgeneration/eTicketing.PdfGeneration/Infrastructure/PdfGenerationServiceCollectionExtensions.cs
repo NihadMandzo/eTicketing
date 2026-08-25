@@ -2,7 +2,7 @@ using eTicketing.PdfGeneration.Documents;
 using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Messaging;
 using eTicketing.PdfGeneration.Options;
-using eTicketing.Shared.Storage;
+using eTicketing.Shared.TicketPdf;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using QuestPDF.Infrastructure;
@@ -31,14 +31,6 @@ public static class PdfGenerationServiceCollectionExtensions
 
         builder.Services.AddOptions<TicketSupportOptions>()
             .Bind(builder.Configuration.GetSection(TicketSupportOptions.SectionName));
-
-        // Not the WebApplicationBuilder-based AddAzureBlobStorage extension — this is a Worker
-        // host, so the two registrations that helper makes are done by hand here.
-        builder.Services.AddOptions<BlobStorageOptions>()
-            .Bind(builder.Configuration.GetSection(BlobStorageOptions.SectionName))
-            .Validate(o => !string.IsNullOrWhiteSpace(o.ConnectionString), "BlobStorage:ConnectionString mora biti podešen.")
-            .ValidateOnStart();
-        builder.Services.AddSingleton<IBlobStorageService, AzureBlobStorageService>();
 
         // Retry + timeout, no circuit breaker: this is an async consumer with its own backoff
         // ladder behind it, not a synchronous critical path that needs to fail fast.

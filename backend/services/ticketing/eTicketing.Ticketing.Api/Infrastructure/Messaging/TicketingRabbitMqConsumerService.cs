@@ -9,8 +9,7 @@ namespace eTicketing.Ticketing.Api.Infrastructure.Messaging;
 /// <summary>
 /// Ticketing's only inbound queue. Two routing keys land here:
 ///
-///  - <c>ticket-pdf.ready</c> from eTicketing.PdfGeneration — stamp Ticket.PdfBlobName, flip
-///    Confirmed → Ready.
+///  - <c>ticket-pdf.ready</c> from eTicketing.PdfGeneration — flip Confirmed → Ready.
 ///  - <c>product.updated</c> from eTicketing.Catalog — fan out per-buyer change notifications.
 ///
 /// Modelled on eTicketing.Notifications' RabbitMqConsumerService (reconnect loop, manual ack,

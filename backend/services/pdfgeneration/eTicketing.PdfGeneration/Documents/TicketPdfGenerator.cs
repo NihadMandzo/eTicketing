@@ -1,8 +1,7 @@
 using eTicketing.Contracts.Events;
 using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Options;
-using eTicketing.PdfGeneration.Qr;
-using eTicketing.Shared.Storage;
+using eTicketing.Shared.TicketPdf;
 using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
 
@@ -10,39 +9,36 @@ namespace eTicketing.PdfGeneration.Documents;
 
 public interface ITicketPdfGenerator
 {
-    /// <summary>Renders and uploads one PDF per ticket in the order, and returns the
-    /// <see cref="TicketPdfReady"/> describing them. Returns null when the order can't be rendered
-    /// at all (the product no longer exists), which the caller treats as a poison message.</summary>
+    /// <summary>Renders one PDF per ticket in the order and returns the <see cref="TicketPdfReady"/>
+    /// carrying them. Returns null when the order can't be rendered at all (the product no longer
+    /// exists), which the caller treats as a poison message.</summary>
     Task<TicketPdfReady?> GenerateAsync(TicketPurchased order, CancellationToken ct = default);
 }
 
 /// <summary>
-/// The whole of SPRINT_4 US-4.2 in one place: resolve the product, draw a QR, render a page,
-/// upload it, and hand back the event that tells the rest of the system it's done.
+/// The whole of SPRINT_4 US-4.2 in one place: resolve the product, render a page per ticket, and
+/// hand back the event that carries them to eTicketing.Notifications.
 ///
 /// One PDF per ticket rather than one per order: each is handed to a different person at the gate,
-/// which a single stapled document could not be. They're uploaded under
-/// <c>{orderId}/{ticketId}.pdf</c> so an order's files stay together in the container.
+/// which a single stapled document could not be.
+///
+/// Nothing is persisted. A ticket PDF is a pure function of the ticket — the QR payload is
+/// deterministic for a given ticket id and signing key — so the sheet is rendered here for the
+/// e-mail and re-rendered by eTicketing.Ticketing when a buyer downloads it, rather than a copy of
+/// a gate-opening QR code being left sitting in blob storage.
 /// </summary>
 public class TicketPdfGenerator : ITicketPdfGenerator
 {
-    /// <summary>Must match eTicketing.Ticketing's TicketResponseFactory.PdfContainerName — that's
-    /// the side that turns the stored blob name back into a download URL.</summary>
-    public const string ContainerName = "ticket-pdfs";
-
     private readonly ICatalogClient _catalogClient;
-    private readonly IBlobStorageService _blobStorage;
     private readonly TicketSupportInfo _support;
     private readonly ILogger<TicketPdfGenerator> _logger;
 
     public TicketPdfGenerator(
         ICatalogClient catalogClient,
-        IBlobStorageService blobStorage,
         IOptions<TicketSupportOptions> support,
         ILogger<TicketPdfGenerator> logger)
     {
         _catalogClient = catalogClient;
-        _blobStorage = blobStorage;
         _support = new TicketSupportInfo(support.Value.Email, support.Value.Phone);
         _logger = logger;
     }
@@ -64,25 +60,27 @@ public class TicketPdfGenerator : ITicketPdfGenerator
 
         foreach (var ticket in order.Tickets)
         {
-            var qrPng = QrCodeRenderer.Render(ticket.QrPayload);
-            var document = new TicketDocument(
-                order, ticket, product.Name, product.Date, product.City.ToString(), qrPng, _support);
-
-            var pdfBytes = document.GeneratePdf();
-
-            var blobName = $"{order.OrderId:N}/{ticket.TicketId:N}.pdf";
-            using var stream = new MemoryStream(pdfBytes);
-            // Upload returns the blob's public URL; nothing needs it. Notifications reads the PDF
-            // back by BlobName to attach the bytes, and Ticketing derives TicketResponse.PdfUrl
-            // from the same name via GetPublicUrl.
-            await _blobStorage.UploadAsync(ContainerName, blobName, stream, "application/pdf", ct);
+            var model = new TicketPdfModel(
+                ticket.TicketId,
+                order.OrderId,
+                ticket.QrPayload,
+                product.Name,
+                product.Date,
+                product.City.ToString(),
+                order.SectorName,
+                ticket.TicketTypeName,
+                ticket.PricePaid,
+                order.TicketingMode,
+                ticket.ValidDate,
+                ticket.ValidFrom,
+                ticket.ValidTo,
+                order.PurchasedAt,
+                order.UserEmail);
 
             generated.Add(new TicketPdf(
                 ticket.TicketId,
-                blobName,
-                // Short id in the filename: three attachments called "ulaznica.pdf" are
-                // indistinguishable in a mail client, and the full GUID is unreadable.
-                $"ulaznica-{ticket.TicketId.ToString("N")[..8].ToUpperInvariant()}.pdf",
+                new TicketDocument(model, _support).GeneratePdf(),
+                model.FileName,
                 order.SectorName,
                 ticket.TicketTypeName,
                 ticket.PricePaid));

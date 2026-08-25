@@ -1,10 +1,10 @@
 using eTicketing.Contracts.Persistence;
-using eTicketing.Shared.Storage;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data;
@@ -13,6 +13,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
+using QuestPDF.Infrastructure;
 using StackExchange.Redis;
 
 namespace eTicketing.Ticketing.Api.Infrastructure;
@@ -36,9 +37,14 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddSingleton<ISectorCapacityLock, RedisSectorCapacityLock>();
         builder.Services.AddSingleton<ITicketValidationLock, RedisTicketValidationLock>();
 
-        // Ticketing never uploads anything — this is here purely so TicketResponseFactory can turn
-        // Ticket.PdfBlobName (written by eTicketing.PdfGeneration) into a downloadable URL.
-        builder.AddAzureBlobStorage();
+        // GET /tickets/{id}/pdf renders the buyer's sheet on demand rather than serving a stored
+        // file, so this service needs the QuestPDF licence and the embedded design fonts — same
+        // registration eTicketing.PdfGeneration does, from the same shared project.
+        QuestPDF.Settings.License = LicenseType.Community;
+        TicketTheme.EnsureFontsRegistered();
+
+        builder.Services.AddOptions<TicketSupportOptions>()
+            .Bind(builder.Configuration.GetSection(TicketSupportOptions.SectionName));
 
         // Singleton: the codec is a stateless HMAC over one immutable key. Fails fast at startup if
         // the key is missing rather than minting unverifiable QR codes at purchase time.
@@ -64,6 +70,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketTypeService, TicketTypeService>();
         builder.Services.AddScoped<ITicketService, TicketService>();
         builder.Services.AddScoped<ITicketValidationService, TicketValidationService>();
+        builder.Services.AddScoped<ITicketPdfService, TicketPdfService>();
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();

@@ -17,6 +17,9 @@ public static class TicketEndpoints
         // Gate validation. "Organizer" also admits Admin/SuperAdmin (see
         // AuthorizationPolicyExtensions), which is the PlatformStaff override — the service then
         // skips the per-organization ownership check for them.
+        // Rendered on the spot, never served from storage — see TicketPdfService.
+        group.MapGet("/{id:guid}/pdf", GetPdf).RequireAuthorization();
+
         group.MapGet("/validation/products", GetValidationProducts).RequireAuthorization("Organizer");
         group.MapPost("/validate", Validate).RequireAuthorization("Organizer").WithValidation<ValidateTicketRequest>();
     }
@@ -25,6 +28,21 @@ public static class TicketEndpoints
     {
         var result = await service.GetMineAsync(query, http.User, ct);
         return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetPdf(Guid id, ITicketPdfService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.GetAsync(id, http.User, ct);
+        if (!result.IsSuccess)
+        {
+            return result.ToHttpResult();
+        }
+
+        // Inline rather than an attachment: on mobile this opens in the browser's own viewer, which
+        // is what someone standing at a gate wants; the filename still applies if they save it.
+        var pdf = result.Value!;
+        http.Response.Headers.ContentDisposition = $"inline; filename=\"{pdf.FileName}\"";
+        return Results.File(pdf.Content, "application/pdf");
     }
 
     private static async Task<IResult> GetValidationProducts(ITicketValidationService service, HttpContext http, CancellationToken ct)

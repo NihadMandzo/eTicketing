@@ -17,7 +17,11 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// path reads it, decides, and writes Status=Used on the same instance.</summary>
     Task<Ticket?> GetForValidationAsync(Guid ticketId, CancellationToken ct = default);
 
-    /// <summary>Tracked, by id — used by the TicketPdfReady consumer to stamp PdfBlobName.</summary>
+    /// <summary>Untracked, by id, with the navigations the printed ticket shows — the read-only
+    /// sibling of <see cref="GetForValidationAsync"/>, which is tracked because it mutates.</summary>
+    Task<Ticket?> GetForPdfAsync(Guid ticketId, CancellationToken ct = default);
+
+    /// <summary>Tracked, by id — used by the TicketPdfReady consumer to flip Confirmed → Ready.</summary>
     Task<List<Ticket>> GetByIdsAsync(IReadOnlyList<Guid> ticketIds, CancellationToken ct = default);
 
     /// <summary>Per-product counts of live tickets admitting entry TODAY, for the organizer's

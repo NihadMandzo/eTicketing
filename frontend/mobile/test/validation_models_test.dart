@@ -23,7 +23,6 @@ void main() {
       'createdAt': '2026-08-24T10:00:00Z',
       'qrPayload': 'ETK1.3f2a9c1e000000000000000000000001.AbCdEf',
       'qrImage': 'data:image/png;base64,iVBORw0KGgo=',
-      'pdfUrl': 'https://storage.example/ticket-pdfs/order/ticket.pdf',
     };
 
     test('parses the QR and PDF fields', () {
@@ -31,16 +30,7 @@ void main() {
 
       expect(ticket.qrPayload, 'ETK1.3f2a9c1e000000000000000000000001.AbCdEf');
       expect(ticket.qrImage, startsWith('data:image/png;base64,'));
-      expect(ticket.pdfUrl, isNotNull);
       expect(ticket.status, 'Ready');
-    });
-
-    test('tolerates a ticket whose PDF has not been generated yet', () {
-      // Between purchase and PdfGeneration finishing, pdfUrl is genuinely null
-      // — the app must render that state, not crash on it.
-      final ticket = TicketResponse.fromJson(body()..['pdfUrl'] = null);
-
-      expect(ticket.pdfUrl, isNull);
     });
 
     test('falls back to empty strings if the QR fields are absent', () {

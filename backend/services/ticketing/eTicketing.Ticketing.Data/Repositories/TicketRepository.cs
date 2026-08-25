@@ -26,6 +26,13 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Include(t => t.TicketType)
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct);
 
+    public Task<Ticket?> GetForPdfAsync(Guid ticketId, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(t => t.Sector)
+            .Include(t => t.TicketType)
+            .FirstOrDefaultAsync(t => t.Id == ticketId, ct);
+
     public Task<List<Ticket>> GetByIdsAsync(IReadOnlyList<Guid> ticketIds, CancellationToken ct = default)
         => Query().Where(t => ticketIds.Contains(t.Id)).ToListAsync(ct);
 

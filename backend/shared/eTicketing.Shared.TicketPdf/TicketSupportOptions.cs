@@ -1,4 +1,4 @@
-namespace eTicketing.PdfGeneration.Options;
+namespace eTicketing.Shared.TicketPdf;
 
 /// <summary>Contact details printed in the green footer of every ticket. Configurable per
 /// deployment because the address a buyer should write to is not a property of the code.</summary>

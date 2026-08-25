@@ -1,6 +1,6 @@
 using QRCoder;
 
-namespace eTicketing.PdfGeneration.Qr;
+namespace eTicketing.Shared.TicketPdf;
 
 /// <summary>
 /// Turns a ticket's signed QR payload into PNG bytes for embedding in the PDF.

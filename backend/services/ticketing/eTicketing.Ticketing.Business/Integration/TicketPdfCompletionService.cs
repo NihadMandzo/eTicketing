@@ -9,8 +9,10 @@ namespace eTicketing.Ticketing.Business.Integration;
 /// <summary>
 /// Closes the loop SPRINT_4 T-4.2.4 opened: eTicketing.PdfGeneration finishes an order's PDFs and
 /// publishes TicketPdfReady rather than calling back into this service over HTTP, and this is where
-/// that event lands. Stamps each Ticket's PdfBlobName (which is what makes TicketResponse.PdfUrl
-/// stop being null) and moves it Confirmed → Ready.
+/// that event lands. Moves each ticket Confirmed → Ready.
+///
+/// "Ready" means the buyer has been sent their ticket, not that a file exists somewhere: PDFs are
+/// rendered on demand and never stored (see TicketPdfService).
 ///
 /// Deliberately forgiving in both directions, because this runs off a broker that guarantees
 /// at-least-once, not exactly-once:
@@ -18,7 +20,7 @@ namespace eTicketing.Ticketing.Business.Integration;
 ///    was legitimately deleted between purchase and PDF completion.
 ///  - Re-applying the same event is a no-op that rewrites identical values.
 ///  - A ticket already Used (someone walked in before the PDF finished — unlikely but possible for
-///    a same-day purchase at the door) keeps its terminal status; only the blob name is recorded.
+///    a same-day purchase at the door) keeps its terminal status.
 /// </summary>
 public class TicketPdfCompletionService : ITicketPdfCompletionService
 {
@@ -39,15 +41,13 @@ public class TicketPdfCompletionService : ITicketPdfCompletionService
         if (message.Tickets.Count == 0)
             return;
 
-        var blobNamesByTicketId = message.Tickets
-            // A malformed event naming the same ticket twice would otherwise throw out of
-            // ToDictionary and dead-letter the whole order.
-            .GroupBy(t => t.TicketId)
-            .ToDictionary(g => g.Key, g => g.First().BlobName);
+        // Distinct because a malformed event naming the same ticket twice should not be able to
+        // skew the "how many are missing" count below.
+        var ticketIds = message.Tickets.Select(t => t.TicketId).Distinct().ToList();
 
-        var tickets = await _ticketRepository.GetByIdsAsync(blobNamesByTicketId.Keys.ToList(), ct);
+        var tickets = await _ticketRepository.GetByIdsAsync(ticketIds, ct);
 
-        var missing = blobNamesByTicketId.Count - tickets.Count;
+        var missing = ticketIds.Count - tickets.Count;
         if (missing > 0)
         {
             _logger.LogWarning(
@@ -55,12 +55,9 @@ public class TicketPdfCompletionService : ITicketPdfCompletionService
                 message.OrderId, missing);
         }
 
-        foreach (var ticket in tickets)
+        foreach (var ticket in tickets.Where(t => t.Status == TicketStatus.Confirmed))
         {
-            ticket.PdfBlobName = blobNamesByTicketId[ticket.Id];
-
-            if (ticket.Status == TicketStatus.Confirmed)
-                ticket.Status = TicketStatus.Ready;
+            ticket.Status = TicketStatus.Ready;
         }
 
         if (tickets.Count > 0)

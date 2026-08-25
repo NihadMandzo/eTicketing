@@ -1,8 +1,7 @@
 using System.Text;
-using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.PdfGeneration.Documents;
-using eTicketing.PdfGeneration.Qr;
+using eTicketing.Shared.TicketPdf;
 using FluentAssertions;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
@@ -148,25 +147,24 @@ public class TicketDocumentLayoutTests
         Guid? ticketId = null)
     {
         var id = ticketId ?? Guid.NewGuid();
-        var ticket = new PurchasedTicket(
+
+        var model = new TicketPdfModel(
             id,
+            Guid.NewGuid(),
             $"ETK1.{id:N}.signature",
-            ticketTypeName,
-            50m,
-            mode == TicketingMode.DailyEntry ? new DateOnly(2026, 9, 1) : null,
-            mode == TicketingMode.RecurringReservation ? new DateOnly(2026, 9, 1) : null,
-            mode == TicketingMode.RecurringReservation ? new DateOnly(2026, 9, 30) : null);
-
-        var order = new TicketPurchased(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), sectorName, mode,
-            Guid.NewGuid(), userEmail, 50m, new DateTime(2026, 8, 24, 10, 8, 0, DateTimeKind.Utc),
-            [ticket]);
-
-        return new TicketDocument(
-            order, ticket, productName,
+            productName,
             mode == TicketingMode.SingleOccurrence ? new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc) : null,
             "Sarajevo",
-            QrCodeRenderer.Render(ticket.QrPayload),
-            new TicketSupportInfo("podrska@ekarta.ba", "+387 33 555 120"));
+            sectorName,
+            ticketTypeName,
+            50m,
+            mode,
+            mode == TicketingMode.DailyEntry ? new DateOnly(2026, 9, 1) : null,
+            mode == TicketingMode.RecurringReservation ? new DateOnly(2026, 9, 1) : null,
+            mode == TicketingMode.RecurringReservation ? new DateOnly(2026, 9, 30) : null,
+            new DateTime(2026, 8, 24, 10, 8, 0, DateTimeKind.Utc),
+            userEmail);
+
+        return new TicketDocument(model, new TicketSupportInfo("podrska@ekarta.ba", "+387 33 555 120"));
     }
 }

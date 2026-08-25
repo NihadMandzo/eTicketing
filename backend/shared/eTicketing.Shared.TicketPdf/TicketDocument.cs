@@ -1,15 +1,14 @@
 using System.Globalization;
-using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using static eTicketing.PdfGeneration.Documents.TicketTheme;
+using static eTicketing.Shared.TicketPdf.TicketTheme;
 
-namespace eTicketing.PdfGeneration.Documents;
+namespace eTicketing.Shared.TicketPdf;
 
 /// <summary>
-/// One printable ticket, one page. Rendered once per <see cref="PurchasedTicket"/> in an order, so
+/// One printable ticket, one page. Rendered once per ticket in an order, so
 /// a buyer of three tickets gets three separate PDFs attached to one email — each is handed to a
 /// different person at the gate, which a single stapled document could not be.
 ///
@@ -39,44 +38,27 @@ public class TicketDocument : IDocument
     /// erroring. Manrope's line metrics need roughly Px(15) here, so this keeps a point in hand.</summary>
     private static readonly float FoldMarkerHeight = Px(16);
 
-    private readonly TicketPurchased _order;
-    private readonly PurchasedTicket _ticket;
-    private readonly string _productName;
-    private readonly DateTime? _productDate;
-    private readonly string _productCity;
+    private readonly TicketPdfModel _model;
     private readonly byte[] _qrPng;
     private readonly TicketSupportInfo _support;
 
-    public TicketDocument(
-        TicketPurchased order,
-        PurchasedTicket ticket,
-        string productName,
-        DateTime? productDate,
-        string productCity,
-        byte[] qrPng,
-        TicketSupportInfo support)
+    public TicketDocument(TicketPdfModel model, TicketSupportInfo support)
     {
-        _order = order;
-        _ticket = ticket;
-        _productName = productName;
-        _productDate = productDate;
-        _productCity = productCity;
-        _qrPng = qrPng;
+        _model = model;
         _support = support;
+        _qrPng = QrCodeRenderer.Render(model.QrPayload);
     }
 
     /// <summary>Full ticket id, uppercased. This is what gate staff type into the scanner's manual
     /// fallback when a camera won't read the code, so it has to be the complete GUID — the short
     /// form below is for cross-referencing panels, not for entry.</summary>
-    private string Serial => _ticket.TicketId.ToString().ToUpperInvariant();
+    private string Serial => _model.TicketId.ToString().ToUpperInvariant();
 
-    /// <summary>Eight-character cross-reference, matching the ticket rows in the confirmation email
-    /// and the PDF's own filename.</summary>
-    private string ShortSerial => _ticket.TicketId.ToString("N")[..8].ToUpperInvariant();
+    private string ShortSerial => _model.ShortSerial;
 
     public DocumentMetadata GetMetadata() => new()
     {
-        Title = $"eKarta — {_productName}",
+        Title = $"eKarta — {_model.ProductName}",
         Author = "eKarta",
     };
 
@@ -163,7 +145,7 @@ public class TicketDocument : IDocument
             // Product names are validated up to 200 characters; at this size that is six lines,
             // which would burst the panel and spill the sheet onto extra pages. Two lines is what
             // the design's slack allows, and the full name is in the email and the app anyway.
-            column.Item().PaddingTop(Px(4)).Text(_productName)
+            column.Item().PaddingTop(Px(4)).Text(_model.ProductName)
                 .ClampLines(2, "…")
                 .Style(Title(27).LetterSpacing(-0.02f).LineHeight(1.12f));
         });
@@ -180,16 +162,16 @@ public class TicketDocument : IDocument
             column.Item().Row(row =>
             {
                 row.Spacing(Px(18));
-                row.RelativeItem(1f).Element(c => Fact(c, "LOKACIJA", _productCity));
+                row.RelativeItem(1f).Element(c => Fact(c, "LOKACIJA", _model.ProductCity));
                 row.RelativeItem(1.6f).Element(c => Fact(c, "SEKTOR", SectorLine()));
-                row.RelativeItem(0.75f).Element(c => Fact(c, "CIJENA", Money(_ticket.PricePaid), GreenDark));
+                row.RelativeItem(0.75f).Element(c => Fact(c, "CIJENA", Money(_model.PricePaid), GreenDark));
             });
 
             column.Item().Row(row =>
             {
                 row.Spacing(Px(18));
                 row.RelativeItem(1f).Element(c =>
-                    Fact(c, "DATUM KUPOVINE", _order.PurchasedAt.ToString("dd.MM.yyyy. HH:mm")));
+                    Fact(c, "DATUM KUPOVINE", _model.PurchasedAt.ToString("dd.MM.yyyy. HH:mm")));
 
                 row.RelativeItem(2.35f).Column(validity =>
                 {
@@ -288,10 +270,10 @@ public class TicketDocument : IDocument
         container.Row(row =>
         {
             row.Spacing(Px(16));
-            row.RelativeItem().Element(c => Fact(c, "TIP ULAZNICE", _ticket.TicketTypeName ?? "Standardna", size: 13));
+            row.RelativeItem().Element(c => Fact(c, "TIP ULAZNICE", _model.TicketTypeName ?? "Standardna", size: 13));
             row.RelativeItem().Element(c => Fact(c, "NAČIN ULASKA", EntryModeText(), size: 13));
             row.RelativeItem().Element(c => Fact(c, "POČETAK", StartTimeText(), size: 13));
-            row.RelativeItem().Element(c => Fact(c, "KUPAC", _order.UserEmail, size: 13));
+            row.RelativeItem().Element(c => Fact(c, "KUPAC", _model.BuyerEmail, size: 13));
         });
     }
 
@@ -448,31 +430,31 @@ public class TicketDocument : IDocument
     };
 
     private string SectorLine() =>
-        _ticket.TicketTypeName is { } type ? $"{_order.SectorName} · {type}" : _order.SectorName;
+        _model.TicketTypeName is { } type ? $"{_model.SectorName} · {type}" : _model.SectorName;
 
     /// <summary>The three modes answer "when is this good for" from different fields entirely, so
     /// there is no single date column to print — see .claude/rules/01-domain.md.</summary>
-    private string ValidityLine() => _order.TicketingMode switch
+    private string ValidityLine() => _model.TicketingMode switch
     {
-        TicketingMode.DailyEntry => _ticket.ValidDate is { } d
+        TicketingMode.DailyEntry => _model.ValidDate is { } d
             ? $"{d:dd.MM.yyyy}."
             : "Datum nije određen",
 
-        TicketingMode.RecurringReservation => _ticket.ValidFrom is { } from && _ticket.ValidTo is { } to
+        TicketingMode.RecurringReservation => _model.ValidFrom is { } from && _model.ValidTo is { } to
             ? $"{from:dd.MM.yyyy}. – {to:dd.MM.yyyy}."
             : "Period nije određen",
 
-        _ => _productDate?.ToString("dd.MM.yyyy. HH:mm") ?? "Datum nije određen",
+        _ => _model.ProductDate?.ToString("dd.MM.yyyy. HH:mm") ?? "Datum nije određen",
     };
 
-    private string EntryBadgeText() => _order.TicketingMode switch
+    private string EntryBadgeText() => _model.TicketingMode switch
     {
         TicketingMode.DailyEntry => "DNEVNI ULAZ",
         TicketingMode.RecurringReservation => "REZERVACIJA",
         _ => "JEDAN ULAZ",
     };
 
-    private string EntryModeText() => _order.TicketingMode switch
+    private string EntryModeText() => _model.TicketingMode switch
     {
         TicketingMode.DailyEntry => "Dnevna ulaznica",
         TicketingMode.RecurringReservation => "Mjesečna rezervacija",
@@ -482,15 +464,7 @@ public class TicketDocument : IDocument
     /// <summary>Only SingleOccurrence has a single showing time; the other two are bought for a day
     /// or a period the buyer chose, so there is nothing to print here.</summary>
     private string StartTimeText() =>
-        _order.TicketingMode == TicketingMode.SingleOccurrence && _productDate is { } date
+        _model.TicketingMode == TicketingMode.SingleOccurrence && _model.ProductDate is { } date
             ? $"{date:HH:mm}"
             : "—";
-}
-
-/// <summary>Where a buyer turns when something is wrong with their ticket. Configured per
-/// deployment rather than hardcoded, and the phone is optional — a deployment with no support line
-/// prints the address alone instead of an invented number.</summary>
-public sealed record TicketSupportInfo(string Email, string? Phone)
-{
-    public string Display => string.IsNullOrWhiteSpace(Phone) ? Email : $"{Email} · {Phone}";
 }

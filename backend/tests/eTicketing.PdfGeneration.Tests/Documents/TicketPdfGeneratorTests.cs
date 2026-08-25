@@ -2,9 +2,8 @@ using System.Text;
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.PdfGeneration.Documents;
-using eTicketing.PdfGeneration.Options;
+using eTicketing.Shared.TicketPdf;
 using eTicketing.PdfGeneration.External;
-using eTicketing.PdfGeneration.Tests.TestSupport;
 using FluentAssertions;
 using MsOptions = Microsoft.Extensions.Options.Options;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,7 +15,6 @@ namespace eTicketing.PdfGeneration.Tests.Documents;
 public class TicketPdfGeneratorTests
 {
     private readonly Mock<ICatalogClient> _catalogClient = new();
-    private readonly FakeBlobStorageService _blobStorage = new();
     private readonly ITicketPdfGenerator _sut;
 
     private readonly Guid _productId = Guid.NewGuid();
@@ -35,14 +33,13 @@ public class TicketPdfGeneratorTests
     {
         _sut = new TicketPdfGenerator(
             _catalogClient.Object,
-            _blobStorage,
             MsOptions.Create(new TicketSupportOptions { Email = "podrska@ekarta.ba", Phone = "+387 33 555 120" }),
             NullLogger<TicketPdfGenerator>.Instance);
         MockProduct(TicketingMode.SingleOccurrence, new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc));
     }
 
     [Fact]
-    public async Task GenerateAsync_UploadsOnePdfPerTicket_UnderTheOrderPrefixedBlobName()
+    public async Task GenerateAsync_ReturnsOnePdfPerTicket()
     {
         // One file per ticket, not one per order: each is handed to a different person at the gate.
         var order = Order(ticketCount: 3);
@@ -51,24 +48,18 @@ public class TicketPdfGeneratorTests
 
         result.Should().NotBeNull();
         result!.Tickets.Should().HaveCount(3);
-        _blobStorage.Blobs.Should().HaveCount(3);
-
-        foreach (var ticket in order.Tickets)
-        {
-            _blobStorage.Blobs.Should().ContainKey(
-                $"{TicketPdfGenerator.ContainerName}/{order.OrderId:N}/{ticket.TicketId:N}.pdf");
-        }
+        result.Tickets.Select(t => t.TicketId).Should().BeEquivalentTo(order.Tickets.Select(t => t.TicketId));
     }
 
     [Fact]
-    public async Task GenerateAsync_UploadsRealPdfBytes()
+    public async Task GenerateAsync_CarriesRealPdfBytesOnTheEvent()
     {
+        // Nothing is uploaded anywhere — the bytes ARE the event payload, which is what
+        // Notifications base64-encodes into the Brevo attachment.
         var result = await _sut.GenerateAsync(Order(ticketCount: 1));
 
-        var bytes = _blobStorage.Blobs.Values.Single();
+        var bytes = result!.Tickets.Single().Content;
         bytes.Should().NotBeEmpty();
-        // "%PDF" magic number — proves QuestPDF actually rendered rather than that an empty stream
-        // round-tripped through the fake.
         Encoding.ASCII.GetString(bytes, 0, 4).Should().Be("%PDF");
     }
 
@@ -98,16 +89,15 @@ public class TicketPdfGeneratorTests
     [Fact]
     public async Task GenerateAsync_UploadsEachPdfUnderTheBlobNameItReports()
     {
-        // BlobName is the only handle downstream gets: Notifications reads the bytes back by it to
-        // attach them, and Ticketing turns it into TicketResponse.PdfUrl. If the reported name and
-        // the uploaded name ever diverge, both of those break silently.
-        var order = Order(ticketCount: 1);
+        // The filename is what the buyer sees on the attachment, and it has to be distinguishable:
+        // three files called "ulaznica.pdf" are indistinguishable in a mail client.
+        var order = Order(ticketCount: 3);
 
         var result = await _sut.GenerateAsync(order);
 
-        var ticket = result!.Tickets.Single();
-        ticket.BlobName.Should().Be($"{order.OrderId:N}/{ticket.TicketId:N}.pdf");
-        _blobStorage.Blobs.Should().ContainKey($"{TicketPdfGenerator.ContainerName}/{ticket.BlobName}");
+        var names = result!.Tickets.Select(t => t.FileName).ToList();
+        names.Should().OnlyHaveUniqueItems();
+        names.Should().OnlyContain(n => n.StartsWith("ulaznica-") && n.EndsWith(".pdf"));
     }
 
     [Fact]
@@ -132,7 +122,6 @@ public class TicketPdfGeneratorTests
         var result = await _sut.GenerateAsync(Order(ticketCount: 1));
 
         result.Should().BeNull();
-        _blobStorage.Blobs.Should().BeEmpty();
     }
 
     [Theory]
@@ -148,7 +137,7 @@ public class TicketPdfGeneratorTests
         var result = await _sut.GenerateAsync(Order(ticketCount: 1, mode: mode));
 
         result.Should().NotBeNull();
-        _blobStorage.Blobs.Values.Single().Should().NotBeEmpty();
+        result!.Tickets.Single().Content.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -166,18 +155,6 @@ public class TicketPdfGeneratorTests
         var act = async () => await _sut.GenerateAsync(order);
 
         await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task GenerateAsync_WhenBlobStorageIsDown_Throws()
-    {
-        // Must surface, not be swallowed: the consumer's retry ladder is what eventually gets the
-        // buyer their ticket, and it only runs if this throws.
-        _blobStorage.ThrowOnUpload = true;
-
-        var act = async () => await _sut.GenerateAsync(Order(ticketCount: 1));
-
-        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     private void MockProduct(TicketingMode mode, DateTime? date) =>

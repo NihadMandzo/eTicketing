@@ -4,7 +4,6 @@ using eTicketing.Notifications.Email;
 using eTicketing.Notifications.Email.Templates;
 using eTicketing.Notifications.Options;
 using eTicketing.Notifications.Sending;
-using eTicketing.Shared.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -17,11 +16,6 @@ namespace eTicketing.Notifications.Messaging;
 /// RabbitMqConsumerService).</summary>
 public sealed class NotificationDispatcher
 {
-    /// <summary>Must match eTicketing.PdfGeneration's TicketPdfGenerator.ContainerName and
-    /// eTicketing.Ticketing's TicketResponseFactory.PdfContainerName — the three services agree on
-    /// this string by convention, since none of them can reference the others.</summary>
-    private const string TicketPdfContainerName = "ticket-pdfs";
-
     /// <summary>Brevo caps a single request's attachments; staying comfortably under it matters
     /// more than delivering every PDF of an implausibly large order, because busting the cap
     /// fails the whole email rather than one attachment. At ~50 KB per ticket this is thousands of
@@ -30,18 +24,15 @@ public sealed class NotificationDispatcher
     private const int MaxTotalAttachmentBytes = 9 * 1024 * 1024;
 
     private readonly IEmailSender _emailSender;
-    private readonly IBlobStorageService _blobStorage;
     private readonly FrontendOptions _frontendOptions;
     private readonly ILogger<NotificationDispatcher> _logger;
 
     public NotificationDispatcher(
         IEmailSender emailSender,
-        IBlobStorageService blobStorage,
         IOptions<FrontendOptions> frontendOptions,
         ILogger<NotificationDispatcher> logger)
     {
         _emailSender = emailSender;
-        _blobStorage = blobStorage;
         _frontendOptions = frontendOptions.Value;
         _logger = logger;
     }
@@ -155,18 +146,7 @@ public sealed class NotificationDispatcher
         var totalBytes = 0;
         foreach (var ticket in evt.Tickets)
         {
-            var content = await _blobStorage.DownloadAsync(TicketPdfContainerName, ticket.BlobName, ct);
-            if (content is null)
-            {
-                // The PDF was generated and then vanished. Worth shouting about, but not worth
-                // failing the email over — the buyer still needs their ticket codes.
-                _logger.LogWarning(
-                    "PDF ulaznice {TicketId} (blob {BlobName}) ne postoji — email se šalje bez tog priloga.",
-                    ticket.TicketId, ticket.BlobName);
-                continue;
-            }
-
-            if (totalBytes + content.Length > MaxTotalAttachmentBytes)
+            if (totalBytes + ticket.Content.Length > MaxTotalAttachmentBytes)
             {
                 _logger.LogWarning(
                     "Prilozi za narudžbu {OrderId} prelaze dozvoljenu veličinu — preostale ulaznice nisu priložene.",
@@ -174,8 +154,8 @@ public sealed class NotificationDispatcher
                 break;
             }
 
-            totalBytes += content.Length;
-            builder.WithAttachment(ticket.FileName, content);
+            totalBytes += ticket.Content.Length;
+            builder.WithAttachment(ticket.FileName, ticket.Content);
         }
 
         await _emailSender.SendAsync(builder.Build(), ct);

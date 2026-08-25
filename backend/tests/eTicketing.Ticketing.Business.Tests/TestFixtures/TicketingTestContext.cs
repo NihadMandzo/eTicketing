@@ -2,6 +2,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using MsOptions = Microsoft.Extensions.Options.Options;
 
 namespace eTicketing.Ticketing.Business.Tests.TestFixtures;
 
@@ -55,8 +57,6 @@ public sealed class TicketingTestContext : IDisposable
     /// than depending on the day the suite happens to run.</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero));
 
-    public FakeBlobStorageService BlobStorage { get; } = new();
-
     public TicketingTestContext()
     {
         // "Foreign Keys=True" (SqliteConnectionStringBuilder.ForeignKeys) is the documented way to
@@ -87,13 +87,21 @@ public sealed class TicketingTestContext : IDisposable
             .ReturnsAsync("test-lock-token");
     }
 
-    public TicketResponseFactory ResponseFactory => new(QrCodec, BlobStorage);
+    public TicketResponseFactory ResponseFactory => new(QrCodec);
 
     public ISectorService CreateSectorService() =>
         new SectorService(SectorRepository, CatalogClient.Object, CapacityLock.Object, UnitOfWork);
 
     public ITicketTypeService CreateTicketTypeService() =>
         new TicketTypeService(SectorRepository, TicketTypeRepository, UnitOfWork);
+
+    public ITicketPdfService CreateTicketPdfService() =>
+        new TicketPdfService(
+            TicketRepository,
+            CatalogClient.Object,
+            QrCodec,
+            MsOptions.Create(new TicketSupportOptions { Email = "podrska@ekarta.ba", Phone = "+387 33 555 120" }),
+            NullLogger<TicketPdfService>.Instance);
 
     public ITicketService CreateTicketService() =>
         new TicketService(TicketRepository, ResponseFactory);

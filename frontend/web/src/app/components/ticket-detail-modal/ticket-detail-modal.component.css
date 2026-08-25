@@ -142,9 +142,3 @@
   box-sizing: border-box;
 }
 
-.pdf-pending {
-  margin: 20px 0 0;
-  font-size: 12px;
-  color: var(--muted-foreground);
-  text-align: center;
-}

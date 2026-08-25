@@ -34,8 +34,6 @@ public record PurchaseResponse(
 /// <param name="QrImage">A ready-to-render <c>data:image/png;base64,...</c> QR. Rendered here
 /// rather than in each client so web and mobile need no QR library of their own — see
 /// TicketQrImage.</param>
-/// <param name="PdfUrl">Null until eTicketing.PdfGeneration finishes and its TicketPdfReady event
-/// stamps Ticket.PdfBlobName (at which point Status is also Ready).</param>
 public record TicketResponse(
     Guid Id,
     Guid OrderId,
@@ -51,5 +49,4 @@ public record TicketResponse(
     DateOnly? ValidTo,
     DateTime CreatedAt,
     string QrPayload,
-    string QrImage,
-    string? PdfUrl);
+    string QrImage);

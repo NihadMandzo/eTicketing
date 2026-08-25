@@ -3,7 +3,7 @@ using QuestPDF.Drawing;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 
-namespace eTicketing.PdfGeneration.Documents;
+namespace eTicketing.Shared.TicketPdf;
 
 /// <summary>
 /// The design tokens for the printed ticket, kept in one place so <see cref="TicketDocument"/>

@@ -27,7 +27,6 @@ class TicketResponse {
 
   /// Null until eTicketing.PdfGeneration finishes; at that point [status] is
   /// 'Ready' too.
-  final String? pdfUrl;
 
   const TicketResponse({
     required this.id,
@@ -45,7 +44,6 @@ class TicketResponse {
     required this.createdAt,
     this.qrPayload = '',
     this.qrImage = '',
-    this.pdfUrl,
   });
 
   factory TicketResponse.fromJson(Map<String, dynamic> json) {
@@ -70,7 +68,6 @@ class TicketResponse {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       qrPayload: json['qrPayload'] as String? ?? '',
       qrImage: json['qrImage'] as String? ?? '',
-      pdfUrl: json['pdfUrl'] as String?,
     );
   }
 }

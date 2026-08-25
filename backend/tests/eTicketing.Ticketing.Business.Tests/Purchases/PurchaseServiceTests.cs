@@ -161,9 +161,6 @@ public class PurchaseServiceTests : IDisposable
 
         var ticket = result.Value!.Tickets.Single();
         ticket.QrImage.Should().StartWith("data:image/png;base64,");
-        // The PDF does not exist yet — PdfGeneration hasn't run, so there is nothing to link to.
-        // Claiming otherwise would give the buyer a 404 the moment they clicked it.
-        ticket.PdfUrl.Should().BeNull();
     }
 
     [Fact]

@@ -52,7 +52,6 @@ export interface Ticket {
    */
   qrImage: string;
   /** Null until eTicketing.PdfGeneration finishes; at that point status is 'Ready' too. */
-  pdfUrl: string | null;
 }
 
 export interface PurchaseResponse {
