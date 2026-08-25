@@ -148,6 +148,31 @@ public class ProductChangeNotifierTests : IDisposable
         VerifyNothingPublished();
     }
 
+    [Fact]
+    public async Task NotifyBuyersAsync_JustAfterLocalMidnight_StillIncludesADayPassForTheNewLocalDay()
+    {
+        // Europe/Sarajevo is UTC+2 in August, so 22:30 UTC is already 00:30 the next day. A day pass
+        // for that new local day is still live and its holder still deserves the notice — deriving
+        // "today" from UTC would filter them out as though the pass had expired. See PlatformClock.
+        await SeedTicketAsync(email: "ana@example.com", mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
+        _fixture.Clock.SetUtcNow(new DateTimeOffset(2026, 8, 24, 22, 30, 0, TimeSpan.Zero));
+
+        await _sut.NotifyBuyersAsync(Changed());
+
+        VerifyPublished("ana@example.com");
+    }
+
+    [Fact]
+    public async Task NotifyBuyersAsync_JustAfterLocalMidnight_SkipsADayPassForTheLocalDayThatJustEnded()
+    {
+        await SeedTicketAsync(email: "ana@example.com", mode: TicketingMode.DailyEntry, validDate: Today);
+        _fixture.Clock.SetUtcNow(new DateTimeOffset(2026, 8, 24, 22, 30, 0, TimeSpan.Zero));
+
+        await _sut.NotifyBuyersAsync(Changed());
+
+        VerifyNothingPublished();
+    }
+
     private ProductUpdated Changed(params ProductFieldChange[] changes) =>
         new(_productId, "Test proizvod", DateTime.UtcNow,
             changes.Length > 0 ? changes : [new ProductFieldChange("Naziv", "Staro", "Novo")]);

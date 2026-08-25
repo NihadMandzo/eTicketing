@@ -286,10 +286,22 @@ public class ProductService : IProductService
         return Result<ProductInternalResponse>.Success(ToInternalResponse(product));
     }
 
+    /// <summary>Upper bound on <see cref="GetInternalByIdsAsync"/>. Generous next to the real
+    /// workload (an organizer validating a few dozen products in one day) but finite: the id list
+    /// arrives as a bare List&lt;Guid&gt; body rather than a validated request DTO, so this is the
+    /// only thing standing between a caller bug and an unbounded IN (...) clause.</summary>
+    private const int MaxInternalByIdsCount = 200;
+
     public async Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
     {
         if (ids.Count == 0)
             return Result<List<ProductInternalResponse>>.Success([]);
+
+        if (ids.Count > MaxInternalByIdsCount)
+        {
+            return Result<List<ProductInternalResponse>>.Failure(Error.Validation(
+                "product.too_many_ids", $"Moguće je zatražiti najviše {MaxInternalByIdsCount} proizvoda odjednom."));
+        }
 
         var products = await _productRepository.GetByIdsWithCategoryAsync(ids, ct);
         return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());

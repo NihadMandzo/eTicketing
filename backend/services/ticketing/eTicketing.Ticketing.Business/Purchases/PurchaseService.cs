@@ -6,6 +6,7 @@ using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -65,6 +66,7 @@ public class PurchaseService : IPurchaseService
     private readonly IUnitOfWork _unitOfWork;
     private readonly TicketQrCodec _qrCodec;
     private readonly TicketResponseFactory _responseFactory;
+    private readonly PlatformClock _clock;
     private readonly ILogger<PurchaseService> _logger;
 
     public PurchaseService(
@@ -77,6 +79,7 @@ public class PurchaseService : IPurchaseService
         IUnitOfWork unitOfWork,
         TicketQrCodec qrCodec,
         TicketResponseFactory responseFactory,
+        PlatformClock clock,
         ILogger<PurchaseService> logger)
     {
         _sectorRepository = sectorRepository;
@@ -88,6 +91,7 @@ public class PurchaseService : IPurchaseService
         _unitOfWork = unitOfWork;
         _qrCodec = qrCodec;
         _responseFactory = responseFactory;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -137,7 +141,7 @@ public class PurchaseService : IPurchaseService
         if (charge.Status == PaymentChargeStatus.Failed)
         {
             await _capacityLock.ReleaseAsync(request.HoldId, ct);
-            await _eventPublisher.PublishAsync(EventNames.PaymentFailed, new PaymentFailed(userId, userEmail, "card_declined", DateTime.UtcNow), ct);
+            await _eventPublisher.PublishAsync(EventNames.PaymentFailed, new PaymentFailed(userId, userEmail, "card_declined", _clock.UtcNow), ct);
             return Result<PurchaseResponse>.Failure(Error.Validation("payment.declined", "Plaćanje je odbijeno. Provjerite podatke kartice."));
         }
 
@@ -170,8 +174,10 @@ public class PurchaseService : IPurchaseService
                             SectorId = sector.Id,
                             UserId = userId,
                             Status = SubscriptionStatus.Active,
-                            CurrentPeriodStart = DateOnly.FromDateTime(DateTime.UtcNow),
-                            CurrentPeriodEnd = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(1).AddDays(-1),
+                            // Local business day, not UTC — a subscription bought just after local
+                            // midnight must bill from today, not from yesterday. See PlatformClock.
+                            CurrentPeriodStart = _clock.Today(),
+                            CurrentPeriodEnd = _clock.Today().AddMonths(1).AddDays(-1),
                             PaymentReference = charge.Id.ToString(),
                         };
                         subscription.NextRenewalAt = subscription.CurrentPeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);

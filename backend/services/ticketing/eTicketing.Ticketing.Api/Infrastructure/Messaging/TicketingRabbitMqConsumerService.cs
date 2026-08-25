@@ -13,7 +13,9 @@ namespace eTicketing.Ticketing.Api.Infrastructure.Messaging;
 ///  - <c>product.updated</c> from eTicketing.Catalog — fan out per-buyer change notifications.
 ///
 /// Modelled on eTicketing.Notifications' RabbitMqConsumerService (reconnect loop, manual ack,
-/// publisher confirms before acking a republish) but with a deliberately blunter failure policy:
+/// publisher confirms before acking a republish) — and, like eTicketing.PdfGeneration's, it caps
+/// prefetch rather than letting the broker push a whole backlog at once. But it takes a
+/// deliberately blunter failure policy than either:
 /// that service's five-tier backoff ladder exists because it's retrying a third-party HTTP API that
 /// can be down for hours. Everything here is a local database write, so a failure is either
 /// transient-and-brief (requeue once) or a real bug (dead-letter it and move on) — a 30-minute
@@ -68,6 +70,11 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
         await using var connection = await factory.CreateConnectionAsync(ct);
         await using var channel = await connection.CreateChannelAsync(
             new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true), ct);
+
+        // Every message here opens a DI scope and does a database write. Without a prefetch limit
+        // the broker would hand this single consumer an entire backlog at once — after a restart or
+        // an outage that's a burst of concurrent DbContexts rather than a steady drain.
+        await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 10, global: false, ct);
 
         await channel.ExchangeDeclareAsync(EventNames.Exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct);
         await channel.QueueDeclareAsync(QueueName, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);

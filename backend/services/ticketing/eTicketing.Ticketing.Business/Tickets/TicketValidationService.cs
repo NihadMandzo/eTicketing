@@ -3,6 +3,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Security;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -33,7 +34,7 @@ public class TicketValidationService : ITicketValidationService
     private readonly ICatalogClient _catalogClient;
     private readonly TicketQrCodec _qrCodec;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly TimeProvider _timeProvider;
+    private readonly PlatformClock _clock;
     private readonly ILogger<TicketValidationService> _logger;
 
     public TicketValidationService(
@@ -42,7 +43,7 @@ public class TicketValidationService : ITicketValidationService
         ICatalogClient catalogClient,
         TicketQrCodec qrCodec,
         IUnitOfWork unitOfWork,
-        TimeProvider timeProvider,
+        PlatformClock clock,
         ILogger<TicketValidationService> logger)
     {
         _ticketRepository = ticketRepository;
@@ -50,7 +51,7 @@ public class TicketValidationService : ITicketValidationService
         _catalogClient = catalogClient;
         _qrCodec = qrCodec;
         _unitOfWork = unitOfWork;
-        _timeProvider = timeProvider;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -151,7 +152,7 @@ public class TicketValidationService : ITicketValidationService
         if (validityError is not null)
             return Invalid(validityError.Value.Code, validityError.Value.Message, ticket);
 
-        ticket.MarkValidated(user.GetUserId(), _timeProvider.GetUtcNow().UtcDateTime);
+        ticket.MarkValidated(user.GetUserId(), _clock.UtcNow);
         await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -200,7 +201,10 @@ public class TicketValidationService : ITicketValidationService
             : ("ticket.not_valid_today", $"Ulaznica vrijedi za {product.Date.Value:dd.MM.yyyy}., a ne za danas.");
     }
 
-    private DateOnly Today() => DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+    /// <summary>The platform's local business day — deliberately not UTC's. See PlatformClock: a
+    /// ticket's ValidDate and a product's Date are local wall-clock dates, so comparing them against
+    /// a UTC-derived "today" rejects valid tickets for the first hour or two after local midnight.</summary>
+    private DateOnly Today() => _clock.Today();
 
     private static Result<TicketValidationResponse> Invalid(string code, string message, Ticket? ticket = null) =>
         Result<TicketValidationResponse>.Success(new TicketValidationResponse(

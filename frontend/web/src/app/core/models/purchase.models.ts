@@ -51,7 +51,6 @@ export interface Ticket {
    * share one QR implementation and neither needs a QR library of its own.
    */
   qrImage: string;
-  /** Null until eTicketing.PdfGeneration finishes; at that point status is 'Ready' too. */
 }
 
 export interface PurchaseResponse {

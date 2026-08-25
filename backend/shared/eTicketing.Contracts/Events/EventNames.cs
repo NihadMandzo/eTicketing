@@ -13,8 +13,8 @@ public static class EventNames
     public const string AdminPasswordChanged = "admin-password.changed";
 
     /// <summary>eTicketing.PdfGeneration → eTicketing.Notifications (send the confirmation email
-    /// with every ticket PDF attached) + eTicketing.Ticketing (stamp Ticket.PdfBlobName, flip
-    /// Status to Ready). One event per order, not per ticket.</summary>
+    /// with every ticket PDF attached) + eTicketing.Ticketing (flip Ticket.Status Confirmed →
+    /// Ready). One event per order, not per ticket.</summary>
     public const string TicketPdfReady = "ticket-pdf.ready";
 
     /// <summary>eTicketing.Catalog → eTicketing.Ticketing. Catalog owns Product but has no idea

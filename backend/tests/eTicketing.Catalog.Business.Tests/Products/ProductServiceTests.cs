@@ -3,6 +3,7 @@ using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Business.Tests.TestFixtures;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Contracts.Results;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using SixLabors.ImageSharp;
@@ -435,6 +436,63 @@ public class ProductServiceTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.TicketingMode.Should().Be(TicketingMode.DailyEntry);
         result.Value.OrganizationId.Should().Be(_orgA);
+    }
+
+    // --- GetInternalByIdsAsync ---
+
+    [Fact]
+    public async Task GetInternalByIdsAsync_ForAKnownId_ReturnsThatProduct()
+    {
+        var created = await _sut.CreateAsync(ValidRequest(_music.Id), OrgACaller());
+
+        var result = await _sut.GetInternalByIdsAsync([created.Value!.Id]);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle().Which.Id.Should().Be(created.Value.Id);
+    }
+
+    [Fact]
+    public async Task GetInternalByIdsAsync_ForAnEmptyList_ReturnsEmptyWithoutQuerying()
+    {
+        var result = await _sut.GetInternalByIdsAsync([]);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetInternalByIdsAsync_ForUnknownIds_ReturnsEmptyRatherThanNotFound()
+    {
+        var result = await _sut.GetInternalByIdsAsync([Guid.NewGuid(), Guid.NewGuid()]);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(200)]
+    [InlineData(1)]
+    public async Task GetInternalByIdsAsync_AtOrUnderTheCap_IsAccepted(int count)
+    {
+        var ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
+
+        var result = await _sut.GetInternalByIdsAsync(ids);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetInternalByIdsAsync_OverTheCap_ReturnsValidationFailure()
+    {
+        // The list arrives as a bare body rather than a validated request DTO, so this cap is the
+        // only thing between a caller bug and an unbounded IN (...) clause.
+        var ids = Enumerable.Range(0, 201).Select(_ => Guid.NewGuid()).ToList();
+
+        var result = await _sut.GetInternalByIdsAsync(ids);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("product.too_many_ids");
+        result.Error.Type.Should().Be(ErrorType.Validation);
     }
 
     // --- UploadImageAsync / DeleteImageAsync ---

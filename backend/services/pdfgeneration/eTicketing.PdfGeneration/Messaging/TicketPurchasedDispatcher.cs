@@ -44,7 +44,7 @@ public sealed class TicketPurchasedDispatcher
             ?? throw new PoisonMessageException($"Proizvod iz narudžbe {order.OrderId} više ne postoji.");
 
         // Two consumers pick this up: eTicketing.Notifications sends the confirmation email with
-        // every PDF attached, and eTicketing.Ticketing stamps PdfBlobName / flips Status to Ready.
+        // every PDF attached, and eTicketing.Ticketing flips the tickets Confirmed → Ready.
         await _eventPublisher.PublishAsync(EventNames.TicketPdfReady, ready, ct);
     }
 

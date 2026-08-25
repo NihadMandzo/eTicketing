@@ -1,5 +1,6 @@
 using eTicketing.Contracts.Events;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
 
@@ -22,18 +23,18 @@ public class ProductChangeNotifier : IProductChangeNotifier
 {
     private readonly ITicketRepository _ticketRepository;
     private readonly IEventPublisher _eventPublisher;
-    private readonly TimeProvider _timeProvider;
+    private readonly PlatformClock _clock;
     private readonly ILogger<ProductChangeNotifier> _logger;
 
     public ProductChangeNotifier(
         ITicketRepository ticketRepository,
         IEventPublisher eventPublisher,
-        TimeProvider timeProvider,
+        PlatformClock clock,
         ILogger<ProductChangeNotifier> logger)
     {
         _ticketRepository = ticketRepository;
         _eventPublisher = eventPublisher;
-        _timeProvider = timeProvider;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -44,7 +45,9 @@ public class ProductChangeNotifier : IProductChangeNotifier
         if (message.Changes.Count == 0)
             return;
 
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+        // Local business day, not UTC — see PlatformClock. A buyer whose ticket is valid "today"
+        // locally must not be filtered out because UTC is still on yesterday.
+        var today = _clock.Today();
         var buyers = await _ticketRepository.GetLiveBuyersForProductAsync(message.ProductId, today, ct);
 
         if (buyers.Count == 0)

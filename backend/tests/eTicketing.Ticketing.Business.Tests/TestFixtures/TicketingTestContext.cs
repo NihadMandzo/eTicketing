@@ -5,6 +5,7 @@ using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Data.Sqlite;
@@ -57,6 +58,14 @@ public sealed class TicketingTestContext : IDisposable
     /// than depending on the day the suite happens to run.</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero));
 
+    /// <summary>The real <see cref="PlatformClock"/> over the fake <see cref="Clock"/>, on the same
+    /// Europe/Sarajevo zone production runs. Not mocked on purpose: the whole point of the class is
+    /// the UTC→local conversion, so a test double would assert nothing. The default pin above is
+    /// 10:00 UTC = 12:00 local, comfortably mid-day, so tests that don't care about the boundary
+    /// read the same date either way; the boundary tests move the clock to 22:30 UTC themselves.</summary>
+    public PlatformClock PlatformClock =>
+        new(Clock, MsOptions.Create(new PlatformTimeOptions { TimeZoneId = "Europe/Sarajevo" }));
+
     public TicketingTestContext()
     {
         // "Foreign Keys=True" (SqliteConnectionStringBuilder.ForeignKeys) is the documented way to
@@ -108,19 +117,19 @@ public sealed class TicketingTestContext : IDisposable
 
     public ITicketValidationService CreateTicketValidationService() =>
         new TicketValidationService(
-            TicketRepository, ValidationLock.Object, CatalogClient.Object, QrCodec, UnitOfWork, Clock,
+            TicketRepository, ValidationLock.Object, CatalogClient.Object, QrCodec, UnitOfWork, PlatformClock,
             NullLogger<TicketValidationService>.Instance);
 
     public ITicketPdfCompletionService CreateTicketPdfCompletionService() =>
         new TicketPdfCompletionService(TicketRepository, UnitOfWork, NullLogger<TicketPdfCompletionService>.Instance);
 
     public IProductChangeNotifier CreateProductChangeNotifier() =>
-        new ProductChangeNotifier(TicketRepository, EventPublisher.Object, Clock, NullLogger<ProductChangeNotifier>.Instance);
+        new ProductChangeNotifier(TicketRepository, EventPublisher.Object, PlatformClock, NullLogger<ProductChangeNotifier>.Instance);
 
     public IPurchaseService CreatePurchaseService() =>
         new PurchaseService(
             SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
-            EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, NullLogger<PurchaseService>.Instance);
+            EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock, NullLogger<PurchaseService>.Instance);
 
     public void Dispose()
     {

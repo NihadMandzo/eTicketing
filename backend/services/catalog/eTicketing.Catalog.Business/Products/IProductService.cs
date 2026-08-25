@@ -49,7 +49,9 @@ public interface IProductService
 
     /// <summary>Internal-only batch form of <see cref="GetInternalAsync"/> — one call for every
     /// product an organizer is validating tickets against today, instead of one call per product.
-    /// Unknown ids are simply absent from the result rather than an error.</summary>
+    /// Unknown ids are simply absent from the result rather than an error. Capped at 200 ids per
+    /// call ("product.too_many_ids"): the list arrives as a bare body, not a validated request DTO,
+    /// so the cap is enforced here rather than by a FluentValidation validator.</summary>
     Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
 
     /// <summary>Uploads one gallery photo (up to 5 per product, see ProductImageValidation.MaxCount)

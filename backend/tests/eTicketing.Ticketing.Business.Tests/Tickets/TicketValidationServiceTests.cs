@@ -411,6 +411,81 @@ public class TicketValidationServiceTests : IDisposable
         result.Error.Code.Should().Be("ticket.no_organization");
     }
 
+    // ------------------------------------------------- local business day vs UTC (the 00:00 gate)
+
+    /// <summary>Europe/Sarajevo is UTC+2 in August, so 22:30 UTC is already 00:30 the next day at
+    /// the door. Deriving "today" from UTC would still say 24.08. here and turn this holder away —
+    /// every night, for the first two hours. See PlatformClock.</summary>
+    private static readonly DateTimeOffset JustAfterLocalMidnight = new(2026, 8, 24, 22, 30, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task ValidateAsync_JustAfterLocalMidnight_AcceptsADailyEntryTicketForTheNewLocalDay()
+    {
+        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        var ticket = await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
+        _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeTrue();
+        (await _fixture.DbContext.Tickets.FindAsync(ticket.Id))!.Status.Should().Be(TicketStatus.Used);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_JustBeforeLocalMidnight_StillRejectsTomorrowsDailyEntryTicket()
+    {
+        // The other side of the same boundary: 21:30 UTC is 23:30 local, still today, so a ticket
+        // for tomorrow must not open the gate half an hour early.
+        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        var ticket = await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
+        _fixture.Clock.SetUtcNow(new DateTimeOffset(2026, 8, 24, 21, 30, 0, TimeSpan.Zero));
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeFalse();
+        result.Value.Code.Should().Be("ticket.not_valid_today");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_JustAfterLocalMidnight_AcceptsARecurringReservationStartingThatLocalDay()
+    {
+        var tomorrow = Today.AddDays(1);
+        var ticket = await SeedTicketAsync(
+            mode: TicketingMode.RecurringReservation, validFrom: tomorrow, validTo: tomorrow.AddMonths(1));
+        _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ValidateAsync_JustAfterLocalMidnight_RejectsASingleOccurrenceTicketForTheDayThatJustEnded()
+    {
+        // Mirror case for the mode that asks Catalog for the date: last night's concert stops
+        // working the moment the local day rolls over, not two hours later when UTC catches up.
+        var ticket = await SeedTicketAsync();
+        _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeFalse();
+        result.Value.Code.Should().Be("ticket.not_valid_today");
+    }
+
+    [Fact]
+    public async Task GetProductsForTodayAsync_JustAfterLocalMidnight_ListsTheNewLocalDaysProduct()
+    {
+        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
+        _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
+
+        var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle().Which.ProductId.Should().Be(_productId);
+    }
+
     // ------------------------------------------------------------------------------- test setup
 
     private static ValidateTicketRequest Request(Guid productId, string code) =>

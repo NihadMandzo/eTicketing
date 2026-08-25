@@ -7,6 +7,7 @@ using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data;
 using eTicketing.Ticketing.Data.Repositories;
 using FluentValidation;
@@ -54,6 +55,15 @@ public static class TicketingServiceCollectionExtensions
         // TimeProvider.System — injected rather than DateTime.UtcNow so "is this ticket valid
         // today" is testable without waiting for midnight.
         builder.Services.AddSingleton(TimeProvider.System);
+
+        // PlatformClock answers "what day is it here" in the deployment's own time zone. Every date
+        // the domain compares against (Ticket.ValidDate, ValidFrom/ValidTo, Product.Date) is a local
+        // wall-clock date, so a UTC-derived "today" turns valid tickets away at the gate for the
+        // 1-2 hours between local and UTC midnight. Singleton, and it resolves the zone eagerly, so
+        // a bad/missing time zone fails at startup rather than silently at the door.
+        builder.Services.AddOptions<PlatformTimeOptions>()
+            .Bind(builder.Configuration.GetSection(PlatformTimeOptions.SectionName));
+        builder.Services.AddSingleton<PlatformClock>();
 
         // Ticketing → Catalog: retry + timeout only — no circuit breaker here. The circuit breaker
         // is reserved for the Ticketing → Payment call below, since that's the one call on the

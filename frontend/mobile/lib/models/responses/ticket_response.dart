@@ -25,9 +25,6 @@ class TicketResponse {
   /// package of its own.
   final String qrImage;
 
-  /// Null until eTicketing.PdfGeneration finishes; at that point [status] is
-  /// 'Ready' too.
-
   const TicketResponse({
     required this.id,
     required this.orderId,

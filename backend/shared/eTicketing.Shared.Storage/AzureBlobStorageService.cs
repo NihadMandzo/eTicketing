@@ -30,22 +30,6 @@ public class AzureBlobStorageService : IBlobStorageService
         return blob.Uri.ToString();
     }
 
-    public async Task<byte[]?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default)
-    {
-        var blob = _client.GetBlobContainerClient(containerName).GetBlobClient(blobName);
-
-        // ExistsAsync first rather than catching RequestFailedException: a missing PDF is an
-        // expected outcome (the blob can be deleted out-of-band), not an exceptional one.
-        if (!await blob.ExistsAsync(ct))
-        {
-            return null;
-        }
-
-        using var buffer = new MemoryStream();
-        await blob.DownloadToAsync(buffer, ct);
-        return buffer.ToArray();
-    }
-
     public async Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(containerName);

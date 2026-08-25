@@ -25,7 +25,8 @@ public sealed class EmailMessageBuilder
         return this;
     }
 
-    /// <summary>Attaches a file Brevo will fetch by URL at send time — see EmailAttachment.
+    /// <summary>Attaches a file as inline base64 content — see EmailAttachment for why this is
+    /// NOT the {"url": ...} form Brevo also supports.
     /// Repeatable: one purchase can produce several ticket PDFs, all on the same email.</summary>
     public EmailMessageBuilder WithAttachment(string name, byte[] content)
     {
