@@ -32,6 +32,10 @@ public static class ProductEndpoints
         // Not routed through the Gateway — see docs/gateway-tok.md §1. Consumed only by
         // eTicketing.Ticketing's internal Catalog client.
         app.MapGet("/internal/products/{id:guid}", GetInternal).WithTags("Products (internal)");
+        // POST for a read on purpose: the id list is long enough (an organizer can be validating
+        // tickets for dozens of products in one day) that it would not comfortably fit in a query
+        // string. Long, but not unbounded — ProductService caps it, see MaxInternalByIdsCount.
+        app.MapPost("/internal/products/by-ids", GetInternalByIds).WithTags("Products (internal)");
     }
 
     private static async Task<IResult> GetPublished([AsParameters] ProductQuery query, IProductService service, CancellationToken ct)
@@ -110,6 +114,12 @@ public static class ProductEndpoints
     private static async Task<IResult> GetInternal(Guid id, IProductService service, CancellationToken ct)
     {
         var result = await service.GetInternalAsync(id, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetInternalByIds(List<Guid> ids, IProductService service, CancellationToken ct)
+    {
+        var result = await service.GetInternalByIdsAsync(ids, ct);
         return result.ToHttpResult();
     }
 

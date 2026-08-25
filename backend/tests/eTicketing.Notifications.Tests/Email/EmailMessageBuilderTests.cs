@@ -54,6 +54,34 @@ public class EmailMessageBuilderTests
     }
 
     [Fact]
+    public void Build_WithNoAttachments_ReturnsAnEmptyList()
+    {
+        // Never null — BrevoEmailSender inspects Count to decide whether to send the attachment
+        // array at all.
+        var message = new EmailMessageBuilder()
+            .WithTo("jane@example.com")
+            .WithTemplate(EmailTemplate.AdminPasswordChanged, new AdminPasswordChangedData("Jane"))
+            .Build();
+
+        message.Attachments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WithAttachment_IsRepeatable_SoOneOrderCanCarrySeveralTicketPdfs()
+    {
+        var message = new EmailMessageBuilder()
+            .WithTo("jane@example.com")
+            .WithTemplate(EmailTemplate.AdminPasswordChanged, new AdminPasswordChangedData("Jane"))
+            .WithAttachment("ulaznica-1.pdf", "%PDF-1.4 first"u8.ToArray())
+            .WithAttachment("ulaznica-2.pdf", "%PDF-1.4 second"u8.ToArray())
+            .Build();
+
+        message.Attachments.Should().HaveCount(2);
+        message.Attachments[0].Name.Should().Be("ulaznica-1.pdf");
+        message.Attachments[1].Content.Should().Equal("%PDF-1.4 second"u8.ToArray());
+    }
+
+    [Fact]
     public void WithTemplate_WrongDataType_ThrowsInvalidCastException()
     {
         var act = () => new EmailMessageBuilder()

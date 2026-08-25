@@ -38,7 +38,7 @@ public class PurchaseServiceTests : IDisposable
     private void MockProduct(Guid productId, TicketingMode mode) =>
         _fixture.CatalogClient
             .Setup(c => c.GetProductAsync(productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CatalogProductResponse(productId, _orgA, PublishStatus.Published, mode));
+            .ReturnsAsync(new CatalogProductResponse(productId, _orgA, PublishStatus.Published, mode, "Test proizvod", null, City.Sarajevo));
 
     private static ClaimsPrincipal BuildCaller()
     {
@@ -111,9 +111,56 @@ public class PurchaseServiceTests : IDisposable
         result.Value.Tickets.Should().OnlyContain(t => t.Status == TicketStatus.Confirmed && t.PricePaid == 50);
         result.Value.TotalPaid.Should().Be(100);
         _fixture.CapacityLock.Verify(l => l.ConfirmAsync("hold-1", It.IsAny<CancellationToken>()), Times.Once);
+
+        // ONE event for the whole order, carrying both tickets — not one event per minted Ticket.
+        // eTicketing.PdfGeneration renders a PDF per ticket but eTicketing.Notifications sends a
+        // single confirmation email with all of them attached, which it can only do if it sees the
+        // order as one unit.
         _fixture.EventPublisher.Verify(
-            p => p.PublishAsync(EventNames.TicketPurchased, It.IsAny<TicketPurchased>(), It.IsAny<CancellationToken>()),
-            Times.Exactly(2));
+            p => p.PublishAsync(
+                EventNames.TicketPurchased,
+                It.Is<TicketPurchased>(e => e.Tickets.Count == 2 && e.TotalPaid == 100 && e.SectorName == "VIP"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_PublishesOneQrPayloadPerTicket_MatchingTheMintedTicketIds()
+    {
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 2));
+        MockSuccessfulCharge();
+
+        TicketPurchased? published = null;
+        _fixture.EventPublisher
+            .Setup(p => p.PublishAsync(EventNames.TicketPurchased, It.IsAny<TicketPurchased>(), It.IsAny<CancellationToken>()))
+            .Callback<string, TicketPurchased, CancellationToken>((_, e, _) => published = e);
+
+        var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 2 }), OrgACaller());
+
+        published.Should().NotBeNull();
+        published!.Tickets.Select(t => t.TicketId).Should().BeEquivalentTo(result.Value!.Tickets.Select(t => t.Id));
+
+        // eTicketing.PdfGeneration never signs anything — it renders the payload it's handed here,
+        // so each one has to be the real, verifiable code for its own ticket.
+        foreach (var line in published.Tickets)
+        {
+            _fixture.QrCodec.TryParse(line.QrPayload, out var decoded).Should().BeTrue();
+            decoded.Should().Be(line.TicketId);
+        }
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_ReturnsRenderableQrImageAndNoPdfUrlYet()
+    {
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockSuccessfulCharge();
+
+        var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        var ticket = result.Value!.Tickets.Single();
+        ticket.QrImage.Should().StartWith("data:image/png;base64,");
     }
 
     [Fact]

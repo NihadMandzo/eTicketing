@@ -132,10 +132,6 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("PdfBlobName")
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)");
-
                     b.Property<decimal>("PricePaid")
                         .HasColumnType("decimal(10,2)");
 
@@ -173,6 +169,12 @@ namespace eTicketing.Ticketing.Data.Migrations
 
                     b.Property<DateOnly?>("ValidTo")
                         .HasColumnType("date");
+
+                    b.Property<DateTime?>("ValidatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ValidatedByUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 

@@ -19,6 +19,10 @@ public static class RabbitMqTopology
         EventNames.OrganizationAdminDeleted,
         EventNames.PasswordResetRequested,
         EventNames.AdminPasswordChanged,
+        // Chained behind eTicketing.PdfGeneration, not published directly by Ticketing: the
+        // confirmation email carries the ticket PDFs, so it can only be sent once they exist.
+        EventNames.TicketPdfReady,
+        EventNames.ProductChanged,
     ];
 
     public static async Task DeclareAsync(IChannel channel, CancellationToken ct = default)

@@ -63,6 +63,9 @@ void main() {
       expect(ticketStatusFromJson(1), 'Confirmed');
       expect(ticketStatusFromJson(2), 'Ready');
       expect(ticketStatusFromJson(3), 'Cancelled');
+      // Appended, never inserted — a ticket reaches 'Used' when an organizer
+      // scans it at the gate, and every earlier ordinal has to stay put.
+      expect(ticketStatusFromJson(4), 'Used');
     });
   });
 

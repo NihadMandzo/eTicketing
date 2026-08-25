@@ -16,11 +16,21 @@ namespace eTicketing.Notifications.Messaging;
 /// RabbitMqConsumerService).</summary>
 public sealed class NotificationDispatcher
 {
+    /// <summary>Brevo caps a single request's attachments; staying comfortably under it matters
+    /// more than delivering every PDF of an implausibly large order, because busting the cap
+    /// fails the whole email rather than one attachment. At ~50 KB per ticket this is thousands of
+    /// tickets, so in practice it never trips — it exists so that if it ever does, the buyer still
+    /// gets an email listing every ticket code instead of nothing at all.</summary>
+    private const int MaxTotalAttachmentBytes = 9 * 1024 * 1024;
+
     private readonly IEmailSender _emailSender;
     private readonly FrontendOptions _frontendOptions;
     private readonly ILogger<NotificationDispatcher> _logger;
 
-    public NotificationDispatcher(IEmailSender emailSender, IOptions<FrontendOptions> frontendOptions, ILogger<NotificationDispatcher> logger)
+    public NotificationDispatcher(
+        IEmailSender emailSender,
+        IOptions<FrontendOptions> frontendOptions,
+        ILogger<NotificationDispatcher> logger)
     {
         _emailSender = emailSender;
         _frontendOptions = frontendOptions.Value;
@@ -34,6 +44,8 @@ public sealed class NotificationDispatcher
         EventNames.OrganizationAdminDeleted => HandleOrganizationAdminDeletedAsync(body, ct),
         EventNames.PasswordResetRequested => HandlePasswordResetRequestedAsync(body, ct),
         EventNames.AdminPasswordChanged => HandleAdminPasswordChangedAsync(body, ct),
+        EventNames.TicketPdfReady => HandleTicketPdfReadyAsync(body, ct),
+        EventNames.ProductChanged => HandleProductChangedAsync(body, ct),
         _ => throw new PoisonMessageException($"Nepoznat routing key: {routingKey}")
     };
 
@@ -102,6 +114,67 @@ public sealed class NotificationDispatcher
         var message = new EmailMessageBuilder()
             .WithTo(evt.Email, evt.FirstName)
             .WithTemplate(EmailTemplate.AdminPasswordChanged, new AdminPasswordChangedData(evt.FirstName))
+            .Build();
+
+        await _emailSender.SendAsync(message, ct);
+    }
+
+    /// <summary>The purchase confirmation. Deliberately triggered by ticket-pdf.ready rather than
+    /// ticket.purchased: the PDFs are the point of the email, so it can only be sent once they
+    /// exist. eTicketing.PdfGeneration's own retry ladder guarantees this event eventually
+    /// arrives.</summary>
+    private async Task HandleTicketPdfReadyAsync(ReadOnlyMemory<byte> body, CancellationToken ct)
+    {
+        var evt = Deserialize<TicketPdfReady>(body, EventNames.TicketPdfReady);
+        _logger.LogInformation("Šaljem potvrdu kupovine za narudžbu {OrderId}.", evt.OrderId);
+
+        var data = new TicketsReadyData(
+            evt.ProductName,
+            evt.ProductDate?.ToString("dd.MM.yyyy. HH:mm") ?? "Datum po ulaznici",
+            evt.ProductCity,
+            evt.TotalPaid,
+            evt.Tickets.Select(t => new TicketsReadyLine(
+                // Short, readable code — the same 8-character prefix the PDF filename uses, so the
+                // row and the attachment it refers to are visibly the same ticket.
+                t.TicketId.ToString("N")[..8].ToUpperInvariant(),
+                t.SectorName, t.TicketTypeName, t.PricePaid)).ToList());
+
+        var builder = new EmailMessageBuilder()
+            .WithTo(evt.UserEmail)
+            .WithTemplate(EmailTemplate.TicketsReady, data);
+
+        var totalBytes = 0;
+        foreach (var ticket in evt.Tickets)
+        {
+            if (totalBytes + ticket.Content.Length > MaxTotalAttachmentBytes)
+            {
+                _logger.LogWarning(
+                    "Prilozi za narudžbu {OrderId} prelaze dozvoljenu veličinu — preostale ulaznice nisu priložene.",
+                    evt.OrderId);
+                break;
+            }
+
+            totalBytes += ticket.Content.Length;
+            builder.WithAttachment(ticket.FileName, ticket.Content);
+        }
+
+        await _emailSender.SendAsync(builder.Build(), ct);
+    }
+
+    /// <summary>Already fanned out per-recipient by eTicketing.Ticketing (which is the only service
+    /// that knows who the buyers are) — one event in, one email out, no lookup here.</summary>
+    private async Task HandleProductChangedAsync(ReadOnlyMemory<byte> body, CancellationToken ct)
+    {
+        var evt = Deserialize<ProductChangedNotification>(body, EventNames.ProductChanged);
+        _logger.LogInformation("Šaljem obavještenje o izmjeni proizvoda {ProductId}.", evt.ProductId);
+
+        var data = new ProductChangedData(
+            evt.ProductName,
+            evt.Changes.Select(c => new ProductChangeLine(c.Field, c.OldValue, c.NewValue)).ToList());
+
+        var message = new EmailMessageBuilder()
+            .WithTo(evt.RecipientEmail)
+            .WithTemplate(EmailTemplate.ProductChanged, data)
             .Build();
 
         await _emailSender.SendAsync(message, ct);

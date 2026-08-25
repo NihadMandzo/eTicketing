@@ -48,7 +48,7 @@ public class BrevoEmailSenderTests
             })
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        await sender.SendAsync(new EmailMessage("jane@example.com", "Jane Doe", "Test Subject", "<p>Body</p>"));
+        await sender.SendAsync(new EmailMessage("jane@example.com", "Jane Doe", "Test Subject", "<p>Body</p>", []));
 
         capturedRequest!.RequestUri!.AbsoluteUri.Should().Be("https://api.brevo.com/v3/smtp/email");
         capturedRequest.Headers.GetValues("api-key").Should().ContainSingle().Which.Should().Be(ApiKeySecret);
@@ -65,7 +65,7 @@ public class BrevoEmailSenderTests
     {
         var (sender, _, _) = BuildSender(HttpStatusCode.InternalServerError);
 
-        var act = async () => await sender.SendAsync(new EmailMessage("jane@example.com", null, "Subject", "<p>Body</p>"));
+        var act = async () => await sender.SendAsync(new EmailMessage("jane@example.com", null, "Subject", "<p>Body</p>", []));
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -77,7 +77,7 @@ public class BrevoEmailSenderTests
 
         try
         {
-            await sender.SendAsync(new EmailMessage("jane@example.com", null, "Subject", "<p>Body</p>"));
+            await sender.SendAsync(new EmailMessage("jane@example.com", null, "Subject", "<p>Body</p>", []));
         }
         catch (InvalidOperationException)
         {

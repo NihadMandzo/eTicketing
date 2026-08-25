@@ -1,7 +1,8 @@
-using eTicketing.PdfGeneration;
+using eTicketing.PdfGeneration.Infrastructure;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
+
+builder.AddPdfGenerationInfrastructure();
 
 var host = builder.Build();
-host.Run();
+await host.RunAsync();

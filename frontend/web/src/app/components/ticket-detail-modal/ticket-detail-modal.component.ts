@@ -10,10 +10,10 @@ import {
   inject,
   input,
   output,
-  signal,
 } from '@angular/core';
 
 import { Ticket } from '../../core/models/purchase.models';
+import { environment } from '../../../environments/environment';
 
 const FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -21,10 +21,11 @@ const FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]
  * Full-screen ticket detail overlay, opened by clicking a ticket card in
  * Profile's "Moje ulaznice" tab — the web equivalent of mobile's
  * `ticket_qr_screen.dart` (kept for feature parity between the two apps).
- * The QR is a static placeholder glyph, not a real scannable code and not a
- * fake-but-scannable-looking pattern — Ticketing has no gate-scanning
- * consumer yet, so an honest placeholder is less misleading than something
- * that visually implies real scannability. Same reasoning as mobile's.
+ *
+ * The QR is real and scannable: `ticket.qrImage` is a `data:` PNG rendered
+ * server-side by eTicketing.Ticketing, so this component needs no QR library
+ * and both frontends are guaranteed to show the identical code that the
+ * organizer's scanner and the emailed PDF carry.
  *
  * Rendered/destroyed by the parent's `@if`, so component construction/destruction IS modal
  * open/close — that's why focus management lives in AfterViewInit/OnDestroy rather than
@@ -51,7 +52,12 @@ export class TicketDetailModalComponent implements AfterViewInit, OnDestroy {
   readonly productName = input.required<string>();
   readonly closed = output<void>();
 
-  readonly walletMessageVisible = signal(false);
+  readonly isUsed = computed(() => this.ticket().status === 'Used');
+
+  // Ticket PDFs are never stored — Ticketing renders the sheet per request — so the link is a plain
+  // API URL that works from the moment the ticket exists, with no "generating…" state to wait out.
+  // Opened as a top-level navigation, which carries the httpOnly session cookie (SameSite=Lax/None).
+  readonly pdfUrl = computed(() => `${environment.apiBaseUrl}/tickets/${this.ticket().id}/pdf`);
 
   readonly validityLine = computed(() => {
     const t = this.ticket();
@@ -70,13 +76,11 @@ export class TicketDetailModalComponent implements AfterViewInit, OnDestroy {
         return 'Spremna';
       case 'Cancelled':
         return 'Otkazana';
+      case 'Used':
+        return 'Iskorištena';
       default:
         return status;
     }
-  }
-
-  addToWallet(): void {
-    this.walletMessageVisible.set(true);
   }
 
   close(): void {
@@ -86,7 +90,7 @@ export class TicketDetailModalComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     if (!this.isBrowser) return;
     // Focus the panel itself (tabindex="-1" in the template) rather than the first control inside
-    // it — there's no single "obvious" first field here (close button vs. wallet button), so the
+    // it — there's no single "obvious" first field here (close button vs. PDF link), so the
     // dialog's own heading is the least surprising place for a screen reader to land.
     this.host.nativeElement.querySelector<HTMLElement>('.modal')?.focus();
   }

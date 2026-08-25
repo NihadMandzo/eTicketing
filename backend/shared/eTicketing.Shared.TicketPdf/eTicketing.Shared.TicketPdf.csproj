@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="QuestPDF" Version="2026.7.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded rather than copied to disk: the runtime images ship only Liberation, and the
+         ticket design depends on Manrope's weight range. Both faces are OFL 1.1 (licences
+         alongside the .ttf files) and are redistributed unmodified. -->
+    <EmbeddedResource Include="Fonts\*.ttf" />
+    <EmbeddedResource Include="logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -29,6 +29,11 @@ public record PurchaseResponse(
     DateTime PurchasedAt,
     IReadOnlyList<TicketResponse> Tickets);
 
+/// <param name="QrPayload">The signed code this ticket's QR encodes. Shown to the holder as a
+/// fallback the gate can type in, and the exact string a scanner reads back.</param>
+/// <param name="QrImage">A ready-to-render <c>data:image/png;base64,...</c> QR. Rendered here
+/// rather than in each client so web and mobile need no QR library of their own — see
+/// TicketQrImage.</param>
 public record TicketResponse(
     Guid Id,
     Guid OrderId,
@@ -42,4 +47,6 @@ public record TicketResponse(
     DateOnly? ValidDate,
     DateOnly? ValidFrom,
     DateOnly? ValidTo,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string QrPayload,
+    string QrImage);

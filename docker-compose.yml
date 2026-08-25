@@ -96,8 +96,12 @@ services:
       # Category icons live in Azure Blob Storage now (not proxied through this API), so IconUrl
       # is a direct Azure URL — no Gateway-relative PublicBaseUrl needed here anymore.
       BlobStorage__ConnectionString: "${AZURE_STORAGE_CONNECTION_STRING:?Set AZURE_STORAGE_CONNECTION_STRING in .env}"
+      # Catalog publishes product.updated when a PUBLISHED product's vital fields change; Ticketing
+      # consumes it and fans it out to that product's ticket holders.
+      RabbitMq__Host: "rabbitmq"
     depends_on:
       sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     networks: [eticketing-network]
     restart: unless-stopped
 
@@ -113,6 +117,13 @@ services:
       Services__Catalog: "http://catalog-service:8080"
       Services__Payment: "http://payment-service:8080"
       RabbitMq__Host: "rabbitmq"
+      # Signs the QR payload minted for every ticket, and verifies it back at the gate. Ticketing is
+      # the ONLY service that needs this — PdfGeneration receives finished payloads on the event.
+      Qr__SigningKey: "${QR_SIGNING_KEY:?Set QR_SIGNING_KEY in .env}"
+      # GET /tickets/{id}/pdf renders the buyer's ticket here on demand — ticket PDFs are never
+      # stored anywhere — so this service prints the same support footer as the e-mailed copy.
+      TicketSupport__Email: "${SUPPORT_EMAIL:-podrska@ekarta.ba}"
+      TicketSupport__Phone: "${SUPPORT_PHONE:-}"
     depends_on:
       sqlserver: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -157,8 +168,16 @@ services:
     container_name: eticketing-pdfgeneration
     environment:
       RabbitMq__Host: "rabbitmq"
+      # Printed in the footer of every ticket. The phone is optional — left unset, the ticket shows
+      # the address alone rather than a number nobody answers.
+      TicketSupport__Email: "${SUPPORT_EMAIL:-podrska@ekarta.ba}"
+      TicketSupport__Phone: "${SUPPORT_PHONE:-}"
+      # TicketPurchased carries no product name/date (Ticketing only stores a ProductId) — the PDF
+      # gets them from Catalog's internal endpoint.
+      Services__Catalog: "http://catalog-service:8080"
     depends_on:
       rabbitmq: { condition: service_healthy }
+      catalog-service: { condition: service_started }
     networks: [eticketing-network]
     restart: unless-stopped
 

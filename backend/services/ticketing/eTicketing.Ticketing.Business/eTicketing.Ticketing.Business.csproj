@@ -3,12 +3,19 @@
   <ItemGroup>
     <ProjectReference Include="..\eTicketing.Ticketing.Data\eTicketing.Ticketing.Data.csproj" />
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <!-- For on-demand ticket PDF rendering: TicketPdfService builds a TicketDocument with
+         TicketTheme/TicketSupportOptions from here, so this service and eTicketing.PdfGeneration
+         render the identical sheet from one shared definition. -->
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.TicketPdf\eTicketing.Shared.TicketPdf.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="FluentValidation" Version="12.0.0" />
     <PackageReference Include="Mapster" Version="10.0.11" />
+    <!-- PngByteQRCode only — deliberately not QRCoder's System.Drawing-backed renderers, which
+         don't work on the Linux container this service actually runs in. -->
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <PropertyGroup>

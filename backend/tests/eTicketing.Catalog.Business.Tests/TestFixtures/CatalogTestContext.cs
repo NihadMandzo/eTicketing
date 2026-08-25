@@ -5,6 +5,7 @@ using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 
 namespace eTicketing.Catalog.Business.Tests.TestFixtures;
 
@@ -26,6 +27,11 @@ public sealed class CatalogTestContext : IDisposable
     public IProductImageRepository ProductImageRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public FakeBlobStorageService BlobStorage { get; } = new();
+
+    /// <summary>RabbitMQ is a genuine external system, so it's mocked rather than exercised (see
+    /// .claude/rules/10-backend.md). Catalog publishes product.updated through this when a
+    /// published product's vital fields change.</summary>
+    public Mock<IEventPublisher> EventPublisher { get; } = new();
 
     public CatalogTestContext()
     {
@@ -50,7 +56,7 @@ public sealed class CatalogTestContext : IDisposable
         new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
     public IProductService CreateProductService() =>
-        new ProductService(ProductRepository, ProductImageRepository, CategoryRepository, UnitOfWork, BlobStorage);
+        new ProductService(ProductRepository, ProductImageRepository, CategoryRepository, UnitOfWork, BlobStorage, EventPublisher.Object);
 
     public void Dispose()
     {

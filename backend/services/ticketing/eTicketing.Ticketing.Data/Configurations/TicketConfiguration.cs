@@ -10,7 +10,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
     {
         builder.Property(t => t.UserEmail).HasMaxLength(320).IsRequired();
         builder.Property(t => t.PricePaid).HasColumnType("decimal(10,2)");
-        builder.Property(t => t.PdfBlobName).HasMaxLength(300);
 
         // SectorId is required (non-nullable), so plain Restrict is unambiguous here: the delete
         // is always rejected by the database, there's no nullable client-side fallback for EF to

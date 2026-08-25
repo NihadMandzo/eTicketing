@@ -5,6 +5,8 @@ using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -47,7 +49,11 @@ public interface IEventPublisher
 /// 10. Persists everything in one SaveChangesAsync, logged on failure — by this point the charge has
 ///     already succeeded, so a persistence failure here is silent money without a paper trail unless
 ///     it's logged loudly.
-/// 11. Publishes TicketPurchased once per minted Ticket.
+/// 11. Publishes ONE TicketPurchased for the whole order (not one per Ticket): eTicketing.PdfGeneration
+///     renders a PDF per ticket but eTicketing.Notifications sends a single confirmation email
+///     carrying all of them, which it can only do if it sees the order as one unit. Each line
+///     carries the ticket's signed QR payload, minted here — Ticketing is the only service that
+///     holds the QR signing key.
 /// </summary>
 public class PurchaseService : IPurchaseService
 {
@@ -58,6 +64,9 @@ public class PurchaseService : IPurchaseService
     private readonly IPaymentClient _paymentClient;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TicketQrCodec _qrCodec;
+    private readonly TicketResponseFactory _responseFactory;
+    private readonly PlatformClock _clock;
     private readonly ILogger<PurchaseService> _logger;
 
     public PurchaseService(
@@ -68,6 +77,9 @@ public class PurchaseService : IPurchaseService
         IPaymentClient paymentClient,
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
+        TicketQrCodec qrCodec,
+        TicketResponseFactory responseFactory,
+        PlatformClock clock,
         ILogger<PurchaseService> logger)
     {
         _sectorRepository = sectorRepository;
@@ -77,6 +89,9 @@ public class PurchaseService : IPurchaseService
         _paymentClient = paymentClient;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
+        _qrCodec = qrCodec;
+        _responseFactory = responseFactory;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -126,7 +141,7 @@ public class PurchaseService : IPurchaseService
         if (charge.Status == PaymentChargeStatus.Failed)
         {
             await _capacityLock.ReleaseAsync(request.HoldId, ct);
-            await _eventPublisher.PublishAsync(EventNames.PaymentFailed, new PaymentFailed(userId, userEmail, "card_declined", DateTime.UtcNow), ct);
+            await _eventPublisher.PublishAsync(EventNames.PaymentFailed, new PaymentFailed(userId, userEmail, "card_declined", _clock.UtcNow), ct);
             return Result<PurchaseResponse>.Failure(Error.Validation("payment.declined", "Plaćanje je odbijeno. Provjerite podatke kartice."));
         }
 
@@ -159,8 +174,10 @@ public class PurchaseService : IPurchaseService
                             SectorId = sector.Id,
                             UserId = userId,
                             Status = SubscriptionStatus.Active,
-                            CurrentPeriodStart = DateOnly.FromDateTime(DateTime.UtcNow),
-                            CurrentPeriodEnd = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(1).AddDays(-1),
+                            // Local business day, not UTC — a subscription bought just after local
+                            // midnight must bill from today, not from yesterday. See PlatformClock.
+                            CurrentPeriodStart = _clock.Today(),
+                            CurrentPeriodEnd = _clock.Today().AddMonths(1).AddDays(-1),
                             PaymentReference = charge.Id.ToString(),
                         };
                         subscription.NextRenewalAt = subscription.CurrentPeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
@@ -202,28 +219,32 @@ public class PurchaseService : IPurchaseService
             throw;
         }
 
-        foreach (var ticket in tickets)
-        {
-            await _eventPublisher.PublishAsync(
-                EventNames.TicketPurchased,
-                new TicketPurchased(ticket.Id, ticket.ProductId, ticket.SectorId, ticket.UserId, ticket.UserEmail, ticket.CreatedAt, ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo),
-                ct);
-        }
-
         // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
         // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
+        await _eventPublisher.PublishAsync(
+            EventNames.TicketPurchased,
+            new TicketPurchased(
+                orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
+                userId, userEmail, totalPrice, tickets[0].CreatedAt,
+                tickets.Select(t => new PurchasedTicket(
+                    t.Id,
+                    _qrCodec.Sign(t.Id),
+                    TicketTypeNameOf(t, ticketTypesById),
+                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList()),
+            ct);
+
         var response = new PurchaseResponse(
             orderId, sector.ProductId, sector.Id, totalPrice, tickets[0].CreatedAt,
-            tickets.Select(t => ToTicketResponse(t, sector.Name, ticketTypesById)).ToList());
+            tickets.Select(t => _responseFactory.Create(t, sector.Name, TicketTypeNameOf(t, ticketTypesById))).ToList());
 
         return Result<PurchaseResponse>.Success(response);
     }
 
-    private static TicketResponse ToTicketResponse(Ticket ticket, string sectorName, IReadOnlyDictionary<Guid, TicketType> ticketTypesById) =>
-        new(
-            ticket.Id, ticket.OrderId, ticket.SectorId, sectorName, ticket.ProductId,
-            ticket.TicketTypeId, ticket.TicketTypeId is null ? null : ticketTypesById[ticket.TicketTypeId.Value].Name,
-            ticket.Status, ticket.PricePaid, ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo, ticket.CreatedAt);
+    // The Tickets minted above are brand-new and untracked-by-navigation, so TicketType is null on
+    // them even though TicketTypeId is set — resolve the name from the dictionary the sector was
+    // loaded with rather than through the (unloaded) navigation.
+    private static string? TicketTypeNameOf(Ticket ticket, IReadOnlyDictionary<Guid, TicketType> ticketTypesById) =>
+        ticket.TicketTypeId is null ? null : ticketTypesById[ticket.TicketTypeId.Value].Name;
 
     // The `cardNumber.Length >= 4` branch below is only a defensive fallback — in practice
     // CardNumber always has at least 12 digits by the time it reaches here, enforced by

@@ -29,7 +29,12 @@ public sealed class BrevoEmailSender : IEmailSender
             new BrevoContact(_sender.SenderEmail, _sender.SenderName),
             [new BrevoContact(message.ToEmail, message.ToName)],
             message.Subject,
-            message.HtmlBody);
+            message.HtmlBody,
+            // null, not an empty array: Brevo rejects "attachment": [] as a malformed request,
+            // which would break every email that has no attachment (i.e. most of them).
+            message.Attachments.Count == 0
+                ? null
+                : message.Attachments.Select(a => new BrevoAttachment(Convert.ToBase64String(a.Content), a.Name)).ToArray());
 
         var stopwatch = Stopwatch.StartNew();
         // No custom logging handler/message-logging enabled on this HttpClient (see DI wiring) —
@@ -47,9 +52,20 @@ public sealed class BrevoEmailSender : IEmailSender
         }
     }
 
-    private sealed record BrevoSendRequest(BrevoContact Sender, BrevoContact[] To, string Subject, string HtmlContent);
+    private sealed record BrevoSendRequest(
+        BrevoContact Sender, BrevoContact[] To, string Subject, string HtmlContent, BrevoAttachment[]? Attachment);
 
     private sealed record BrevoContact(string Email, string? Name);
+
+    /// <summary>Brevo's inline attachment form: Content is the base64-encoded file. Property names
+    /// are lowercase on the wire ("content"/"name") — matched by the camelCase serializer
+    /// PostAsJsonAsync uses by default.
+    ///
+    /// Deliberately NOT Brevo's alternative {"url": ...} form, which has it fetch the file itself.
+    /// That was the original implementation and it silently lost mail: Brevo returned 201 and
+    /// logged the message as "delivered", but it never reached the recipient, while the same PDF
+    /// sent inline arrived normally (verified live against Brevo on 2026-08-24).</summary>
+    private sealed record BrevoAttachment(string Content, string Name);
 }
 
 /// <summary>Just the two values BrevoEmailSender needs to build the "sender" field of a Brevo

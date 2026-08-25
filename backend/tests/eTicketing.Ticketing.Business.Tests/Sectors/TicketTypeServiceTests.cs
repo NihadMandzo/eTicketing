@@ -27,7 +27,7 @@ public class TicketTypeServiceTests : IDisposable
 
         _fixture.CatalogClient
             .Setup(c => c.GetProductAsync(_productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CatalogProductResponse(_productId, _orgA, PublishStatus.Published, TicketingMode.DailyEntry));
+            .ReturnsAsync(new CatalogProductResponse(_productId, _orgA, PublishStatus.Published, TicketingMode.DailyEntry, "Test proizvod", null, City.Sarajevo));
     }
 
     private static ClaimsPrincipal BuildCaller(string role, Guid? organizationId = null)

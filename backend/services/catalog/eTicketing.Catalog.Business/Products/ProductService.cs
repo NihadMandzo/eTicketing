@@ -3,6 +3,7 @@ using eTicketing.Catalog.Business.Products.Validators;
 using eTicketing.Catalog.Business.Security;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
+using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
@@ -21,19 +22,22 @@ public class ProductService : IProductService
     private readonly ICategoryRepository _categoryRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
+    private readonly IEventPublisher _eventPublisher;
 
     public ProductService(
         IProductRepository productRepository,
         IProductImageRepository productImageRepository,
         ICategoryRepository categoryRepository,
         IUnitOfWork unitOfWork,
-        IBlobStorageService blobStorageService)
+        IBlobStorageService blobStorageService,
+        IEventPublisher eventPublisher)
     {
         _productRepository = productRepository;
         _productImageRepository = productImageRepository;
         _categoryRepository = categoryRepository;
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<Result<ProductPreviewResponse>> PreviewAsync(UpsertProductRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -109,6 +113,13 @@ public class ProductService : IProductService
         if (validation.IsFailure)
             return Result<ProductResponse>.Failure(validation.Error);
 
+        // Diffed BEFORE the assignments below overwrite the old values, and only for a published
+        // product: a draft has no buyers by construction, so there is nobody to notify and no
+        // reason to put an event on the bus.
+        var changes = product.Status == PublishStatus.Published
+            ? ProductChangeDetector.Detect(product, request, product.Category?.Name ?? string.Empty, validation.Value!.Name)
+            : [];
+
         // A Published product stays Published after an edit — Status is deliberately untouched here.
         product.Name = request.Name;
         product.Description = request.Description;
@@ -120,6 +131,17 @@ public class ProductService : IProductService
         product.City = request.City!.Value;
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Published after the commit, never before: a buyer must not be emailed "the date moved"
+        // about a save that then failed. eTicketing.Ticketing consumes this and fans it out to the
+        // actual ticket holders — Catalog has no idea who they are.
+        if (changes.Count > 0)
+        {
+            await _eventPublisher.PublishAsync(
+                EventNames.ProductUpdated,
+                new ProductUpdated(product.Id, product.Name, DateTime.UtcNow, changes),
+                ct);
+        }
 
         return Result<ProductResponse>.Success(ToResponse(product));
     }
@@ -261,9 +283,33 @@ public class ProductService : IProductService
         if (product is null)
             return Result<ProductInternalResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
-        return Result<ProductInternalResponse>.Success(new ProductInternalResponse(
-            product.Id, product.OrganizationId, product.Status, product.Category!.TicketingMode));
+        return Result<ProductInternalResponse>.Success(ToInternalResponse(product));
     }
+
+    /// <summary>Upper bound on <see cref="GetInternalByIdsAsync"/>. Generous next to the real
+    /// workload (an organizer validating a few dozen products in one day) but finite: the id list
+    /// arrives as a bare List&lt;Guid&gt; body rather than a validated request DTO, so this is the
+    /// only thing standing between a caller bug and an unbounded IN (...) clause.</summary>
+    private const int MaxInternalByIdsCount = 200;
+
+    public async Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return Result<List<ProductInternalResponse>>.Success([]);
+
+        if (ids.Count > MaxInternalByIdsCount)
+        {
+            return Result<List<ProductInternalResponse>>.Failure(Error.Validation(
+                "product.too_many_ids", $"Moguće je zatražiti najviše {MaxInternalByIdsCount} proizvoda odjednom."));
+        }
+
+        var products = await _productRepository.GetByIdsWithCategoryAsync(ids, ct);
+        return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
+    }
+
+    private static ProductInternalResponse ToInternalResponse(Product product) =>
+        new(product.Id, product.OrganizationId, product.Status, product.Category!.TicketingMode,
+            product.Name, product.Date, product.City);
 
     /// <summary>Shared by PreviewAsync/CreateAsync/UpdateAsync so preview and the real write path
     /// always agree on the same validation message (per SPRINT_2 US-2.2's acceptance criteria).

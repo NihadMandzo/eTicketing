@@ -32,8 +32,16 @@ String enumNameFromJson(dynamic value, List<String> names, String fallback) {
 /// Mirrors `eTicketing.Contracts.Persistence.PublishStatus`.
 const publishStatusNames = ['Draft', 'Published'];
 
-/// Mirrors `eTicketing.Ticketing.Data.Entities.TicketStatus`.
-const ticketStatusNames = ['Processing', 'Confirmed', 'Ready', 'Cancelled'];
+/// Mirrors `eTicketing.Ticketing.Data.Entities.TicketStatus`. 'Used' is
+/// appended (never inserted) because the wire value is the ordinal — it's the
+/// terminal status a ticket reaches once an organizer scans it at the gate.
+const ticketStatusNames = [
+  'Processing',
+  'Confirmed',
+  'Ready',
+  'Cancelled',
+  'Used',
+];
 
 String publishStatusFromJson(dynamic value) => enumNameFromJson(value, publishStatusNames, 'Published');
 
