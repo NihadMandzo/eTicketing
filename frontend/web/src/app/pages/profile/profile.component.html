@@ -118,6 +118,20 @@
                   <div class="ticket-side">
                     <span class="ticket-status" [class.confirmed]="ticket.status === 'Confirmed'">{{ statusLabel(ticket.status) }}</span>
                     <span class="ticket-price">{{ ticket.pricePaid }} KM</span>
+                    <!-- A plain top-level navigation, not an XHR blob download: that is what carries
+                         the httpOnly session cookie. stopPropagation keeps the click off the card,
+                         which otherwise opens the detail modal. -->
+                    <a
+                      class="ticket-pdf-link"
+                      [href]="pdfUrlFor(ticket)"
+                      target="_blank"
+                      rel="noopener"
+                      (click)="$event.stopPropagation()"
+                      [attr.aria-label]="'Preuzmi PDF ulaznicu za ' + ticket.sectorName"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                      <span>Preuzmi PDF</span>
+                    </a>
                   </div>
                 </div>
               }

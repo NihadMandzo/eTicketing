@@ -1,0 +1,89 @@
+using eTicketing.Contracts.Persistence;
+
+namespace eTicketing.Ticketing.Data.Entities;
+
+/// <summary>Persisted as the integer ordinal and mirrored by ordinal in the Flutter desktop's
+/// TicketPrintBatchStatus. Append new values only; never reorder or remove.</summary>
+public enum TicketPrintBatchStatus
+{
+    Queued,     // Tickets minted and capacity claimed; waiting for the render worker
+    Rendering,  // TicketPrintRenderWorker has picked it up
+    Ready,      // The file row holds the finished PDF, waiting to be downloaded once
+    Failed      // Rendering blew up; ErrorMessage says why, and the batch can be retried
+}
+
+/// <summary>
+/// One bulk export of physical, printable tickets for a Product, requested by an organizer from
+/// the desktop back-office. Creating the batch is what mints the Tickets and claims their capacity
+/// — the PDF is only paper. Rendering happens afterwards, off the request thread, in
+/// TicketPrintRenderWorker, because a batch can run to thousands of tickets.
+///
+/// <para>This row stays small on purpose: the rendered PDF lives in a separate
+/// <see cref="TicketPrintBatchFile"/> row, so listing batches, polling status and flipping state
+/// never drag tens of megabytes through the change tracker.</para>
+/// </summary>
+public class TicketPrintBatch : BaseEntity
+{
+    public Guid Id { get; set; }
+
+    // Cross-service ref to Catalog.Product — plain Guid column, same convention as Sector.
+    public Guid ProductId { get; set; }
+
+    // Denormalized from the product at request time so ownership checks on later polls/downloads
+    // never need another cross-service call.
+    public Guid OrganizationId { get; set; }
+    public Guid RequestedByUserId { get; set; }
+
+    // Denormalized product name, so the desktop's "ready for download" badge can label the batch
+    // without fanning out to Catalog for every row it shows.
+    public string ProductName { get; set; } = string.Empty;
+
+    public TicketPrintBatchStatus Status { get; set; } = TicketPrintBatchStatus.Queued;
+
+    public int TicketCount { get; set; }
+
+    // Advances while the worker renders, so the UI can show real progress rather than a spinner
+    // with no end in sight.
+    public int RenderedCount { get; set; }
+
+    // ceil(TicketCount / PrintSheetDocument.TicketsPerSheet). Written once the render finishes.
+    public int PageCount { get; set; }
+
+    // The inclusive range of human-readable stub numbers this batch printed. Serial numbers run
+    // per product and never restart, so a later batch continues where this one stopped.
+    public int SerialFrom { get; set; }
+    public int SerialTo { get; set; }
+
+    // Sum of the face value of every ticket in the batch — what the organizer is accountable for
+    // once the paper leaves the printer.
+    public decimal NominalValue { get; set; }
+
+    // DailyEntry batches only: which calendar day every ticket in the batch admits entry for.
+    public DateOnly? ValidDate { get; set; }
+
+    public long? FileSizeBytes { get; set; }
+
+    public string? ErrorMessage { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public DateTime? DownloadedAt { get; set; }
+}
+
+/// <summary>
+/// The rendered sheet for one <see cref="TicketPrintBatch"/>, in its own table so the batch row
+/// stays cheap to read.
+///
+/// <para><b>Deliberately transient.</b> Ticket PDFs are never archived anywhere in this platform —
+/// that is why GET /tickets/{id}/pdf re-renders per request instead of reading a stored file — and
+/// this sheet is worse than one ticket: it is thousands of working gate codes in a single file. So
+/// this row exists only in the gap between "the worker finished" and "the organizer downloaded
+/// it". It is deleted the moment the bytes are handed over, and swept away if nobody ever collects
+/// them. Nothing is ever written to blob storage.</para>
+/// </summary>
+public class TicketPrintBatchFile
+{
+    // PK and FK at once — a batch has at most one file.
+    public Guid BatchId { get; set; }
+    public TicketPrintBatch? Batch { get; set; }
+
+    public byte[] Content { get; set; } = [];
+}

@@ -6,6 +6,7 @@ using eTicketing.Ticketing.Business.Tests.TestFixtures;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data.Entities;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 
 namespace eTicketing.Ticketing.Business.Tests.Tickets;
@@ -490,6 +491,104 @@ public class TicketValidationServiceTests : IDisposable
 
     private static ValidateTicketRequest Request(Guid productId, string code) =>
         new() { ProductId = productId, Code = code };
+
+    // ------------------------------------------------- printed tickets (physical ticket export)
+
+    [Fact]
+    public async Task ValidateAsync_ForAPrintedTicket_AdmitsItExactlyLikeAnOnlineOne()
+    {
+        // The whole promise of the physical-ticket export: paper sold over a counter opens the gate
+        // on the strength of its printed QR, with no buyer account behind it.
+        var ticket = await SeedPrintedTicketAsync();
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.IsValid.Should().BeTrue();
+        (await ReloadAsync(ticket.Id)).Status.Should().Be(TicketStatus.Used);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ForAPrintedTicketScannedTwice_RejectsTheSecondScan()
+    {
+        // A printed sheet can be photocopied. The second copy must not get anyone in.
+        var ticket = await SeedPrintedTicketAsync();
+        var payload = _fixture.QrCodec.Sign(ticket.Id);
+        await _sut.ValidateAsync(Request(_productId, payload), OrganizerOf(_orgA));
+
+        var second = await _sut.ValidateAsync(Request(_productId, payload), OrganizerOf(_orgA));
+
+        second.Value!.IsValid.Should().BeFalse();
+        second.Value.Code.Should().Be("ticket.already_used");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ForAnotherOrganizationsPrintedTicket_IsRejected()
+    {
+        var ticket = await SeedPrintedTicketAsync(organizationId: _orgB);
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeFalse();
+        result.Value.Code.Should().Be("ticket.wrong_organization");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ForAPrintedTicket_ReportsNoHolderRatherThanABlankEmail()
+    {
+        var ticket = await SeedPrintedTicketAsync();
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.HolderEmail.Should().BeNull();
+    }
+
+    /// <summary>A ticket minted by the physical-ticket export: no buyer, a stub number, and its
+    /// print batch as the order it belongs to.</summary>
+    private async Task<Ticket> SeedPrintedTicketAsync(Guid? organizationId = null)
+    {
+        var sector = new Sector
+        {
+            Id = Guid.NewGuid(),
+            ProductId = _productId,
+            OrganizationId = organizationId ?? _orgA,
+            Name = "VIP",
+            Capacity = 100,
+            Price = 50,
+            Status = PublishStatus.Published,
+            TicketingMode = TicketingMode.SingleOccurrence,
+        };
+        _fixture.DbContext.Sectors.Add(sector);
+
+        // The batch row has to exist: Ticket.PrintBatchId is a real FK, so a printed ticket can
+        // never be orphaned from the export that minted it.
+        var batch = new TicketPrintBatch
+        {
+            Id = Guid.NewGuid(),
+            ProductId = _productId,
+            OrganizationId = sector.OrganizationId,
+            RequestedByUserId = Guid.NewGuid(),
+            ProductName = "Test proizvod",
+            Status = TicketPrintBatchStatus.Ready,
+            TicketCount = 1,
+            SerialFrom = 1,
+            SerialTo = 1,
+            NominalValue = 50,
+        };
+        _fixture.DbContext.TicketPrintBatches.Add(batch);
+
+        var ticket = Ticket.ForPrint(sector.Id, null, batch.Id, _productId, 50, 1, null);
+        _fixture.DbContext.Tickets.Add(ticket);
+        await _fixture.DbContext.SaveChangesAsync();
+        _fixture.DbContext.ChangeTracker.Clear();
+        return ticket;
+    }
+
+    private async Task<Ticket> ReloadAsync(Guid ticketId)
+    {
+        _fixture.DbContext.ChangeTracker.Clear();
+        return await _fixture.DbContext.Tickets.AsNoTracking().FirstAsync(t => t.Id == ticketId);
+    }
 
     private void MockProduct(Guid productId, TicketingMode mode, DateTime? date)
     {

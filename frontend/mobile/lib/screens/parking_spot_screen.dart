@@ -255,19 +255,24 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          if (_organization != null) ...[
-                            const SizedBox(height: 12),
-                            InfoRow(
-                              icon: Icons.person_outline_rounded,
-                              text: 'Organizator: ${_organization!.name}',
-                            ),
-                          ],
                           const SizedBox(height: 20),
                           ProductLocationMap(
                             latitude: product.latitude,
                             longitude: product.longitude,
                             city: product.city,
                           ),
+                          if (_organization != null) ...[
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Organizator',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OrganizerCard(organization: _organization!),
+                          ],
                           const SizedBox(height: 20),
                           const Text(
                             'Odaberite parking mjesto',

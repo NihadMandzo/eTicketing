@@ -70,7 +70,27 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             // already closed — the change can't affect them any more.
             .Where(t => t.ValidDate == null || t.ValidDate >= today)
             .Where(t => t.ValidTo == null || t.ValidTo >= today)
-            .Select(t => new TicketBuyer(t.UserId, t.UserEmail))
+            // Printed tickets carry no buyer — there is nobody to notify, and projecting them
+            // would put a null address into the notification fan-out.
+            .Where(t => t.UserId != null && t.UserEmail != null)
+            .Select(t => new TicketBuyer(t.UserId!.Value, t.UserEmail!))
             .Distinct()
+            .ToListAsync(ct);
+
+    public async Task<int> GetMaxSerialNumberAsync(Guid productId, CancellationToken ct = default)
+        => await Query()
+            .AsNoTracking()
+            .Where(t => t.ProductId == productId && t.SerialNumber != null)
+            .MaxAsync(t => (int?)t.SerialNumber, ct) ?? 0;
+
+    public Task<List<Ticket>> GetForPrintBatchAsync(Guid batchId, int skip, int take, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(t => t.Sector)
+            .Include(t => t.TicketType)
+            .Where(t => t.PrintBatchId == batchId)
+            .OrderBy(t => t.SerialNumber)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 }

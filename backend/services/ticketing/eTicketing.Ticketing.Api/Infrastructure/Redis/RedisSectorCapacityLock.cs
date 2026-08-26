@@ -47,6 +47,28 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         return 1
         """;
 
+    /// <summary>The read-only half of <see cref="HoldScript"/>: sums the quantity of every
+    /// not-yet-expired hold and reports what is left. Deliberately does NOT lazily HDEL the expired
+    /// ones the way the hold script does — a query must not mutate the counter it is reporting on,
+    /// and expired holds are excluded from the sum here anyway, so the answer is identical.</summary>
+    private const string RemainingScript = """
+        local all = redis.call('HGETALL', KEYS[1])
+        local used = 0
+        local i = 1
+        while i <= #all do
+            local value = all[i + 1]
+            local sep = string.find(value, ':')
+            local qty = tonumber(string.sub(value, 1, sep - 1))
+            local exp = tonumber(string.sub(value, sep + 1))
+            if exp >= tonumber(ARGV[2]) then
+                used = used + qty
+            end
+            i = i + 2
+        end
+
+        return tonumber(ARGV[1]) - used
+        """;
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisSectorCapacityLock> _logger;
 
@@ -166,5 +188,18 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
 
         await Db.HashDeleteAsync(counterKey.ToString(), holdId);
         await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
+    }
+
+    public async Task<int> GetRemainingAsync(Guid sectorId, int capacity, DateOnly? date, CancellationToken ct = default)
+    {
+        var remaining = (int)await Db.ScriptEvaluateAsync(
+            RemainingScript,
+            [BuildCounterKey(sectorId, date)],
+            [capacity, DateTimeOffset.UtcNow.ToUnixTimeSeconds()]);
+
+        // Clamped because the two inputs can disagree: the counter records what was sold against
+        // the capacity in force at the time, and an organizer is free to lower Sector.Capacity
+        // afterwards. "Minus four seats left" is not a thing anyone can act on — zero is.
+        return Math.Max(0, remaining);
     }
 }

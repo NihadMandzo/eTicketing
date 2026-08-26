@@ -8,7 +8,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 {
     public void Configure(EntityTypeBuilder<Ticket> builder)
     {
-        builder.Property(t => t.UserEmail).HasMaxLength(320).IsRequired();
+        // Optional, not required: a printed ticket has no buyer at all (see TicketOrigin).
+        builder.Property(t => t.UserEmail).HasMaxLength(320);
         builder.Property(t => t.PricePaid).HasColumnType("decimal(10,2)");
 
         // SectorId is required (non-nullable), so plain Restrict is unambiguous here: the delete
@@ -36,9 +37,23 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .HasForeignKey(t => t.TicketTypeId)
             .OnDelete(DeleteBehavior.ClientNoAction);
 
+        // Cascade, unlike every FK above: a print batch owns its tickets outright — nobody bought
+        // them and nothing else references them — so deleting the batch should take them with it
+        // rather than being blocked. Nothing deletes batches today; this keeps that door open
+        // without leaving orphans behind if it ever does.
+        builder.HasOne(t => t.PrintBatch)
+            .WithMany()
+            .HasForeignKey(t => t.PrintBatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(t => t.UserId);
         builder.HasIndex(t => t.SectorId);
         builder.HasIndex(t => t.ProductId);
         builder.HasIndex(t => t.OrderId);
+        builder.HasIndex(t => t.PrintBatchId);
+
+        // The render worker pages through one batch in serial order, and TicketPrintService reads
+        // MAX(SerialNumber) per product to continue numbering across batches.
+        builder.HasIndex(t => new { t.ProductId, t.SerialNumber });
     }
 }

@@ -35,4 +35,11 @@ public interface ISectorCapacityLock
     /// abandoned-cart TTL expiry (handled automatically by Redis) and for an explicit business
     /// release (e.g. a cancelled RecurringReservation subscription freeing its space).</summary>
     Task ReleaseAsync(string holdId, CancellationToken ct = default);
+
+    /// <summary>How many admissions are still available on this counter, without reserving any of
+    /// them. Read-only and therefore inherently a snapshot: a concurrent buyer can take the last
+    /// seat between this call and whatever the caller does next, which is exactly why
+    /// <see cref="TryHoldAsync"/> re-checks atomically rather than trusting a number read here.
+    /// Used to show an organizer how many physical tickets a sector still has room for.</summary>
+    Task<int> GetRemainingAsync(Guid sectorId, int capacity, DateOnly? date, CancellationToken ct = default);
 }

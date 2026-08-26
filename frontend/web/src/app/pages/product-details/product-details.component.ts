@@ -63,6 +63,18 @@ export class ProductDetailsComponent {
 
   readonly cityLabels = CITY_LABELS;
 
+  /** Stand-in for a missing organizer logo — the first letter of each of the
+   * first two words, so "Sunset Events d.o.o." reads as "SE". */
+  organizerInitials(name: string): string {
+    return name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0].toUpperCase())
+      .join('');
+  }
+
+
   // The Maps JS API is loaded lazily, browser-only (SSR has no `window`/`document` to inject a
   // <script> tag into, and there's nothing to render server-side anyway) — <google-map> only
   // renders once this flips true, see loadGoogleMapsScript().

@@ -11,6 +11,7 @@ import '../users_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
 import 'settings_dialog.dart';
+import '../../core/export_notifications.dart';
 
 /// The post-login application shell.
 /// Hosts the sidebar + header and swaps the content area as the user navigates.
@@ -27,10 +28,28 @@ class _MainShellState extends State<MainShell> {
   String _currentPage = 'dashboard';
   late UserProfile _user;
 
+  /// Only an organization has exports of its own — platform staff would poll an
+  /// endpoint that always answers with an empty list.
+  static const _exportRoles = {'OrganizationAdmin', 'OrganizationSuperAdmin'};
+
   @override
   void initState() {
     super.initState();
     _user = widget.user;
+
+    // Starts the background watch for finished ticket exports, so a batch the
+    // organizer left rendering still reaches them wherever they are in the app.
+    if (_exportRoles.contains(_user.roleName)) {
+      exportNotifications.start();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Covers logout and session expiry alike: both tear this shell down, and
+    // one user's exports must never linger in the next user's badge.
+    exportNotifications.stop();
+    super.dispose();
   }
 
   void _navigate(String page) {

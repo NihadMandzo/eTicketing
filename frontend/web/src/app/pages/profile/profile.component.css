@@ -183,6 +183,23 @@
   color: var(--primary);
 }
 
+.ticket-pdf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.ticket-pdf-link:hover {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
 .card {
   display: flex;
   flex-direction: column;
@@ -268,9 +285,13 @@
   }
 
   .ticket-side {
-    align-items: flex-start;
+    align-items: center;
     flex-direction: row-reverse;
     justify-content: space-between;
+    /* Three items now instead of two — let them wrap rather than squeezing the
+       PDF button off the edge on a narrow phone. */
+    flex-wrap: wrap;
+    gap: 8px 12px;
     width: 100%;
   }
 }

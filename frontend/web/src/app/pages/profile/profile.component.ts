@@ -10,6 +10,7 @@ import { PurchaseService } from '../../core/services/purchase.service';
 import { Product } from '../../core/models/catalog.models';
 import { Ticket } from '../../core/models/purchase.models';
 import { TicketDetailModalComponent } from '../../components/ticket-detail-modal/ticket-detail-modal.component';
+import { environment } from '../../../environments/environment';
 
 type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 
@@ -196,6 +197,17 @@ export class ProfileComponent {
   loadMoreTickets(): void {
     if (this.isLoadingMoreTickets() || !this.hasMoreTickets()) return;
     this.loadTicketsPage(this.ticketsPage() + 1);
+  }
+
+  /**
+   * Ticket PDFs are never stored — eTicketing.Ticketing renders the sheet per
+   * request — so this is a plain API URL that works the moment the ticket
+   * exists, with no "generating…" state to wait out. Same approach as
+   * `ticket-detail-modal`: opened as a top-level navigation, which carries the
+   * httpOnly session cookie.
+   */
+  pdfUrlFor(ticket: Ticket): string {
+    return `${environment.apiBaseUrl}/tickets/${ticket.id}/pdf`;
   }
 
   statusLabel(status: Ticket['status']): string {
