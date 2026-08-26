@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/export_notifications.dart';
+import '../core/formatting.dart';
 import '../main.dart';
 import '../models/enums/ticketing_mode.dart';
 import '../models/requests/create_ticket_print_batch_request.dart';
@@ -14,6 +16,7 @@ import '../models/responses/ticket_print_options_response.dart';
 import '../providers/ticket_print_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/ticket_export_download.dart';
+import 'widgets/ticket_sheet_preview.dart';
 
 /// Izvoz fizičkih ulaznica — the box-office side of a product.
 ///
@@ -63,6 +66,12 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   final Set<String> _enabledSectors = {};
   final Map<String, int> _quantities = {};
 
+  /// One text controller per quantity line. They live here rather than inside
+  /// the row widget because the presets, the reset button and a finished
+  /// download all have to push values back into a field the organizer may also
+  /// be typing into.
+  final Map<String, TextEditingController> _quantityFields = {};
+
   DateTime? _validDate;
 
   TicketPrintBatchResponse? _batch;
@@ -81,6 +90,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    for (final field in _quantityFields.values) {
+      field.dispose();
+    }
     super.dispose();
   }
 
@@ -177,7 +189,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   String? get _capacityError {
     for (final sector in _sectors) {
       if (_isOverCapacity(sector)) {
-        return 'Sektor "${sector.name}" ima još ${_int(sector.remaining)} slobodnih mjesta.';
+        return 'Sektor "${sector.name}" ima još ${formatCount(sector.remaining)} slobodnih mjesta.';
       }
     }
     return null;
@@ -192,7 +204,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     }
     if (_totalTickets == 0) return null;
     if (_totalTickets > options.maxTicketsPerBatch) {
-      return 'Jedan izvoz može sadržavati najviše ${_int(options.maxTicketsPerBatch)} ulaznica.';
+      return 'Jedan izvoz može sadržavati najviše ${formatCount(options.maxTicketsPerBatch)} ulaznica.';
     }
     return _capacityError;
   }
@@ -200,17 +212,58 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   bool get _canSubmit =>
       _totalTickets > 0 && _validationError == null && !_isSubmitting && (_options?.canExport ?? false);
 
-  void _setQuantity(String sectorId, String? ticketTypeId, int value) {
+  void _setQuantity(String sectorId, String? ticketTypeId, int value, {bool writeField = true}) {
     final sector = _sectors.where((s) => s.sectorId == sectorId).firstOrNull;
-    // Clamped at the sector's remaining capacity so the stepper can never walk
-    // past what the backend will accept.
+    // Clamped at the sector's remaining capacity so neither the stepper nor a
+    // typed figure can walk past what the backend will accept.
     final ceiling = sector?.remaining ?? 0;
-    setState(() => _quantities[_lineKey(sectorId, ticketTypeId)] = value.clamp(0, ceiling));
+    final clamped = value.clamp(0, ceiling);
+
+    setState(() => _quantities[_lineKey(sectorId, ticketTypeId)] = clamped);
+    if (writeField) _writeField(sectorId, ticketTypeId, clamped);
+  }
+
+  /// The controller for one line, created on first use with whatever the line
+  /// already holds. Zero shows as an empty field with a `0` hint rather than a
+  /// literal `0`, so typing a figure never has to start by deleting one.
+  TextEditingController _fieldFor(String sectorId, String? ticketTypeId) {
+    final key = _lineKey(sectorId, ticketTypeId);
+    return _quantityFields.putIfAbsent(key, () {
+      final quantity = _quantities[key] ?? 0;
+      return TextEditingController(text: quantity == 0 ? '' : quantity.toString());
+    });
+  }
+
+  void _writeField(String sectorId, String? ticketTypeId, int value) {
+    final field = _fieldFor(sectorId, ticketTypeId);
+    final text = value == 0 ? '' : value.toString();
+    if (field.text == text) return;
+
+    field.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  /// A figure typed straight into the field. The field is only rewritten when
+  /// the capacity clamp actually bit — otherwise typing "1" on the way to "150"
+  /// would be fought with on every keystroke.
+  void _onQuantityTyped(TicketPrintSectorOption sector, String? ticketTypeId, String raw) {
+    final typed = int.tryParse(raw) ?? 0;
+    final clamped = typed.clamp(0, sector.remaining);
+    _setQuantity(sector.sectorId, ticketTypeId, clamped, writeField: clamped != typed);
+  }
+
+  void _clearQuantities() {
+    _quantities.clear();
+    for (final field in _quantityFields.values) {
+      field.clear();
+    }
   }
 
   void _resetSelection() {
     setState(() {
-      _quantities.clear();
+      _clearQuantities();
       for (final sector in _sectors) {
         _enabledSectors.add(sector.sectorId);
       }
@@ -310,7 +363,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     setState(() {
       _batch = null;
       _isDownloading = false;
-      _quantities.clear();
+      _clearQuantities();
     });
     await _refreshOptions();
   }
@@ -458,12 +511,12 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
             ? const SizedBox(
                 width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
             : const Icon(LucideIcons.download, size: 16),
-        label: Text(_isDownloading ? 'Preuzimanje…' : 'Preuzmi PDF (${_int(batch.ticketCount)} karata)'),
+        label: Text(_isDownloading ? 'Preuzimanje…' : 'Preuzmi PDF (${formatCount(batch.ticketCount)} karata)'),
       );
     }
 
     if (batch != null && batch.status.isInFlight) {
-      final progress = batch.ticketCount == 0 ? '' : ' ${_int(batch.renderedCount)}/${_int(batch.ticketCount)}';
+      final progress = batch.ticketCount == 0 ? '' : ' ${formatCount(batch.renderedCount)}/${formatCount(batch.ticketCount)}';
       return FilledButton.icon(
         onPressed: null,
         icon: const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
@@ -477,7 +530,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
           ? const SizedBox(
               width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
           : const Icon(LucideIcons.fileDown, size: 16),
-      label: Text(_totalTickets > 0 ? 'Izvezi ${_int(_totalTickets)} karata (PDF)' : 'Izvezi PDF'),
+      label: Text(_totalTickets > 0 ? 'Izvezi ${formatCount(_totalTickets)} karata (PDF)' : 'Izvezi PDF'),
     );
   }
 
@@ -555,7 +608,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Numeracija kreće od ${_stub(options.nextSerialNumber)}',
+                    'Numeracija kreće od ${formatStubNumber(options.nextSerialNumber)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: textTertiary,
@@ -585,7 +638,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   }
 
   Widget _buildDateRow(Color border, Color textTertiary) {
-    final label = _validDate == null ? 'Odaberite datum' : _date(_validDate!);
+    final label = _validDate == null ? 'Odaberite datum' : formatDate(_validDate!);
 
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -660,7 +713,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                             overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 1),
                         Text(
-                          'Slobodno ${_int(sector.remaining)} od ${_int(sector.capacity)}',
+                          'Slobodno ${formatCount(sector.remaining)} od ${formatCount(sector.capacity)}',
                           style: TextStyle(
                             fontSize: 11,
                             color: textTertiary,
@@ -674,7 +727,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                   if (enabled && total > 0) ...[
                     const SizedBox(width: 8),
                     Text(
-                      _int(total),
+                      formatCount(total),
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -706,7 +759,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                       for (final preset in _presets) ...[
                         Expanded(
                           child: _PresetChip(
-                            label: _int(preset),
+                            label: formatCount(preset),
                             enabled: preset <= sector.remaining,
                             onTap: () => _setQuantity(
                               sector.sectorId,
@@ -743,7 +796,7 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
               Text(name,
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis),
-              Text(_money(price), style: TextStyle(fontSize: 11, color: textTertiary)),
+              Text(formatMoney(price), style: TextStyle(fontSize: 11, color: textTertiary)),
             ],
           ),
         ),
@@ -758,15 +811,43 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                 icon: LucideIcons.minus,
                 onTap: quantity <= 0 ? null : () => _setQuantity(sector.sectorId, ticketTypeId, quantity - 10),
               ),
+              // Typed as well as stepped: ±10 is for nudging, but a box office
+              // printing 1.250 tickets should not have to press a button 125
+              // times. Capacity still clamps whatever is typed.
               SizedBox(
-                width: 48,
-                child: Text(
-                  _int(quantity),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                width: 62,
+                height: 34,
+                // Centre comes from the Center + `isCollapsed`, not from the
+                // decorator: a bare TextField reserves room for a label and a
+                // helper line it will never have, which sits the digits high in
+                // the box and out of line with the two stepper icons.
+                child: Center(
+                  child: TextField(
+                    controller: _fieldFor(sector.sectorId, ticketTypeId),
+                    onChanged: (raw) => _onQuantityTyped(sector, ticketTypeId, raw),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: const [_QuantityInputFormatter()],
+                    textAlign: TextAlign.center,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      hintStyle: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled,
+                      ),
+                      filled: false,
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
                   ),
                 ),
               ),
@@ -800,10 +881,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
           Expanded(
             child: Center(
               child: AspectRatio(
-                aspectRatio: 210 / 297,
-                child: _SheetPreview(
-                  productName: widget.product.name,
-                  city: widget.product.city.label,
+                aspectRatio: TicketSheetPreview.a4Ratio,
+                child: TicketSheetPreview(
+                  sheet: _sheetContext(),
                   tickets: previews,
                   ticketsPerSheet: _ticketsPerSheet,
                 ),
@@ -825,14 +905,25 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     );
   }
 
-  String _sheetCaption(List<_PreviewTicket> previews) {
+  /// Everything the sheet shows that belongs to the run rather than to one
+  /// ticket — the same values `TicketPrintRenderer` hands to `PrintSheetModel`.
+  PrintSheetContext _sheetContext() => PrintSheetContext(
+        productName: widget.product.name,
+        city: widget.product.city.label,
+        productDate: widget.product.date,
+        ticketingMode: _options?.ticketingMode ?? widget.product.ticketingMode,
+        validDate: _validDate,
+        issuedAt: DateTime.now(),
+      );
+
+  String _sheetCaption(List<PrintPreviewTicket> previews) {
     if (previews.isEmpty) {
       return 'Odaberite sektor i broj karata da vidite kako će list izgledati.';
     }
 
-    final first = _stub(previews.first.serial);
-    final last = _stub(previews.last.serial);
-    return 'List 1 od ${_int(_totalSheets)} · ulaznice $first – $last · režite po isprekidanim linijama';
+    final first = formatStubNumber(previews.first.serial);
+    final last = formatStubNumber(previews.last.serial);
+    return 'List 1 od ${formatCount(_totalSheets)} · ulaznice $first – $last · režite po isprekidanim linijama';
   }
 
   /// Count, sheets and face value — the three things an organizer signs off on
@@ -851,16 +942,16 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       ),
       child: Row(
         children: [
-          Expanded(child: _Metric(label: 'Ukupno karata', value: _int(_totalTickets))),
+          Expanded(child: _Metric(label: 'Ukupno karata', value: formatCount(_totalTickets))),
           _MetricDivider(color: border),
           Expanded(
-            child: _Metric(label: 'A4 listova · $_ticketsPerSheet po strani', value: _int(_totalSheets)),
+            child: _Metric(label: 'A4 listova · $_ticketsPerSheet po strani', value: formatCount(_totalSheets)),
           ),
           _MetricDivider(color: border),
           Expanded(
             child: _Metric(
               label: 'Nominalna vrijednost',
-              value: _money(_totalValue),
+              value: formatMoney(_totalValue),
               color: AppColors.successDark,
             ),
           ),
@@ -871,24 +962,27 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
 
   /// The first sheet's worth of tickets, numbered exactly as the renderer will
   /// number them.
-  List<_PreviewTicket> _previewTickets() {
+  List<PrintPreviewTicket> _previewTickets() {
     final options = _options;
     if (options == null) return const [];
 
-    final tickets = <_PreviewTicket>[];
+    final tickets = <PrintPreviewTicket>[];
     var serial = options.nextSerialNumber;
 
     for (final sector in options.sectors) {
       if (!_enabledSectors.contains(sector.sectorId)) continue;
 
+      // A sector with no ticket types prints its sector name alone, exactly as
+      // the renderer does when `TicketTypeName` is null — "Redovna" is the
+      // rail's label for that line, not something that reaches the paper.
       final lines = sector.ticketTypes.isEmpty
-          ? [(name: 'Redovna', price: sector.price, id: null as String?)]
-          : [for (final t in sector.ticketTypes) (name: t.name, price: t.price, id: t.id as String?)];
+          ? [(name: null as String?, price: sector.price, id: null as String?)]
+          : [for (final t in sector.ticketTypes) (name: t.name as String?, price: t.price, id: t.id as String?)];
 
       for (final line in lines) {
         for (var i = 0; i < _quantityOf(sector.sectorId, line.id); i++) {
           if (tickets.length < _ticketsPerSheet) {
-            tickets.add(_PreviewTicket(
+            tickets.add(PrintPreviewTicket(
               sector: sector.name,
               type: line.name,
               price: line.price,
@@ -902,30 +996,6 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
 
     return tickets;
   }
-
-  // -------------------------------------------------------------- formatting
-
-  /// Bosnian grouping: a dot every three digits, so `93600` reads `93.600`.
-  static String _int(int value) {
-    final digits = value.abs().toString();
-    final buffer = StringBuffer(value < 0 ? '-' : '');
-    for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write('.');
-      buffer.write(digits[i]);
-    }
-    return buffer.toString();
-  }
-
-  /// Bosnian money: grouped thousands, comma decimals — `93.600,00 KM`.
-  static String _money(double amount) {
-    final cents = (amount * 100).round();
-    return '${_int(cents ~/ 100)},${(cents % 100).toString().padLeft(2, '0')} KM';
-  }
-
-  static String _stub(int serial) => '#${serial.toString().padLeft(6, '0')}';
-
-  static String _date(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}.';
 }
 
 // --------------------------------------------------------------- rail pieces
@@ -1082,394 +1152,21 @@ class _MetricDivider extends StatelessWidget {
       Container(width: 1, height: 34, color: color, margin: const EdgeInsets.symmetric(horizontal: 18));
 }
 
-// ------------------------------------------------------------- sheet preview
-
-class _PreviewTicket {
-  final String sector;
-  final String type;
-  final double price;
-  final int serial;
-
-  const _PreviewTicket({
-    required this.sector,
-    required this.type,
-    required this.price,
-    required this.serial,
-  });
-}
-
-/// One A4 sheet exactly as it will print: three tickets, dashed cut rules
-/// between them, blank paper where the run does not fill the page.
-///
-/// White in both themes on purpose. This is paper, and a print preview that
-/// tints itself to match the app chrome misrepresents the artifact — every
-/// print dialog worth trusting shows a white page on a darker ground.
-class _SheetPreview extends StatelessWidget {
-  final String productName;
-  final String city;
-  final List<_PreviewTicket> tickets;
-  final int ticketsPerSheet;
-
-  const _SheetPreview({
-    required this.productName,
-    required this.city,
-    required this.tickets,
-    required this.ticketsPerSheet,
-  });
-
-  static const _paper = Color(0xFFFCFCFA);
-
-  /// The width every inner measurement is expressed against, so the sheet stays
-  /// proportional at any window size.
-  static const _referenceWidth = 620.0;
+/// Digits only, and never a leading zero: "007" is not a quantity anyone means
+/// to type, and letting it stand leaves the field disagreeing with the total.
+class _QuantityInputFormatter extends TextInputFormatter {
+  const _QuantityInputFormatter();
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final cleaned = digits.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+    if (cleaned == newValue.text) return newValue;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final scale = constraints.maxWidth / _referenceWidth;
-
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: _paper,
-            border: Border.all(color: isDark ? const Color(0xFF2A3B36) : AppColors.lightBorder),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.13),
-                blurRadius: 26 * scale,
-                offset: Offset(0, 9 * scale),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              for (var slot = 0; slot < ticketsPerSheet; slot++) ...[
-                Expanded(
-                  child: slot < tickets.length
-                      ? _SheetTicket(
-                          ticket: tickets[slot],
-                          productName: productName,
-                          city: city,
-                          scale: scale,
-                        )
-                      : _EmptySlot(scale: scale, showHint: slot == 0 && tickets.isEmpty),
-                ),
-                if (slot != ticketsPerSheet - 1)
-                  SizedBox(
-                    height: math.max(1, 2 * scale),
-                    child: CustomPaint(
-                      painter: _DashedLinePainter(color: const Color(0xFFC9CDCB), dash: 5 * scale),
-                      size: Size.infinite,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        );
-      },
+    final offset = newValue.selection.baseOffset - (newValue.text.length - cleaned.length);
+    return TextEditingValue(
+      text: cleaned,
+      selection: TextSelection.collapsed(offset: offset.clamp(0, cleaned.length)),
     );
   }
-}
-
-/// A slot the run does not reach. Only the first one speaks — an empty sheet is
-/// an invitation to act, not the same sentence printed three times.
-class _EmptySlot extends StatelessWidget {
-  final double scale;
-  final bool showHint;
-
-  const _EmptySlot({required this.scale, required this.showHint});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!showHint) return const SizedBox.shrink();
-
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 40 * scale),
-        child: Text(
-          'Odaberite sektor i broj karata.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13 * scale, color: const Color(0xFF9CA3AF)),
-        ),
-      ),
-    );
-  }
-}
-
-/// One printed ticket: green body plus its tear-off QR stub, at the design's
-/// proportions — the stub is 62mm of a 210mm sheet.
-class _SheetTicket extends StatelessWidget {
-  final _PreviewTicket ticket;
-  final String productName;
-  final String city;
-  final double scale;
-
-  const _SheetTicket({
-    required this.ticket,
-    required this.productName,
-    required this.city,
-    required this.scale,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(flex: 148, child: _body()),
-        _DashedRule(scale: scale),
-        Expanded(flex: 62, child: _stub()),
-      ],
-    );
-  }
-
-  Widget _body() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: AppColors.primary,
-            padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 7 * scale),
-            child: Row(
-              children: [
-                Container(
-                  width: 20 * scale,
-                  height: 20 * scale,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'e',
-                    style: TextStyle(
-                      fontSize: 12 * scale,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                      height: 1,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Flexible(
-                  child: Text(
-                    'ULAZNICA · EKARTA',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 7.5 * scale,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.4 * scale,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(14 * scale, 11 * scale, 14 * scale, 11 * scale),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _label('DOGAĐAJ'),
-                  SizedBox(height: 3 * scale),
-                  Flexible(
-                    child: Text(
-                      productName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 17 * scale,
-                        fontWeight: FontWeight.w800,
-                        height: 1.12,
-                        letterSpacing: -0.3 * scale,
-                        color: const Color(0xFF111827),
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 10, child: _fact('LOKACIJA', city)),
-                      Expanded(flex: 16, child: _fact('SEKTOR', '${ticket.sector} · ${ticket.type}')),
-                      Expanded(
-                        flex: 9,
-                        child: _fact(
-                          'CIJENA',
-                          _TicketExportScreenState._money(ticket.price),
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8 * scale),
-                  Row(
-                    children: [
-                      for (final color in const [AppColors.primary, AppColors.secondary, AppColors.accent])
-                        Container(width: 16 * scale, height: 3 * scale, color: color),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-
-  Widget _stub() => Container(
-        color: const Color(0xFFF6F7F6),
-        padding: EdgeInsets.all(10 * scale),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: EdgeInsets.all(4 * scale),
-              color: Colors.white,
-              child: SizedBox(
-                width: 52 * scale,
-                height: 52 * scale,
-                child: CustomPaint(painter: _QrPreviewPainter(seed: ticket.serial)),
-              ),
-            ),
-            SizedBox(height: 7 * scale),
-            _label('SERIJSKI BROJ', center: true),
-            SizedBox(height: 2 * scale),
-            Text(
-              _TicketExportScreenState._stub(ticket.serial),
-              style: TextStyle(
-                fontSize: 10 * scale,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF111827),
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Widget _label(String text, {bool center = false}) => Text(
-        text,
-        textAlign: center ? TextAlign.center : TextAlign.start,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 6.5 * scale,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.1 * scale,
-          color: const Color(0xFF6B7280),
-        ),
-      );
-
-  Widget _fact(String label, String value, {Color? color}) => Padding(
-        padding: EdgeInsets.only(right: 8 * scale),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _label(label),
-            SizedBox(height: 2 * scale),
-            Text(
-              value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9.5 * scale,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
-                color: color ?? const Color(0xFF111827),
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-class _DashedRule extends StatelessWidget {
-  final double scale;
-
-  const _DashedRule({required this.scale});
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: math.max(1, 1.5 * scale),
-        child: CustomPaint(
-          painter: _DashedLinePainter(color: const Color(0xFFD1D5DB), dash: 4 * scale, vertical: true),
-          size: Size.infinite,
-        ),
-      );
-}
-
-class _DashedLinePainter extends CustomPainter {
-  final Color color;
-  final double dash;
-  final bool vertical;
-
-  const _DashedLinePainter({required this.color, required this.dash, this.vertical = false});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = vertical ? size.width : size.height
-      ..strokeCap = StrokeCap.square;
-
-    final length = vertical ? size.height : size.width;
-    final step = math.max(1.0, dash * 2);
-
-    for (var offset = 0.0; offset < length; offset += step) {
-      final end = math.min(offset + dash, length);
-      canvas.drawLine(
-        vertical ? Offset(size.width / 2, offset) : Offset(offset, size.height / 2),
-        vertical ? Offset(size.width / 2, end) : Offset(end, size.height / 2),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedLinePainter old) =>
-      old.color != color || old.dash != dash || old.vertical != vertical;
-}
-
-/// A stand-in QR: real finder squares plus a pattern seeded from the stub
-/// number, so each ticket on the sheet visibly carries a different code.
-///
-/// Not scannable, and not meant to be — the real payload is signed server-side
-/// when the batch is created. Drawing a believable block is the honest way to
-/// show that every ticket gets its own without implying this one is live.
-class _QrPreviewPainter extends CustomPainter {
-  final int seed;
-
-  const _QrPreviewPainter({required this.seed});
-
-  static const _modules = 21;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final unit = size.width / _modules;
-    final dark = Paint()..color = const Color(0xFF111827);
-    final light = Paint()..color = Colors.white;
-    final random = math.Random(seed);
-
-    bool isFinder(int r, int c) =>
-        (r < 8 && c < 8) || (r < 8 && c >= _modules - 8) || (r >= _modules - 8 && c < 8);
-
-    for (var r = 0; r < _modules; r++) {
-      for (var c = 0; c < _modules; c++) {
-        if (isFinder(r, c)) continue;
-        if (random.nextBool()) {
-          canvas.drawRect(Rect.fromLTWH(c * unit, r * unit, unit, unit), dark);
-        }
-      }
-    }
-
-    const corners = [Offset(0, 0), Offset(_modules - 7, 0), Offset(0, _modules - 7)];
-    for (final corner in corners) {
-      final x = corner.dx * unit;
-      final y = corner.dy * unit;
-      canvas.drawRect(Rect.fromLTWH(x, y, unit * 7, unit * 7), dark);
-      canvas.drawRect(Rect.fromLTWH(x + unit, y + unit, unit * 5, unit * 5), light);
-      canvas.drawRect(Rect.fromLTWH(x + unit * 2, y + unit * 2, unit * 3, unit * 3), dark);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_QrPreviewPainter old) => old.seed != seed;
 }

@@ -1,4 +1,5 @@
 using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Persistence;
 using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Options;
 using eTicketing.Shared.TicketPdf;
@@ -66,7 +67,7 @@ public class TicketPdfGenerator : ITicketPdfGenerator
                 ticket.QrPayload,
                 product.Name,
                 product.Date,
-                product.City.ToString(),
+                product.City.ToDisplayName(),
                 order.SectorName,
                 ticket.TicketTypeName,
                 ticket.PricePaid,
@@ -91,6 +92,6 @@ public class TicketPdfGenerator : ITicketPdfGenerator
 
         return new TicketPdfReady(
             order.OrderId, order.ProductId, order.UserId, order.UserEmail,
-            product.Name, product.Date, product.City.ToString(), order.TotalPaid, generated);
+            product.Name, product.Date, product.City.ToDisplayName(), order.TotalPaid, generated);
     }
 }

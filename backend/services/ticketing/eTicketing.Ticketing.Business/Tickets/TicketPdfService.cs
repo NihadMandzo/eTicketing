@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.External;
@@ -89,7 +90,7 @@ public sealed class TicketPdfService : ITicketPdfService
             _qrCodec.Sign(ticket.Id),
             product.Name,
             product.Date,
-            product.City.ToString(),
+            product.City.ToDisplayName(),
             ticket.Sector?.Name ?? string.Empty,
             ticket.TicketType?.Name,
             ticket.PricePaid,

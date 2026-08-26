@@ -108,3 +108,28 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+  # Manrope + IBM Plex Mono are the two faces the printed ticket is typeset in
+  # (see eTicketing.Shared.TicketPdf/TicketTheme.cs, which embeds these exact
+  # .ttf files). They are bundled here so the export screen's sheet preview can
+  # be a faithful reproduction rather than an approximation in the system UI
+  # font — the whole point of that preview is to show what comes off the
+  # printer. Both faces are SIL Open Font License 1.1; the licences sit beside
+  # the files and the files themselves are unmodified.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-ExtraBold.ttf
+          weight: 800
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
+          weight: 600

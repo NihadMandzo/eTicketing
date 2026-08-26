@@ -117,7 +117,7 @@ public class TicketPrintRenderer : ITicketPrintRenderer
 
             var sheet = new PrintSheetModel(
                 product.Name,
-                product.City.ToString(),
+                product.City.ToDisplayName(),
                 product.Date,
                 product.TicketingMode,
                 batch.CreatedAt,
