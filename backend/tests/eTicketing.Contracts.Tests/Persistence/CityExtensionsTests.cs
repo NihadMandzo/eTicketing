@@ -41,6 +41,10 @@ public class CityExtensionsTests
 
             display.Should().NotBeNullOrWhiteSpace();
             display.Should().NotContain("_");
+            // Every mapped city already comes back as its own written name; an unmapped one falls
+            // through to the raw enum identifier, which is PascalCase and would show a lower-to-
+            // upper letter boundary (e.g. "NoviGrad") that no customer-facing string should have.
+            display.Should().NotMatchRegex("[a-z][A-Z]");
         }
     }
 }

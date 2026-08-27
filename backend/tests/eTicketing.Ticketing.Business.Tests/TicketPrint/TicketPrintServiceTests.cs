@@ -216,6 +216,51 @@ public class TicketPrintServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateAsync_WhenAConcurrentInsertAlreadyClaimedTheComputedSerialNumber_ReturnsConflictAndReleasesHolds()
+    {
+        var sector = await SeedSectorAsync("VIP", capacity: 200, price: 80);
+
+        // Not in flight, so it doesn't trip the earlier HasInFlightForProductAsync guard — this
+        // simulates a batch that has already fully committed elsewhere.
+        var earlierBatch = await SeedBatchAsync(TicketPrintBatchStatus.Ready);
+
+        // Stage (but do not save) a phantom ticket claiming serial 1. GetMaxSerialNumberAsync below
+        // queries the database directly, so it stays blind to this unsaved addition and still
+        // computes firstSerial = 1 — exactly what a second, still-uncommitted concurrent request
+        // would compute. Both this phantom ticket and CreateAsync's own tickets are then flushed
+        // together in CreateAsync's single SaveChangesAsync call, and the unique (ProductId,
+        // SerialNumber) index rejects the collision, the same way a genuine race would.
+        _fixture.DbContext.Tickets.Add(Ticket.ForPrint(
+            sector.Id, null, earlierBatch.Id, _productId, 80m, serialNumber: 1, null));
+
+        var result = await _sut.CreateAsync(Request((sector.Id, null, 5)), Organizer());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("print.concurrent_create");
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _fixture.CapacityLock.Verify(l => l.ConfirmAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _fixture.PrintQueue.Enqueued.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Tickets_RejectsTwoTicketsWithTheSameSerialNumberOnTheSameProduct()
+    {
+        // Pins down the DB-level guarantee CreateAsync's concurrency handling depends on: the
+        // unique (ProductId, SerialNumber) index, not just application-level checks.
+        var sector = await SeedSectorAsync("VIP", capacity: 200, price: 80);
+        var batch = await SeedBatchAsync(TicketPrintBatchStatus.Ready);
+
+        _fixture.DbContext.Tickets.Add(Ticket.ForPrint(sector.Id, null, batch.Id, _productId, 80m, serialNumber: 1, null));
+        await _fixture.DbContext.SaveChangesAsync();
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        _fixture.DbContext.Tickets.Add(Ticket.ForPrint(sector.Id, null, batch.Id, _productId, 80m, serialNumber: 1, null));
+        var act = async () => await _fixture.DbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
     public async Task CreateAsync_WhileAnotherBatchIsStillRunning_ReturnsConflict()
     {
         var sector = await SeedSectorAsync("VIP", capacity: 200, price: 80);

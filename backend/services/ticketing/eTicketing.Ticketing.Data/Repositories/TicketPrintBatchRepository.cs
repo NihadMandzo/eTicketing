@@ -19,6 +19,11 @@ public class TicketPrintBatchRepository : Repository<TicketPrintBatch, Guid>, IT
     public Task<TicketPrintBatch?> GetHeaderAsync(Guid id, CancellationToken ct = default)
         => Query().AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
 
+    /// <summary>Caps at 50 — this backs a badge, not a report, and there is nothing today that
+    /// forces an organizer to ever resolve a Failed or ignored batch, so the set is not otherwise
+    /// bounded.</summary>
+    private const int MaxOutstandingPerOrganization = 50;
+
     public Task<List<TicketPrintBatch>> GetOutstandingForOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => Query()
             .AsNoTracking()
@@ -27,6 +32,7 @@ public class TicketPrintBatchRepository : Repository<TicketPrintBatch, Guid>, IT
             // work still worth surfacing stays in the badge.
             .Where(b => b.DownloadedAt == null)
             .OrderByDescending(b => b.CreatedAt)
+            .Take(MaxOutstandingPerOrganization)
             .ToListAsync(ct);
 
     public Task<TicketPrintBatch?> GetLatestForProductAsync(Guid productId, CancellationToken ct = default)
@@ -56,13 +62,6 @@ public class TicketPrintBatchRepository : Repository<TicketPrintBatch, Guid>, IT
                         && b.CompletedAt < completedBefore)
             .Select(b => b.Id)
             .ToListAsync(ct);
-
-    public Task<byte[]?> GetFileAsync(Guid batchId, CancellationToken ct = default)
-        => _context.Set<TicketPrintBatchFile>()
-            .AsNoTracking()
-            .Where(f => f.BatchId == batchId)
-            .Select(f => f.Content)
-            .FirstOrDefaultAsync(ct)!;
 
     public Task<TicketPrintBatchFile?> GetFileRowAsync(Guid batchId, CancellationToken ct = default)
         => _context.Set<TicketPrintBatchFile>().FirstOrDefaultAsync(f => f.BatchId == batchId, ct);

@@ -53,7 +53,12 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => t.PrintBatchId);
 
         // The render worker pages through one batch in serial order, and TicketPrintService reads
-        // MAX(SerialNumber) per product to continue numbering across batches.
-        builder.HasIndex(t => new { t.ProductId, t.SerialNumber });
+        // MAX(SerialNumber) per product to continue numbering across batches. Unique so that two
+        // overlapping CreateAsync calls for the same product — both racing past the in-flight check
+        // and computing the same MAX(SerialNumber)+1 before either commits — cannot both mint
+        // colliding stub numbers; the loser's SaveChangesAsync throws instead. SerialNumber is
+        // nullable and every non-printed ticket leaves it null, which a unique index does not
+        // constrain (NULLs are never considered equal to each other).
+        builder.HasIndex(t => new { t.ProductId, t.SerialNumber }).IsUnique();
     }
 }

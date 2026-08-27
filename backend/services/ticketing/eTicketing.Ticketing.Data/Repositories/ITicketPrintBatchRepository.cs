@@ -5,8 +5,8 @@ namespace eTicketing.Ticketing.Data.Repositories;
 
 /// <summary>
 /// Reads and writes for the physical-ticket export batches. The rendered PDF lives in a separate
-/// <see cref="TicketPrintBatchFile"/> row, so everything here except <see cref="GetFileAsync"/> and
-/// <see cref="GetFileRowAsync"/> stays cheap no matter how large the sheet is.
+/// <see cref="TicketPrintBatchFile"/> row, so everything here except <see cref="GetFileRowAsync"/>
+/// stays cheap no matter how large the sheet is.
 /// </summary>
 public interface ITicketPrintBatchRepository : IRepository<TicketPrintBatch, Guid>
 {
@@ -34,10 +34,6 @@ public interface ITicketPrintBatchRepository : IRepository<TicketPrintBatch, Gui
     /// <summary>Ids of Ready batches whose file was never collected and is now older than the
     /// cutoff — the sweep that stops the table growing without bound.</summary>
     Task<List<Guid>> GetStaleReadyIdsAsync(DateTime completedBefore, CancellationToken ct = default);
-
-    /// <summary>The rendered bytes on their own, untracked. Null when the batch is unknown or its
-    /// file has already been handed over or swept away.</summary>
-    Task<byte[]?> GetFileAsync(Guid batchId, CancellationToken ct = default);
 
     /// <summary>The file row, tracked, so it can be removed once the bytes are handed over. Loads
     /// the content along with it — only ever call this on a path that is about to delete it.</summary>

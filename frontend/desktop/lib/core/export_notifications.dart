@@ -64,16 +64,22 @@ class ExportNotifications {
   Future<void> refresh() async {
     if (!_isRunning) return;
 
+    // Cancel the pending tick before awaiting the request below, so a poll that takes longer than
+    // the interval (slow network/backend) can never overlap with another one firing mid-flight.
+    _timer?.cancel();
+
     try {
       final result = await _provider.getOutstanding();
       if (!_isRunning) return;
       batches.value = result;
-      // Watch closely while something is rendering, back off once it settles.
-      _schedule(hasInFlight ? _activeInterval : _idleInterval);
     } catch (_) {
       // A failed poll is not worth interrupting anyone over — the badge simply
       // keeps showing what it last knew, and the next tick tries again. A truly
       // dead session is handled by the api client's own 401 interceptor.
+    } finally {
+      // Always re-schedule exactly once, success or failure, so polling never silently stops.
+      // Watch closely while something is rendering, back off once it settles.
+      _schedule(hasInFlight ? _activeInterval : _idleInterval);
     }
   }
 

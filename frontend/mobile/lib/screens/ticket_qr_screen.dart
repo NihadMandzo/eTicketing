@@ -312,6 +312,11 @@ class _DownloadPdfButtonState extends State<_DownloadPdfButton> {
 
     try {
       final bytes = await _purchaseService.downloadTicketPdf(widget.ticket.id);
+      if (bytes.isEmpty) {
+        // An unexpected empty response body — writing it would produce a broken 0-byte .pdf that
+        // still looks like a successful download. Treat it as the same failure as a network error.
+        throw Exception('Empty PDF response');
+      }
 
       final directory = await getApplicationDocumentsDirectory();
       final shortId = widget.ticket.id.replaceAll('-', '').substring(0, 8).toUpperCase();

@@ -240,6 +240,17 @@ public class TicketPrintService : ITicketPrintService
         {
             await _unitOfWork.SaveChangesAsync(ct);
         }
+        catch (DbUpdateException)
+        {
+            // Another request won the race: it passed the in-flight check and computed the same
+            // MAX(SerialNumber)+1 before this one committed, and the unique (ProductId,
+            // SerialNumber) index rejected the loser. Not a bug — hand the capacity back and let
+            // the organizer retry, by which point the winner's batch is the one in flight.
+            foreach (var taken in holds) await _capacityLock.ReleaseAsync(taken, ct);
+            return Result<TicketPrintBatchResponse>.Failure(Error.Conflict(
+                "print.concurrent_create",
+                "Neko drugi je upravo pokrenuo izvoz ulaznica za ovaj proizvod. Pokušajte ponovo za trenutak."));
+        }
         catch
         {
             // The capacity is claimed but the tickets never landed. Hand it back rather than
@@ -354,7 +365,21 @@ public class TicketPrintService : ITicketPrintService
         _batchRepository.RemoveFile(file);
         batch.DownloadedAt = _clock.UtcNow;
         _batchRepository.Update(batch);
-        await _unitOfWork.SaveChangesAsync(ct);
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A second near-simultaneous download (double-click, a retried request) raced this one:
+            // both loaded the row before either committed, this one lost, and its delete now
+            // affects zero rows. Same outcome as the row simply being gone — the winner already has
+            // the PDF, and the tickets stay valid either way.
+            return Result<TicketPrintDownload>.Failure(Error.NotFound(
+                "print.file_gone",
+                "PDF ovog izvoza više nije dostupan. Ulaznice su i dalje važeće — napravite novi izvoz ako vam treba još primjeraka."));
+        }
 
         _logger.LogInformation(
             "Preuzet PDF izvoza {BatchId} ({Count} ulaznica); pohranjena kopija je obrisana.",
