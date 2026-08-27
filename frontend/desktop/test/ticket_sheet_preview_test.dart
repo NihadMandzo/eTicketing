@@ -52,37 +52,93 @@ void main() {
   // The sheet is sized by its A4 aspect ratio, so the test surface has to be
   // that shape too — the default 800x600 would silently squash the slots and
   // every overflow assertion below would be measuring the wrong sheet.
-  Future<void> pumpSheet(WidgetTester tester, Widget sheet, double width) async {
+  Future<void> pumpSheet(
+    WidgetTester tester,
+    Widget sheet,
+    double width,
+  ) async {
     final size = Size(width, width * 297 / 210);
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: SizedBox.fromSize(size: size, child: sheet)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox.fromSize(size: size, child: sheet),
+        ),
+      ),
+    );
   }
 
   List<PrintPreviewTicket> tickets(int count, {int from = 37}) => [
-        for (var i = 0; i < count; i++)
-          PrintPreviewTicket(sector: 'Sjever', type: 'Redovna', price: 25, serial: from + i),
-      ];
+    for (var i = 0; i < count; i++)
+      PrintPreviewTicket(
+        sector: 'Sjever',
+        type: 'Redovna',
+        price: 25,
+        serial: from + i,
+      ),
+  ];
 
   group('TicketSheetPreview', () {
+    testWidgets('paints the eKarta mark in every ticket\'s brand roundel', (tester) async {
+      // The mark is an asset, and an asset that is missing from the bundle or
+      // fails to decode leaves the roundel silently blank rather than throwing
+      // anything the other tests here would notice — hence loading it for real
+      // (runAsync, so the image pipeline's real I/O actually runs) instead of
+      // just asserting an Image widget exists in the tree.
+      await pumpSheet(
+        tester,
+        TicketSheetPreview(
+          sheet: singleOccurrence,
+          tickets: tickets(3),
+          ticketsPerSheet: 3,
+        ),
+        620,
+      );
+
+      final images = tester.widgetList<Image>(find.byType(Image)).toList();
+      expect(images, hasLength(3), reason: 'one mark per ticket on the sheet');
+
+      final provider = images.first.image as AssetImage;
+      expect(provider.assetName, 'assets/ticket-mark.png');
+
+      Object? loadError;
+      await tester.runAsync(() async {
+        try {
+          await precacheImage(provider, tester.element(find.byType(Image).first));
+        } catch (e) {
+          loadError = e;
+        }
+      });
+
+      expect(loadError, isNull, reason: 'the mark must actually decode from the bundle');
+    });
+
     // A full sheet is the densest case; the narrow widths are what the stacked
     // layout below the 1080px breakpoint actually hands it.
     for (final width in [760.0, 620.0, 460.0, 320.0]) {
-      testWidgets('renders a full sheet without overflow at ${width.toInt()}px', (tester) async {
-        await pumpSheet(
-          tester,
-          TicketSheetPreview(sheet: singleOccurrence, tickets: tickets(3), ticketsPerSheet: 3),
-          width,
-        );
+      testWidgets(
+        'renders a full sheet without overflow at ${width.toInt()}px',
+        (tester) async {
+          await pumpSheet(
+            tester,
+            TicketSheetPreview(
+              sheet: singleOccurrence,
+              tickets: tickets(3),
+              ticketsPerSheet: 3,
+            ),
+            width,
+          );
 
-        expect(tester.takeException(), isNull);
-      });
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
 
-    testWidgets('renders the longest realistic product name without overflow', (tester) async {
+    testWidgets('renders the longest realistic product name without overflow', (
+      tester,
+    ) async {
       // Products validate up to 200 characters, and the document clamps the
       // title to two lines rather than letting it push the ticket off the page.
       final long = PrintSheetContext(
@@ -95,45 +151,69 @@ void main() {
       );
 
       await pumpSheet(
-          tester,
-        TicketSheetPreview(sheet: long, tickets: tickets(3), ticketsPerSheet: 3),
+        tester,
+        TicketSheetPreview(
+          sheet: long,
+          tickets: tickets(3),
+          ticketsPerSheet: 3,
+        ),
         620,
-        );
+      );
 
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('shows one ticket per slot, numbered as the renderer will number them', (tester) async {
-      await pumpSheet(
+    testWidgets(
+      'shows one ticket per slot, numbered as the renderer will number them',
+      (tester) async {
+        await pumpSheet(
           tester,
-        TicketSheetPreview(sheet: singleOccurrence, tickets: tickets(3), ticketsPerSheet: 3),
-        700,
+          TicketSheetPreview(
+            sheet: singleOccurrence,
+            tickets: tickets(3),
+            ticketsPerSheet: 3,
+          ),
+          700,
         );
 
-      expect(find.text('#000037'), findsOneWidget);
-      expect(find.text('#000038'), findsOneWidget);
-      expect(find.text('#000039'), findsOneWidget);
-      expect(find.text('SERIJSKI BROJ'), findsNWidgets(3));
-      expect(find.text('DOGAĐAJ'), findsNWidgets(3));
-    });
+        expect(find.text('#000037'), findsOneWidget);
+        expect(find.text('#000038'), findsOneWidget);
+        expect(find.text('#000039'), findsOneWidget);
+        expect(find.text('SERIJSKI BROJ'), findsNWidgets(3));
+        expect(find.text('DOGAĐAJ'), findsNWidgets(3));
+      },
+    );
 
-    testWidgets('leaves unused slots as blank paper, inviting action exactly once', (tester) async {
-      await pumpSheet(
+    testWidgets(
+      'leaves unused slots as blank paper, inviting action exactly once',
+      (tester) async {
+        await pumpSheet(
           tester,
-        TicketSheetPreview(sheet: singleOccurrence, tickets: const [], ticketsPerSheet: 3),
-        700,
+          TicketSheetPreview(
+            sheet: singleOccurrence,
+            tickets: const [],
+            ticketsPerSheet: 3,
+          ),
+          700,
         );
 
-      expect(find.text('Odaberite sektor i broj karata.'), findsOneWidget);
-      expect(find.text('SERIJSKI BROJ'), findsNothing);
-    });
+        expect(find.text('Odaberite sektor i broj karata.'), findsOneWidget);
+        expect(find.text('SERIJSKI BROJ'), findsNothing);
+      },
+    );
 
-    testWidgets('a partly filled sheet prints only the tickets it has', (tester) async {
+    testWidgets('a partly filled sheet prints only the tickets it has', (
+      tester,
+    ) async {
       await pumpSheet(
-          tester,
-        TicketSheetPreview(sheet: singleOccurrence, tickets: tickets(2), ticketsPerSheet: 3),
+        tester,
+        TicketSheetPreview(
+          sheet: singleOccurrence,
+          tickets: tickets(2),
+          ticketsPerSheet: 3,
+        ),
         700,
-        );
+      );
 
       expect(find.text('SERIJSKI BROJ'), findsNWidgets(2));
       // The hint belongs to an empty sheet, not to a half-full one.
@@ -141,27 +221,36 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a single-occurrence ticket is valid for the showing, one entry', (tester) async {
-      final sheet = PrintSheetContext(
-        productName: 'Koncert',
-        city: 'Mostar',
-        productDate: _showing,
-        ticketingMode: TicketingMode.singleOccurrence,
-        validDate: null,
-        issuedAt: _issued,
-      );
-
-      await pumpSheet(
-          tester,
-        TicketSheetPreview(sheet: sheet, tickets: tickets(1), ticketsPerSheet: 3),
-        700,
+    testWidgets(
+      'a single-occurrence ticket is valid for the showing, one entry',
+      (tester) async {
+        final sheet = PrintSheetContext(
+          productName: 'Koncert',
+          city: 'Mostar',
+          productDate: _showing,
+          ticketingMode: TicketingMode.singleOccurrence,
+          validDate: null,
+          issuedAt: _issued,
         );
 
-      expect(find.text('05.09.2026. 20:30'), findsOneWidget);
-      expect(find.text('JEDAN ULAZ'), findsOneWidget);
-    });
+        await pumpSheet(
+          tester,
+          TicketSheetPreview(
+            sheet: sheet,
+            tickets: tickets(1),
+            ticketsPerSheet: 3,
+          ),
+          700,
+        );
 
-    testWidgets('a daily-entry ticket is valid for the chosen day', (tester) async {
+        expect(find.text('05.09.2026. 20:30'), findsOneWidget);
+        expect(find.text('JEDAN ULAZ'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a daily-entry ticket is valid for the chosen day', (
+      tester,
+    ) async {
       final sheet = PrintSheetContext(
         productName: 'Muzej — dnevna ulaznica',
         city: 'Sarajevo',
@@ -172,44 +261,67 @@ void main() {
       );
 
       await pumpSheet(
-          tester,
-        TicketSheetPreview(sheet: sheet, tickets: tickets(1), ticketsPerSheet: 3),
+        tester,
+        TicketSheetPreview(
+          sheet: sheet,
+          tickets: tickets(1),
+          ticketsPerSheet: 3,
+        ),
         700,
-        );
+      );
 
       expect(find.text('14.09.2026.'), findsOneWidget);
       expect(find.text('DNEVNI ULAZ'), findsOneWidget);
     });
 
-    testWidgets('a sector without ticket types prints its name alone', (tester) async {
+    testWidgets('a sector without ticket types prints its name alone', (
+      tester,
+    ) async {
       await pumpSheet(
-          tester,
+        tester,
         TicketSheetPreview(
           sheet: singleOccurrence,
-          tickets: const [PrintPreviewTicket(sector: 'Sjever', type: null, price: 25, serial: 1)],
+          tickets: const [
+            PrintPreviewTicket(
+              sector: 'Sjever',
+              type: null,
+              price: 25,
+              serial: 1,
+            ),
+          ],
           ticketsPerSheet: 3,
         ),
         700,
-        );
+      );
 
       expect(find.text('Sjever'), findsOneWidget);
       expect(find.textContaining('Sjever ·'), findsNothing);
     });
 
-    testWidgets('a sector with ticket types prints both, as the renderer joins them', (tester) async {
-      await pumpSheet(
+    testWidgets(
+      'a sector with ticket types prints both, as the renderer joins them',
+      (tester) async {
+        await pumpSheet(
           tester,
-        TicketSheetPreview(
-          sheet: singleOccurrence,
-          tickets: const [PrintPreviewTicket(sector: 'Sjever', type: 'Studentska', price: 15, serial: 1)],
-          ticketsPerSheet: 3,
-        ),
-        700,
+          TicketSheetPreview(
+            sheet: singleOccurrence,
+            tickets: const [
+              PrintPreviewTicket(
+                sector: 'Sjever',
+                type: 'Studentska',
+                price: 15,
+                serial: 1,
+              ),
+            ],
+            ticketsPerSheet: 3,
+          ),
+          700,
         );
 
-      expect(find.text('Sjever · Studentska'), findsOneWidget);
-      expect(find.text('15,00 KM'), findsOneWidget);
-    });
+        expect(find.text('Sjever · Studentska'), findsOneWidget);
+        expect(find.text('15,00 KM'), findsOneWidget);
+      },
+    );
   });
 
   group('formatting', () {

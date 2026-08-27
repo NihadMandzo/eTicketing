@@ -37,6 +37,13 @@ public class TicketPrintRenderer : ITicketPrintRenderer
     /// materialises the whole batch.</summary>
     private const int PageSize = 500;
 
+    /// <summary>Diagnostic hook, not production surface — see AssemblyInfo.cs.
+    /// TicketPrintRendererTests asserts this differs from the thread that called RenderAsync, which
+    /// is the actual guarantee TaskCreationOptions.LongRunning below exists to provide: GeneratePdf's
+    /// long CPU-bound work must never run on a thread-pool worker Kestrel needs for other
+    /// requests.</summary>
+    internal int? LastGeneratePdfThreadId { get; private set; }
+
     private readonly ITicketPrintBatchRepository _batchRepository;
     private readonly ITicketRepository _ticketRepository;
     private readonly ICatalogClient _catalogClient;
@@ -125,7 +132,24 @@ public class TicketPrintRenderer : ITicketPrintRenderer
                 tickets);
 
             var document = new PrintSheetDocument(sheet);
-            var content = document.GeneratePdf();
+            // A 900-page batch is tens of seconds of pure CPU work inside QuestPDF's layout engine.
+            // Calling GeneratePdf() inline would run that on whichever thread-pool worker resumed
+            // this async method — the same shared pool Kestrel uses to service every other request
+            // this instance handles. The pool does not grow fast enough under a sudden multi-second
+            // block to absorb that, so an organizer submitting one huge export was starving every
+            // other call into this service (including a buyer's own purchase) until the render
+            // finished. TaskCreationOptions.LongRunning asks the runtime for a dedicated thread
+            // outside the pool's worker-count accounting, so this stays CPU-heavy without taking a
+            // pool thread hostage for the duration.
+            var content = await Task.Factory.StartNew(
+                () =>
+                {
+                    LastGeneratePdfThreadId = Environment.CurrentManagedThreadId;
+                    return document.GeneratePdf();
+                },
+                ct,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
 
             _batchRepository.AddFile(new TicketPrintBatchFile { BatchId = batch.Id, Content = content });
 

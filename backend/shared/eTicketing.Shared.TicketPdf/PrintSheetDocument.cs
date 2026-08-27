@@ -42,15 +42,31 @@ public class PrintSheetDocument : IDocument
     private static readonly float CutRuleHeight = Px(2);
 
     private readonly PrintSheetModel _model;
-    private readonly IReadOnlyList<byte[]> _qrCodes;
+    private readonly IReadOnlyList<string> _qrCodes;
+    private readonly QuestPDF.Infrastructure.Image _logo;
 
     public PrintSheetDocument(PrintSheetModel model)
     {
         _model = model;
-        // Rendered up front, in the same order as the tickets, so Compose stays pure layout. One QR
-        // PNG is a few kilobytes, so even a full 5000-ticket batch stays well inside what the
-        // render worker has to hold anyway to build the document.
-        _qrCodes = [.. model.Tickets.Select(t => QrCodeRenderer.Render(t.QrPayload))];
+        // Rendered up front, in the same order as the tickets, so Compose stays pure layout. These
+        // are SVG rather than PNG — see QrCodeRenderer.RenderSvg for why that is what makes a
+        // 5000-ticket batch a viable size at all.
+        _qrCodes = [.. model.Tickets.Select(t => QrCodeRenderer.RenderSvg(t.QrPayload))];
+
+        // One shared Image object for the mark that appears on every single ticket, rather than
+        // handing the raw bytes to each .Image() call.
+        //
+        // This is the difference between a usable batch and an unusable one. Passing byte[] makes
+        // QuestPDF treat every use as a distinct image and embed a separate copy: the logo is a
+        // 204 KB PNG, and it cost ~44 KB per ticket in the finished PDF, so a 5000-ticket export
+        // came out around 220 MB — far too big to hold in memory, store, and stream back through
+        // the gateway before something timed out. A shared Image is embedded once and referenced
+        // from every page.
+        //
+        // Per-document rather than a static: TicketDocument renders e-mail PDFs concurrently in
+        // PdfGeneration, and a shared mutable QuestPDF object across threads is not worth the risk
+        // for what is a one-off allocation per document.
+        _logo = QuestPDF.Infrastructure.Image.FromBinaryData(TicketTheme.Logo);
     }
 
     public int PageCount => (int)Math.Ceiling(_model.Tickets.Count / (double)TicketsPerSheet);
@@ -103,13 +119,13 @@ public class PrintSheetDocument : IDocument
         });
     }
 
-    private void ComposeSlot(IContainer container, PrintTicketModel ticket, byte[] qrPng, bool withCutRule)
+    private void ComposeSlot(IContainer container, PrintTicketModel ticket, string qrSvg, bool withCutRule)
     {
         container.Column(column =>
         {
             var bodyHeight = withCutRule ? SlotHeight - CutRuleHeight : SlotHeight;
 
-            column.Item().Height(bodyHeight).Element(c => ComposeTicket(c, ticket, qrPng));
+            column.Item().Height(bodyHeight).Element(c => ComposeTicket(c, ticket, qrSvg));
 
             if (withCutRule)
             {
@@ -119,7 +135,7 @@ public class PrintSheetDocument : IDocument
         });
     }
 
-    private void ComposeTicket(IContainer container, PrintTicketModel ticket, byte[] qrPng)
+    private void ComposeTicket(IContainer container, PrintTicketModel ticket, string qrSvg)
     {
         container.Row(row =>
         {
@@ -127,7 +143,7 @@ public class PrintSheetDocument : IDocument
             // Borders in QuestPDF are always solid, so the design's dashed tear-off rule between
             // the ticket and its stub is drawn as a line element between the two columns.
             row.AutoItem().LineVertical(Px(2)).LineColor(Border).LineDashPattern([Px(4), Px(4)]);
-            row.ConstantItem(62, Unit.Millimetre).Element(c => ComposeQrStub(c, ticket, qrPng));
+            row.ConstantItem(62, Unit.Millimetre).Element(c => ComposeQrStub(c, ticket, qrSvg));
         });
     }
 
@@ -143,7 +159,7 @@ public class PrintSheetDocument : IDocument
         });
     }
 
-    private static void ComposeBrandBar(IContainer container)
+    private void ComposeBrandBar(IContainer container)
     {
         container.Background(GreenDark).PaddingVertical(Px(8)).PaddingHorizontal(Px(22)).Row(row =>
         {
@@ -155,7 +171,9 @@ public class PrintSheetDocument : IDocument
                 .CornerRadius(Px(32))
                 .AlignMiddle().AlignCenter()
                 .Width(Px(41)).Height(Px(42))
-                .Image(Logo).FitArea();
+                // _logo, not the raw bytes — see the constructor for why that distinction is worth
+                // ~44 KB on every ticket in the batch.
+                .Image(_logo).FitArea();
 
             row.RelativeItem().AlignMiddle().AlignRight()
                 .Text("ULAZNICA · EKARTA")
@@ -241,7 +259,7 @@ public class PrintSheetDocument : IDocument
         });
     }
 
-    private static void ComposeQrStub(IContainer container, PrintTicketModel ticket, byte[] qrPng)
+    private static void ComposeQrStub(IContainer container, PrintTicketModel ticket, string qrSvg)
     {
         container
             .Background(StubSurface)
@@ -254,7 +272,7 @@ public class PrintSheetDocument : IDocument
                 column.Item().AlignCenter()
                     .Background(White).Border(1).BorderColor(Border).Padding(Px(7))
                     .Width(Px(124)).Height(Px(124))
-                    .Image(qrPng).FitArea();
+                    .Svg(qrSvg).FitArea();
 
                 column.Item().AlignCenter().Column(serial =>
                 {

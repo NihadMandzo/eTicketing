@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/export_notifications.dart';
@@ -15,6 +14,7 @@ import '../models/responses/ticket_print_batch_response.dart';
 import '../models/responses/ticket_print_options_response.dart';
 import '../providers/ticket_print_provider.dart';
 import '../theme/app_colors.dart';
+import 'widgets/quantity_stepper_field.dart';
 import 'widgets/ticket_export_download.dart';
 import 'widgets/ticket_sheet_preview.dart';
 
@@ -105,7 +105,10 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     });
 
     try {
-      final options = await _provider.getOptions(widget.product.id, date: _validDate);
+      final options = await _provider.getOptions(
+        widget.product.id,
+        date: _validDate,
+      );
       // Picks up a render started before the organizer navigated away, so
       // coming back to this product shows the batch instead of a blank form.
       final latest = await _provider.getLatestForProduct(widget.product.id);
@@ -114,7 +117,8 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       setState(() {
         _options = options;
         _isLoading = false;
-        if (latest != null && (latest.status.isInFlight || latest.isDownloadable)) {
+        if (latest != null &&
+            (latest.status.isInFlight || latest.isDownloadable)) {
           _batch = latest;
         }
         for (final sector in options.sectors) {
@@ -133,32 +137,76 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     }
   }
 
-  /// Re-reads remaining capacity without disturbing the current selection —
-  /// used after picking a DailyEntry date, where capacity is per calendar day.
+  /// Re-reads remaining capacity without discarding the current selection —
+  /// used after picking a DailyEntry date (capacity is per calendar day),
+  /// right after a batch is created (its hold already claimed capacity), and
+  /// again once that batch finishes rendering, since a batch that fails still
+  /// keeps the tickets it minted and the capacity they used.
+  ///
+  /// Refreshing alone would leave stale numbers sitting in the quantity
+  /// fields even though the sector cards now show less room — [_setQuantity]
+  /// already clamps on every keystroke, but nothing re-runs that clamp
+  /// against figures the organizer typed *before* the numbers moved. This
+  /// reconciles every currently-entered line against the new capacity so nothing
+  /// in the form is left describing tickets that no longer fit.
   Future<void> _refreshOptions() async {
     try {
-      final options = await _provider.getOptions(widget.product.id, date: _validDate);
+      final options = await _provider.getOptions(
+        widget.product.id,
+        date: _validDate,
+      );
       if (!mounted) return;
-      setState(() => _options = options);
+      setState(() {
+        _options = options;
+        _reconcileQuantitiesWithCapacity(options);
+      });
     } catch (e) {
       handleApiError(e);
     }
   }
 
+  /// Clamps every non-zero quantity line down to its sector's freshly-read
+  /// `remaining`, rewriting the visible field to match. `_validationError` /
+  /// `_capacityError` are reactive getters over `_options`/`_quantities`, so
+  /// the rest of the screen (the readout, the capacity banner, the export
+  /// button) re-validates for free the moment this changes them.
+  void _reconcileQuantitiesWithCapacity(TicketPrintOptionsResponse options) {
+    for (final sector in options.sectors) {
+      final lines = sector.ticketTypes.isEmpty
+          ? [null as String?]
+          : [for (final type in sector.ticketTypes) type.id as String?];
+
+      for (final ticketTypeId in lines) {
+        final current = _quantityOf(sector.sectorId, ticketTypeId);
+        if (current == 0 || current <= sector.remaining) continue;
+
+        _quantities[_lineKey(sector.sectorId, ticketTypeId)] =
+            sector.remaining;
+        _writeField(sector.sectorId, ticketTypeId, sector.remaining);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- selection
 
-  String _lineKey(String sectorId, String? ticketTypeId) => '$sectorId|${ticketTypeId ?? ''}';
+  String _lineKey(String sectorId, String? ticketTypeId) =>
+      '$sectorId|${ticketTypeId ?? ''}';
 
-  int _quantityOf(String sectorId, String? ticketTypeId) => _quantities[_lineKey(sectorId, ticketTypeId)] ?? 0;
+  int _quantityOf(String sectorId, String? ticketTypeId) =>
+      _quantities[_lineKey(sectorId, ticketTypeId)] ?? 0;
 
   /// Total requested for one sector across all its price tiers.
   int _sectorTotal(TicketPrintSectorOption sector) {
     if (!_enabledSectors.contains(sector.sectorId)) return 0;
     if (sector.ticketTypes.isEmpty) return _quantityOf(sector.sectorId, null);
-    return sector.ticketTypes.fold(0, (sum, t) => sum + _quantityOf(sector.sectorId, t.id));
+    return sector.ticketTypes.fold(
+      0,
+      (sum, t) => sum + _quantityOf(sector.sectorId, t.id),
+    );
   }
 
-  bool _isOverCapacity(TicketPrintSectorOption sector) => _sectorTotal(sector) > sector.remaining;
+  bool _isOverCapacity(TicketPrintSectorOption sector) =>
+      _sectorTotal(sector) > sector.remaining;
 
   List<TicketPrintSectorOption> get _sectors => _options?.sectors ?? const [];
 
@@ -199,7 +247,8 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     final options = _options;
     if (options == null) return null;
     if (!options.canExport) return options.blockedReason;
-    if (options.ticketingMode == TicketingMode.dailyEntry && _validDate == null) {
+    if (options.ticketingMode == TicketingMode.dailyEntry &&
+        _validDate == null) {
       return 'Odaberite datum za koji ulaznice važe.';
     }
     if (_totalTickets == 0) return null;
@@ -210,9 +259,17 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   }
 
   bool get _canSubmit =>
-      _totalTickets > 0 && _validationError == null && !_isSubmitting && (_options?.canExport ?? false);
+      _totalTickets > 0 &&
+      _validationError == null &&
+      !_isSubmitting &&
+      (_options?.canExport ?? false);
 
-  void _setQuantity(String sectorId, String? ticketTypeId, int value, {bool writeField = true}) {
+  void _setQuantity(
+    String sectorId,
+    String? ticketTypeId,
+    int value, {
+    bool writeField = true,
+  }) {
     final sector = _sectors.where((s) => s.sectorId == sectorId).firstOrNull;
     // Clamped at the sector's remaining capacity so neither the stepper nor a
     // typed figure can walk past what the backend will accept.
@@ -230,7 +287,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     final key = _lineKey(sectorId, ticketTypeId);
     return _quantityFields.putIfAbsent(key, () {
       final quantity = _quantities[key] ?? 0;
-      return TextEditingController(text: quantity == 0 ? '' : quantity.toString());
+      return TextEditingController(
+        text: quantity == 0 ? '' : quantity.toString(),
+      );
     });
   }
 
@@ -248,10 +307,19 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   /// A figure typed straight into the field. The field is only rewritten when
   /// the capacity clamp actually bit — otherwise typing "1" on the way to "150"
   /// would be fought with on every keystroke.
-  void _onQuantityTyped(TicketPrintSectorOption sector, String? ticketTypeId, String raw) {
+  void _onQuantityTyped(
+    TicketPrintSectorOption sector,
+    String? ticketTypeId,
+    String raw,
+  ) {
     final typed = int.tryParse(raw) ?? 0;
     final clamped = typed.clamp(0, sector.remaining);
-    _setQuantity(sector.sectorId, ticketTypeId, clamped, writeField: clamped != typed);
+    _setQuantity(
+      sector.sectorId,
+      ticketTypeId,
+      clamped,
+      writeField: clamped != typed,
+    );
   }
 
   void _clearQuantities() {
@@ -282,24 +350,38 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
 
       if (sector.ticketTypes.isEmpty) {
         final quantity = _quantityOf(sector.sectorId, null);
-        if (quantity > 0) lines.add(TicketPrintLineRequest(sectorId: sector.sectorId, quantity: quantity));
+        if (quantity > 0) {
+          lines.add(
+            TicketPrintLineRequest(
+              sectorId: sector.sectorId,
+              quantity: quantity,
+            ),
+          );
+        }
       } else {
         for (final type in sector.ticketTypes) {
           final quantity = _quantityOf(sector.sectorId, type.id);
           if (quantity > 0) {
-            lines.add(TicketPrintLineRequest(
-                sectorId: sector.sectorId, ticketTypeId: type.id, quantity: quantity));
+            lines.add(
+              TicketPrintLineRequest(
+                sectorId: sector.sectorId,
+                ticketTypeId: type.id,
+                quantity: quantity,
+              ),
+            );
           }
         }
       }
     }
 
     try {
-      final batch = await _provider.create(CreateTicketPrintBatchRequest(
-        productId: widget.product.id,
-        validDate: _validDate,
-        lines: lines,
-      ));
+      final batch = await _provider.create(
+        CreateTicketPrintBatchRequest(
+          productId: widget.product.id,
+          validDate: _validDate,
+          lines: lines,
+        ),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -307,9 +389,15 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
         _isSubmitting = false;
       });
 
-      handleApiSuccess('Ulaznice su izdate. PDF se priprema — možete nastaviti s radom.');
+      handleApiSuccess(
+        'Ulaznice su izdate. PDF se priprema — možete nastaviti s radom.',
+      );
       exportNotifications.refresh();
       _startPolling();
+      // The hold behind this batch already claimed capacity the moment it was
+      // created, not when the render finishes — refresh now so "Slobodno …"
+      // is never stale while the PDF is still being prepared.
+      await _refreshOptions();
     } catch (e) {
       if (mounted) setState(() => _isSubmitting = false);
       handleApiError(e);
@@ -337,6 +425,10 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       if (!updated.status.isInFlight) {
         _pollTimer?.cancel();
         exportNotifications.refresh();
+        // A batch that fails still keeps the tickets it already minted (and
+        // the capacity they used) — Ready or Failed, the export is finished
+        // and the numbers on screen must catch up to that.
+        await _refreshOptions();
       }
     } catch (_) {
       // A single failed poll is not worth a snackbar — the next tick retries,
@@ -411,11 +503,17 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = _isDark;
-    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final textPrimary = isDark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
+    final textTertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: AppBar(
         backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
         foregroundColor: textPrimary,
@@ -425,67 +523,85 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Izvoz fizičkih ulaznica',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Text(
+              'Izvoz fizičkih ulaznica',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
             Text(
               '${widget.product.name} — spremno za štampu na A4 papiru',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: textTertiary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: textTertiary,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
         actions: [
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: _buildPrimaryAction()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildPrimaryAction(),
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _loadFailed
-              ? _buildLoadError(textTertiary)
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth >= _twoColumnBreakpoint) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(width: _railWidth, child: _buildRail()),
-                          Expanded(child: _buildStage()),
-                        ],
-                      );
-                    }
+          ? _buildLoadError(textTertiary)
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= _twoColumnBreakpoint) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: _railWidth, child: _buildRail()),
+                      Expanded(child: _buildStage()),
+                    ],
+                  );
+                }
 
-                    // Stacked: the rail is the job, so it comes first. Both
-                    // halves get explicit heights — an Expanded would collapse
-                    // to nothing inside a scroll view.
-                    return SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          SizedBox(height: math.max(constraints.maxHeight * 0.62, 460), child: _buildRail()),
-                          SizedBox(height: math.max(constraints.maxHeight, 680), child: _buildStage()),
-                        ],
+                // Stacked: the rail is the job, so it comes first. Both
+                // halves get explicit heights — an Expanded would collapse
+                // to nothing inside a scroll view.
+                return SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: math.max(constraints.maxHeight * 0.62, 460),
+                        child: _buildRail(),
                       ),
-                    );
-                  },
-                ),
+                      SizedBox(
+                        height: math.max(constraints.maxHeight, 680),
+                        child: _buildStage(),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 
   Widget _buildLoadError(Color textTertiary) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.circleAlert, size: 32, color: textTertiary),
-              const SizedBox(height: 12),
-              Text('Podaci za izvoz nisu učitani.',
-                  style: TextStyle(color: textTertiary), textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              OutlinedButton(onPressed: _load, child: const Text('Pokušaj ponovo')),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.circleAlert, size: 32, color: textTertiary),
+          const SizedBox(height: 12),
+          Text(
+            'Podaci za izvoz nisu učitani.',
+            style: TextStyle(color: textTertiary),
+            textAlign: TextAlign.center,
           ),
-        ),
-      );
+          const SizedBox(height: 12),
+          OutlinedButton(onPressed: _load, child: const Text('Pokušaj ponovo')),
+        ],
+      ),
+    ),
+  );
 
   // ------------------------------------------------------- the primary button
 
@@ -509,17 +625,33 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
         style: FilledButton.styleFrom(backgroundColor: AppColors.successDark),
         icon: _isDownloading
             ? const SizedBox(
-                width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
             : const Icon(LucideIcons.download, size: 16),
-        label: Text(_isDownloading ? 'Preuzimanje…' : 'Preuzmi PDF (${formatCount(batch.ticketCount)} karata)'),
+        label: Text(
+          _isDownloading
+              ? 'Preuzimanje…'
+              : 'Preuzmi PDF (${formatCount(batch.ticketCount)} karata)',
+        ),
       );
     }
 
     if (batch != null && batch.status.isInFlight) {
-      final progress = batch.ticketCount == 0 ? '' : ' ${formatCount(batch.renderedCount)}/${formatCount(batch.ticketCount)}';
+      final progress = batch.ticketCount == 0
+          ? ''
+          : ' ${formatCount(batch.renderedCount)}/${formatCount(batch.ticketCount)}';
       return FilledButton.icon(
         onPressed: null,
-        icon: const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+        icon: const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
         label: Text('Priprema PDF-a…$progress'),
       );
     }
@@ -528,9 +660,19 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       onPressed: _canSubmit ? _submit : null,
       icon: _isSubmitting
           ? const SizedBox(
-              width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
           : const Icon(LucideIcons.fileDown, size: 16),
-      label: Text(_totalTickets > 0 ? 'Izvezi ${formatCount(_totalTickets)} karata (PDF)' : 'Izvezi PDF'),
+      label: Text(
+        _totalTickets > 0
+            ? 'Izvezi ${formatCount(_totalTickets)} karata (PDF)'
+            : 'Izvezi PDF',
+      ),
     );
   }
 
@@ -540,7 +682,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     final isDark = _isDark;
     final options = _options!;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final textTertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
     final error = _validationError;
 
     return Container(
@@ -560,14 +704,20 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                 const SizedBox(height: 6),
                 Text(
                   'Označite sektore i unesite broj karata po tipu.',
-                  style: TextStyle(fontSize: 12, height: 1.4, color: textTertiary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: textTertiary,
+                  ),
                 ),
                 if (!options.canExport) ...[
                   const SizedBox(height: 14),
                   _Banner(
                     icon: LucideIcons.circleAlert,
                     color: AppColors.warningDark,
-                    text: options.blockedReason ?? 'Izvoz nije moguć za ovaj proizvod.',
+                    text:
+                        options.blockedReason ??
+                        'Izvoz nije moguć za ovaj proizvod.',
                   ),
                 ],
                 if (options.ticketingMode == TicketingMode.dailyEntry) ...[
@@ -593,17 +743,24 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     itemCount: options.sectors.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) => _buildSectorCard(options.sectors[index]),
+                    itemBuilder: (context, index) =>
+                        _buildSectorCard(options.sectors[index]),
                   ),
           ),
           if (error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: _Banner(icon: LucideIcons.triangleAlert, color: AppColors.error, text: error),
+              child: _Banner(
+                icon: LucideIcons.triangleAlert,
+                color: AppColors.error,
+                text: error,
+              ),
             ),
           Container(
             padding: const EdgeInsets.fromLTRB(20, 8, 12, 8),
-            decoration: BoxDecoration(border: Border(top: BorderSide(color: border))),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: border)),
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -622,12 +779,17 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                   onPressed: _totalTickets == 0 ? null : _resetSelection,
                   style: TextButton.styleFrom(
                     foregroundColor: textTertiary,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('Poništi izbor',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Poništi izbor',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -638,22 +800,32 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   }
 
   Widget _buildDateRow(Color border, Color textTertiary) {
-    final label = _validDate == null ? 'Odaberite datum' : formatDate(_validDate!);
+    final label = _validDate == null
+        ? 'Odaberite datum'
+        : formatDate(_validDate!);
 
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: _pickDate,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(border: Border.all(color: border), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Row(
           children: [
             Icon(LucideIcons.calendarDays, size: 15, color: textTertiary),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Ulaznice važe za: $label',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                'Ulaznice važe za: $label',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -668,13 +840,17 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     final total = _sectorTotal(sector);
     final primary = isDark ? AppColors.secondary : AppColors.primary;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final textTertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
     final accent = over ? AppColors.error : primary;
 
     return Container(
       decoration: BoxDecoration(
         color: enabled ? accent.withValues(alpha: 0.05) : Colors.transparent,
-        border: Border.all(color: enabled ? accent.withValues(alpha: over ? 0.9 : 0.3) : border),
+        border: Border.all(
+          color: enabled ? accent.withValues(alpha: over ? 0.9 : 0.3) : border,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -698,19 +874,33 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                     height: 18,
                     decoration: BoxDecoration(
                       color: enabled ? accent : Colors.transparent,
-                      border: Border.all(color: enabled ? accent : border, width: 1.6),
+                      border: Border.all(
+                        color: enabled ? accent : border,
+                        width: 1.6,
+                      ),
                       borderRadius: BorderRadius.circular(5),
                     ),
-                    child: enabled ? const Icon(LucideIcons.check, size: 12, color: Colors.white) : null,
+                    child: enabled
+                        ? const Icon(
+                            LucideIcons.check,
+                            size: 12,
+                            color: Colors.white,
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(sector.name,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          sector.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 1),
                         Text(
                           'Slobodno ${formatCount(sector.remaining)} od ${formatCount(sector.capacity)}',
@@ -751,7 +941,8 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                   else
                     for (final type in sector.ticketTypes) ...[
                       _buildQuantityRow(sector, type.id, type.name, type.price),
-                      if (type != sector.ticketTypes.last) const SizedBox(height: 8),
+                      if (type != sector.ticketTypes.last)
+                        const SizedBox(height: 8),
                     ],
                   const SizedBox(height: 10),
                   Row(
@@ -763,7 +954,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
                             enabled: preset <= sector.remaining,
                             onTap: () => _setQuantity(
                               sector.sectorId,
-                              sector.ticketTypes.isEmpty ? null : sector.ticketTypes.first.id,
+                              sector.ticketTypes.isEmpty
+                                  ? null
+                                  : sector.ticketTypes.first.id,
                               preset,
                             ),
                           ),
@@ -781,10 +974,16 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
     );
   }
 
-  Widget _buildQuantityRow(TicketPrintSectorOption sector, String? ticketTypeId, String name, double price) {
+  Widget _buildQuantityRow(
+    TicketPrintSectorOption sector,
+    String? ticketTypeId,
+    String name,
+    double price,
+  ) {
     final isDark = _isDark;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final border = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
+    final textTertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
     final quantity = _quantityOf(sector.sectorId, ticketTypeId);
 
     return Row(
@@ -793,72 +992,36 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis),
-              Text(formatMoney(price), style: TextStyle(fontSize: 11, color: textTertiary)),
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                formatMoney(price),
+                style: TextStyle(fontSize: 11, color: textTertiary),
+              ),
             ],
           ),
         ),
         const SizedBox(width: 10),
-        Container(
-          decoration: BoxDecoration(border: Border.all(color: border), borderRadius: BorderRadius.circular(9)),
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _StepperButton(
-                icon: LucideIcons.minus,
-                onTap: quantity <= 0 ? null : () => _setQuantity(sector.sectorId, ticketTypeId, quantity - 10),
-              ),
-              // Typed as well as stepped: ±10 is for nudging, but a box office
-              // printing 1.250 tickets should not have to press a button 125
-              // times. Capacity still clamps whatever is typed.
-              SizedBox(
-                width: 62,
-                height: 34,
-                // Centre comes from the Center + `isCollapsed`, not from the
-                // decorator: a bare TextField reserves room for a label and a
-                // helper line it will never have, which sits the digits high in
-                // the box and out of line with the two stepper icons.
-                child: Center(
-                  child: TextField(
-                    controller: _fieldFor(sector.sectorId, ticketTypeId),
-                    onChanged: (raw) => _onQuantityTyped(sector, ticketTypeId, raw),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: const [_QuantityInputFormatter()],
-                    textAlign: TextAlign.center,
-                    textAlignVertical: TextAlignVertical.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                    decoration: InputDecoration(
-                      hintText: '0',
-                      hintStyle: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled,
-                      ),
-                      filled: false,
-                      isCollapsed: true,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    ),
-                  ),
-                ),
-              ),
-              _StepperButton(
-                icon: LucideIcons.plus,
-                onTap: quantity >= sector.remaining
-                    ? null
-                    : () => _setQuantity(sector.sectorId, ticketTypeId, quantity + 10),
-              ),
-            ],
-          ),
+        // Typed as well as stepped: ±10 is for nudging, but a box office
+        // printing 1.250 tickets should not have to press a button 125 times.
+        // Capacity still clamps whatever is typed.
+        QuantityStepperField(
+          controller: _fieldFor(sector.sectorId, ticketTypeId),
+          onChanged: (raw) => _onQuantityTyped(sector, ticketTypeId, raw),
+          onDecrement: quantity <= 0
+              ? null
+              : () =>
+                    _setQuantity(sector.sectorId, ticketTypeId, quantity - 10),
+          onIncrement: quantity >= sector.remaining
+              ? null
+              : () =>
+                    _setQuantity(sector.sectorId, ticketTypeId, quantity + 10),
         ),
       ],
     );
@@ -868,7 +1031,9 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
 
   Widget _buildStage() {
     final isDark = _isDark;
-    final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final textTertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
     final previews = _previewTickets();
 
     return Padding(
@@ -908,13 +1073,13 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
   /// Everything the sheet shows that belongs to the run rather than to one
   /// ticket — the same values `TicketPrintRenderer` hands to `PrintSheetModel`.
   PrintSheetContext _sheetContext() => PrintSheetContext(
-        productName: widget.product.name,
-        city: widget.product.city.label,
-        productDate: widget.product.date,
-        ticketingMode: _options?.ticketingMode ?? widget.product.ticketingMode,
-        validDate: _validDate,
-        issuedAt: DateTime.now(),
-      );
+    productName: widget.product.name,
+    city: widget.product.city.label,
+    productDate: widget.product.date,
+    ticketingMode: _options?.ticketingMode ?? widget.product.ticketingMode,
+    validDate: _validDate,
+    issuedAt: DateTime.now(),
+  );
 
   String _sheetCaption(List<PrintPreviewTicket> previews) {
     if (previews.isEmpty) {
@@ -942,10 +1107,18 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       ),
       child: Row(
         children: [
-          Expanded(child: _Metric(label: 'Ukupno karata', value: formatCount(_totalTickets))),
+          Expanded(
+            child: _Metric(
+              label: 'Ukupno karata',
+              value: formatCount(_totalTickets),
+            ),
+          ),
           _MetricDivider(color: border),
           Expanded(
-            child: _Metric(label: 'A4 listova · $_ticketsPerSheet po strani', value: formatCount(_totalSheets)),
+            child: _Metric(
+              label: 'A4 listova · $_ticketsPerSheet po strani',
+              value: formatCount(_totalSheets),
+            ),
           ),
           _MetricDivider(color: border),
           Expanded(
@@ -977,17 +1150,22 @@ class _TicketExportScreenState extends State<TicketExportScreen> {
       // rail's label for that line, not something that reaches the paper.
       final lines = sector.ticketTypes.isEmpty
           ? [(name: null as String?, price: sector.price, id: null as String?)]
-          : [for (final t in sector.ticketTypes) (name: t.name as String?, price: t.price, id: t.id as String?)];
+          : [
+              for (final t in sector.ticketTypes)
+                (name: t.name as String?, price: t.price, id: t.id as String?),
+            ];
 
       for (final line in lines) {
         for (var i = 0; i < _quantityOf(sector.sectorId, line.id); i++) {
           if (tickets.length < _ticketsPerSheet) {
-            tickets.add(PrintPreviewTicket(
-              sector: sector.name,
-              type: line.name,
-              price: line.price,
-              serial: serial,
-            ));
+            tickets.add(
+              PrintPreviewTicket(
+                sector: sector.name,
+                type: line.name,
+                price: line.price,
+                serial: serial,
+              ),
+            );
           }
           serial++;
         }
@@ -1008,35 +1186,14 @@ class _Eyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: color),
-      );
-}
-
-class _StepperButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  const _StepperButton({required this.icon, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        width: 30,
-        height: 34,
-        child: Icon(
-          icon,
-          size: 14,
-          color: onTap == null
-              ? (isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled)
-              : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
-        ),
-      ),
-    );
-  }
+    text.toUpperCase(),
+    style: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+      color: color,
+    ),
+  );
 }
 
 class _PresetChip extends StatelessWidget {
@@ -1044,13 +1201,21 @@ class _PresetChip extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _PresetChip({required this.label, required this.enabled, required this.onTap});
+  const _PresetChip({
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border = isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput;
-    final disabled = isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
+    final border = isDark
+        ? AppColors.darkBorderInput
+        : AppColors.lightBorderInput;
+    final disabled = isDark
+        ? AppColors.darkTextDisabled
+        : AppColors.lightTextDisabled;
 
     return InkWell(
       borderRadius: BorderRadius.circular(7),
@@ -1059,7 +1224,9 @@ class _PresetChip extends StatelessWidget {
         height: 28,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          border: Border.all(color: enabled ? border : border.withValues(alpha: 0.4)),
+          border: Border.all(
+            color: enabled ? border : border.withValues(alpha: 0.4),
+          ),
           borderRadius: BorderRadius.circular(7),
         ),
         child: Text(
@@ -1085,21 +1252,23 @@ class _Banner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-          borderRadius: BorderRadius.circular(10),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.08),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(text, style: const TextStyle(fontSize: 12, height: 1.35)),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 15, color: color),
-            const SizedBox(width: 9),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 12, height: 1.35))),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 class _Metric extends StatelessWidget {
@@ -1112,14 +1281,21 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final tertiary = isDark
+        ? AppColors.darkTextTertiary
+        : AppColors.lightTextTertiary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label.toUpperCase(),
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: tertiary),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.9,
+            color: tertiary,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
@@ -1148,25 +1324,10 @@ class _MetricDivider extends StatelessWidget {
   const _MetricDivider({required this.color});
 
   @override
-  Widget build(BuildContext context) =>
-      Container(width: 1, height: 34, color: color, margin: const EdgeInsets.symmetric(horizontal: 18));
-}
-
-/// Digits only, and never a leading zero: "007" is not a quantity anyone means
-/// to type, and letting it stand leaves the field disagreeing with the total.
-class _QuantityInputFormatter extends TextInputFormatter {
-  const _QuantityInputFormatter();
-
-  @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final cleaned = digits.replaceFirst(RegExp(r'^0+(?=\d)'), '');
-    if (cleaned == newValue.text) return newValue;
-
-    final offset = newValue.selection.baseOffset - (newValue.text.length - cleaned.length);
-    return TextEditingValue(
-      text: cleaned,
-      selection: TextSelection.collapsed(offset: offset.clamp(0, cleaned.length)),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    width: 1,
+    height: 34,
+    color: color,
+    margin: const EdgeInsets.symmetric(horizontal: 18),
+  );
 }

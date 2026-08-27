@@ -75,6 +75,28 @@ public class TicketPrintRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task RenderAsync_RunsGeneratePdfOffTheCallingThread()
+    {
+        // QuestPDF's GeneratePdf() is a long, pure-CPU call for a large batch — running it inline
+        // on whatever thread-pool worker resumed this async method would tie that worker up for
+        // the whole render, starving every other request the host is trying to serve concurrently
+        // (this is exactly what surfaced as Gateway "RequestTimedOut" errors on unrelated
+        // endpoints while a big export was rendering). Dispatching it via
+        // TaskCreationOptions.LongRunning is what fixes that, so the guarantee worth pinning down
+        // is that the render provably does not happen on the thread that called RenderAsync.
+        var batch = await SeedBatchAsync(3);
+        var callingThreadId = Environment.CurrentManagedThreadId;
+        var renderer = (TicketPrintRenderer)_sut;
+
+        await renderer.RenderAsync(batch.Id);
+
+        var stored = await ReloadAsync(batch.Id);
+        stored.Status.Should().Be(TicketPrintBatchStatus.Ready);
+        renderer.LastGeneratePdfThreadId.Should().NotBeNull();
+        renderer.LastGeneratePdfThreadId.Should().NotBe(callingThreadId);
+    }
+
+    [Fact]
     public async Task RenderAsync_PrintsEveryTicketsOwnGateCodeAndStubNumber()
     {
         // Each sheet is torn apart and sold separately, so two tickets sharing a code would let two
