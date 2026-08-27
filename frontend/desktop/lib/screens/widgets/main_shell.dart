@@ -4,6 +4,7 @@ import '../../models/responses/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_colors.dart';
 import '../categories_screen.dart';
+import '../gate_devices_screen.dart';
 import '../dashboard_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
@@ -142,6 +143,9 @@ class _PageContent extends StatelessWidget {
     if (page == 'products') {
       return const ProductsScreen();
     }
+    if (page == 'gate-devices') {
+      return const GateDevicesScreen();
+    }
     if (page == 'organizations') {
       return const OrganizationsScreen();
     }
@@ -215,6 +219,10 @@ class _PageContent extends StatelessWidget {
         return 'Proizvodi';
       case 'categories':
         return 'Kategorije';
+      case 'tickets':
+        return 'Karte';
+      case 'gate-devices':
+        return 'Ulazni uređaji';
       case 'organizations':
         return 'Organizacije';
       case 'users':

@@ -11,21 +11,49 @@ using Microsoft.Extensions.Logging;
 namespace eTicketing.Ticketing.Business.Tickets;
 
 /// <summary>
-/// The gate. Two operations, both organizer-facing:
+/// Who is allowed through this particular door, resolved before any ticket is looked at.
+///
+/// It exists so the gate logic has exactly one shape to check against, whoever is asking: an
+/// organizer holding a phone (claims) and an unattended ESP32-CAM bolted next to a turnstile
+/// (a GateDevice row) reduce to the same five facts. Nothing below this point knows or cares which
+/// one it is serving.
+/// </summary>
+/// <param name="BypassOrganizationCheck">PlatformStaff only. Deliberately a separate flag rather
+/// than "a null OrganizationId means skip": an organizer whose token carries no organizationId must
+/// be turned away, not handed a platform-wide override, and overloading null onto one field makes
+/// those two cases indistinguishable.</param>
+/// <param name="SectorIds">Null means every sector of <paramref name="ProductId"/> — a main
+/// entrance. A non-empty set means this door only takes those sectors.</param>
+internal readonly record struct ValidationScope(
+    bool BypassOrganizationCheck,
+    Guid? OrganizationId,
+    Guid ProductId,
+    IReadOnlySet<Guid>? SectorIds,
+    Guid ValidatedByUserId,
+    Guid? ValidatedByDeviceId);
+
+/// <summary>
+/// The gate. Three operations:
 ///
 ///  - <see cref="GetProductsForTodayAsync"/> — "what am I checking people into today", scoped to
 ///    the caller's organization.
-///  - <see cref="ValidateAsync"/> — scan one code against one product, and if it's good, burn it.
+///  - <see cref="ValidateAsync"/> — an organizer scans one code, and if it's good, burns it.
+///  - <see cref="ValidateForDeviceAsync"/> — the same, for an unattended scanner whose scope comes
+///    from its own registration rather than from anything it sends.
 ///
-/// Two things about the shape of this class are deliberate and worth not undoing:
+/// Three things about the shape of this class are deliberate and worth not undoing:
 ///
-/// 1. <b>Validation is always against a product.</b> There is no "is this ticket valid?" method,
-///    only "is this ticket valid FOR THIS PRODUCT?". A ticket to last night's concert is a
-///    perfectly good ticket and still must not get anyone into today's football match.
-/// 2. <b>A bad ticket is a successful Result.</b> Already used, wrong event, expired, forged — all
-///    come back as Result.Success with IsValid=false and a Bosnian Message the scanner renders
-///    verbatim on a red card. Only "caller is not an organizer" (403) and "another scanner holds
-///    the lock" (409) are Result.Failure, because neither is an answer about a ticket.
+/// 1. <b>Validation is always against a product, and optionally against specific sectors.</b> There
+///    is no "is this ticket valid?" method, only "is this ticket valid FOR THIS DOOR?". A ticket to
+///    last night's concert is a perfectly good ticket and still must not get anyone into today's
+///    football match — and a Parter ticket must not get anyone into VIP.
+/// 2. <b>A bad ticket is a successful Result.</b> Already used, wrong event, wrong sector, expired,
+///    forged — all come back as Result.Success with IsValid=false and a Bosnian Message the scanner
+///    renders verbatim on a red card. Only "caller is not an organizer" (403) and "another scanner
+///    holds the lock" (409) are Result.Failure, because neither is an answer about a ticket.
+/// 3. <b>The device never states its own scope.</b> <see cref="ValidateForDeviceAsync"/> takes the
+///    GateDevice row, not a product id off the wire, so tampered firmware cannot widen what its
+///    door admits.
 /// </summary>
 public class TicketValidationService : ITicketValidationService
 {
@@ -96,9 +124,42 @@ public class TicketValidationService : ITicketValidationService
             result.OrderBy(p => p.Date ?? DateTime.MaxValue).ThenBy(p => p.Name).ToList());
     }
 
-    public async Task<Result<TicketValidationResponse>> ValidateAsync(ValidateTicketRequest request, ClaimsPrincipal user, CancellationToken ct = default)
+    public Task<Result<TicketValidationResponse>> ValidateAsync(ValidateTicketRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        if (!_qrCodec.TryParse(request.Code, out var ticketId))
+        var isPlatformStaff = user.IsPlatformStaff();
+
+        var scope = new ValidationScope(
+            BypassOrganizationCheck: isPlatformStaff,
+            OrganizationId: isPlatformStaff ? null : user.GetOrganizationId(),
+            ProductId: request.ProductId,
+            // Absent or empty means the caller did not narrow to a sector, which is the behavior
+            // every existing client relies on — the mobile scanner opens on a product, not a door.
+            SectorIds: request.SectorIds is { Count: > 0 } ids ? ids.ToHashSet() : null,
+            ValidatedByUserId: user.GetUserId(),
+            ValidatedByDeviceId: null);
+
+        return ValidateCoreAsync(request.Code, scope, ct);
+    }
+
+    public Task<Result<TicketValidationResponse>> ValidateForDeviceAsync(GateDevice device, string code, CancellationToken ct = default)
+    {
+        var scope = new ValidationScope(
+            // A device is always bound to one organization; there is no device equivalent of
+            // PlatformStaff, and there should not be one.
+            BypassOrganizationCheck: false,
+            OrganizationId: device.OrganizationId,
+            ProductId: device.ProductId,
+            SectorIds: device.AllSectors ? null : device.Sectors.Select(s => s.SectorId).ToHashSet(),
+            // The organizer who registered the gate stays the accountable party for what it admits.
+            ValidatedByUserId: device.CreatedByUserId,
+            ValidatedByDeviceId: device.Id);
+
+        return ValidateCoreAsync(code, scope, ct);
+    }
+
+    private async Task<Result<TicketValidationResponse>> ValidateCoreAsync(string code, ValidationScope scope, CancellationToken ct)
+    {
+        if (!_qrCodec.TryParse(code, out var ticketId))
             return Invalid("ticket.qr_invalid", "Kod nije prepoznat. Ovo nije važeća eKarta ulaznica.");
 
         var lockToken = await _validationLock.TryAcquireAsync(ticketId, ct);
@@ -113,7 +174,7 @@ public class TicketValidationService : ITicketValidationService
 
         try
         {
-            return await ValidateLockedAsync(request, ticketId, user, ct);
+            return await ValidateLockedAsync(ticketId, scope, ct);
         }
         finally
         {
@@ -123,20 +184,26 @@ public class TicketValidationService : ITicketValidationService
         }
     }
 
-    private async Task<Result<TicketValidationResponse>> ValidateLockedAsync(
-        ValidateTicketRequest request, Guid ticketId, ClaimsPrincipal user, CancellationToken ct)
+    private async Task<Result<TicketValidationResponse>> ValidateLockedAsync(Guid ticketId, ValidationScope scope, CancellationToken ct)
     {
         var ticket = await _ticketRepository.GetForValidationAsync(ticketId, ct);
         if (ticket is null)
             return Invalid("ticket.not_found", "Ulaznica ne postoji.");
 
-        if (!user.IsPlatformStaff() && ticket.Sector?.OrganizationId != user.GetOrganizationId())
+        if (!scope.BypassOrganizationCheck && ticket.Sector?.OrganizationId != scope.OrganizationId)
             return Invalid("ticket.wrong_organization", "Ulaznica ne pripada vašoj organizaciji.", ticket);
 
         // The requirement this whole feature exists for: not "is the ticket valid" but "is it valid
         // for the event whose gate this scanner is standing at".
-        if (ticket.ProductId != request.ProductId)
+        if (ticket.ProductId != scope.ProductId)
             return Invalid("ticket.wrong_product", "Ulaznica ne pripada odabranom događaju.", ticket);
+
+        // ...and then, one level finer, the right door of that event. Checked after the product so a
+        // ticket for a different event entirely still reports the more useful reason: telling
+        // someone at the VIP door that their ticket is "for another sector" when it is actually for
+        // last week's match would send them to the wrong place to fix it.
+        if (scope.SectorIds is { } allowedSectors && !allowedSectors.Contains(ticket.SectorId))
+            return Invalid("ticket.wrong_sector", "Ulaznica ne pripada sektoru na ovom ulazu.", ticket);
 
         switch (ticket.Status)
         {
@@ -152,12 +219,12 @@ public class TicketValidationService : ITicketValidationService
         if (validityError is not null)
             return Invalid(validityError.Value.Code, validityError.Value.Message, ticket);
 
-        ticket.MarkValidated(user.GetUserId(), _clock.UtcNow);
+        ticket.MarkValidated(scope.ValidatedByUserId, _clock.UtcNow, scope.ValidatedByDeviceId);
         await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Ulaznica {TicketId} za proizvod {ProductId} validirana od strane {UserId}.",
-            ticket.Id, ticket.ProductId, user.GetUserId());
+            "Ulaznica {TicketId} za proizvod {ProductId} validirana od strane {UserId} (uređaj: {DeviceId}).",
+            ticket.Id, ticket.ProductId, scope.ValidatedByUserId, scope.ValidatedByDeviceId);
 
         return Result<TicketValidationResponse>.Success(new TicketValidationResponse(
             IsValid: true,

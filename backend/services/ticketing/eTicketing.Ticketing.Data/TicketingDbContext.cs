@@ -14,6 +14,8 @@ public class TicketingDbContext : DbContext, IUnitOfWork
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketPrintBatch> TicketPrintBatches => Set<TicketPrintBatch>();
     public DbSet<TicketPrintBatchFile> TicketPrintBatchFiles => Set<TicketPrintBatchFile>();
+    public DbSet<GateDevice> GateDevices => Set<GateDevice>();
+    public DbSet<GateDeviceSector> GateDeviceSectors => Set<GateDeviceSector>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

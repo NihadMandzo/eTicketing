@@ -6,9 +6,11 @@ using eTicketing.Ticketing.Business.Analytics.Insights;
 using eTicketing.Ticketing.Business.Analytics.Narrative;
 using eTicketing.Ticketing.Business.Analytics.Segmentation;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.TicketPrint;
@@ -49,6 +51,7 @@ public sealed class TicketingTestContext : IDisposable
     public ITicketRepository TicketRepository { get; }
     public ISubscriptionRepository SubscriptionRepository { get; }
     public ITicketPrintBatchRepository TicketPrintBatchRepository { get; }
+    public IGateDeviceRepository GateDeviceRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public Mock<ICatalogClient> CatalogClient { get; } = new();
 
@@ -104,6 +107,7 @@ public sealed class TicketingTestContext : IDisposable
         TicketRepository = new TicketRepository(DbContext);
         SubscriptionRepository = new SubscriptionRepository(DbContext);
         TicketPrintBatchRepository = new TicketPrintBatchRepository(DbContext);
+        GateDeviceRepository = new GateDeviceRepository(DbContext);
         UnitOfWork = DbContext;
 
         ValidationLock
@@ -198,6 +202,14 @@ public sealed class TicketingTestContext : IDisposable
 
     public IReportPdfService CreateReportPdfService() =>
         new ReportPdfService(CreateReportService(), CreateAnalyticsService(), PlatformClock);
+    /// <summary>Real, not mocked — it is CSPRNG + SHA-256, and the tests need keys the
+    /// authentication path would genuinely accept back.</summary>
+    public GateDeviceKeyGenerator KeyGenerator { get; } = new();
+
+    public IGateDeviceService CreateGateDeviceService() =>
+        new GateDeviceService(
+            GateDeviceRepository, CatalogClient.Object, KeyGenerator, UnitOfWork, Clock,
+            NullLogger<GateDeviceService>.Instance);
 
     public IPurchaseService CreatePurchaseService() =>
         new PurchaseService(
