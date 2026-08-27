@@ -33,8 +33,19 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
 
     /// <summary>Distinct (UserId, UserEmail) of everyone still holding a live ticket for this
     /// product — the recipients of a "the event changed" email. Deduplicated here, so a buyer with
-    /// three tickets to the same show gets one email, not three.</summary>
+    /// three tickets to the same show gets one email, not three. Printed tickets are excluded by
+    /// construction: they have no UserId and no address to write to.</summary>
     Task<List<TicketBuyer>> GetLiveBuyersForProductAsync(Guid productId, DateOnly today, CancellationToken ct = default);
+
+    /// <summary>Highest stub number printed so far for this product, or 0 if none. Serial numbers
+    /// run per product and never restart, so each new batch continues where the last one stopped
+    /// and no two printed tickets for the same product ever show the same number.</summary>
+    Task<int> GetMaxSerialNumberAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>One page of a print batch in stub-number order, untracked, with the navigations the
+    /// printed sheet shows. The render worker pulls a batch through in chunks rather than
+    /// materialising thousands of entities at once.</summary>
+    Task<List<Ticket>> GetForPrintBatchAsync(Guid batchId, int skip, int take, CancellationToken ct = default);
 }
 
 /// <summary>Projection, not an entity — one row per (product, mode) with today's ticket tallies.</summary>

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.External;
@@ -89,7 +90,7 @@ public sealed class TicketPdfService : ITicketPdfService
             _qrCodec.Sign(ticket.Id),
             product.Name,
             product.Date,
-            product.City.ToString(),
+            product.City.ToDisplayName(),
             ticket.Sector?.Name ?? string.Empty,
             ticket.TicketType?.Name,
             ticket.PricePaid,
@@ -99,8 +100,9 @@ public sealed class TicketPdfService : ITicketPdfService
             ticket.ValidTo,
             ticket.CreatedAt,
             // The buyer's address as stored on the ticket, not the caller's — platform staff
-            // downloading someone else's sheet must not see their own e-mail printed on it.
-            ticket.UserEmail);
+            // downloading someone else's sheet must not see their own e-mail printed on it. A
+            // printed ticket has no buyer at all, and says so rather than printing a blank line.
+            ticket.UserEmail ?? "Štampana ulaznica");
 
         var content = new TicketDocument(model, _support).GeneratePdf();
 

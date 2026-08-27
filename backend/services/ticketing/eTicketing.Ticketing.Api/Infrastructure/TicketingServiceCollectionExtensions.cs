@@ -1,11 +1,13 @@
 using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
+using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.TicketPrint;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data;
@@ -32,6 +34,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketTypeRepository, TicketTypeRepository>();
         builder.Services.AddScoped<ITicketRepository, TicketRepository>();
         builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        builder.Services.AddScoped<ITicketPrintBatchRepository, TicketPrintBatchRepository>();
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
@@ -84,6 +87,14 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
+        builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();
+        builder.Services.AddScoped<ITicketPrintRenderer, TicketPrintRenderer>();
+
+        // The queue is a singleton the worker reads and request threads write; ITicketPrintQueue is
+        // what Business depends on, and the worker needs the concrete type for its ChannelReader.
+        builder.Services.AddSingleton<TicketPrintQueue>();
+        builder.Services.AddSingleton<ITicketPrintQueue>(sp => sp.GetRequiredService<TicketPrintQueue>());
+        builder.Services.AddHostedService<TicketPrintRenderWorker>();
         builder.Services.AddHostedService<TicketingRabbitMqConsumerService>();
         builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
         builder.Services.AddValidatorsFromAssembly(typeof(ISectorService).Assembly);

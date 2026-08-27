@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/responses/organization_response.dart';
 import '../theme/app_colors.dart';
 
 /// Small circular back-chevron button overlaid on a hero image — shared by
@@ -185,6 +186,142 @@ class PurchaseBottomBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The organizer behind a product — who is running this event, and how to reach
+/// them. Shared by EventDetails/MuseumTicket/ParkingSpot so the three detail
+/// screens stay in step; the web's equivalent lives in
+/// `product-details.component.html`.
+///
+/// Rendered only when the organization actually loaded. That request is
+/// deliberately allowed to fail silently on all three screens (organizer detail
+/// is a nice-to-have, never a reason to break a product page), so the caller
+/// passes null and this simply does not appear.
+class OrganizerCard extends StatelessWidget {
+  final OrganizationResponse organization;
+
+  const OrganizerCard({super.key, required this.organization});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final tertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _Logo(organization: organization, border: border),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      organization.name,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    if (organization.address.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        organization.address,
+                        style: TextStyle(fontSize: 12, color: tertiary),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (organization.description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              organization.description,
+              style: TextStyle(fontSize: 13, height: 1.4, color: tertiary),
+            ),
+          ],
+          if (organization.email.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            InfoRow(icon: Icons.mail_outline_rounded, text: organization.email),
+          ],
+          if (organization.phoneNumber.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            InfoRow(icon: Icons.phone_outlined, text: organization.phoneNumber),
+          ],
+          if (organization.website != null && organization.website!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            InfoRow(icon: Icons.language_rounded, text: organization.website!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Logo extends StatelessWidget {
+  final OrganizationResponse organization;
+  final Color border;
+
+  const _Logo({required this.organization, required this.border});
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final logoUrl = organization.logoUrl;
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: logoUrl != null && logoUrl.isNotEmpty
+          ? Image.network(
+              logoUrl,
+              fit: BoxFit.contain,
+              // A broken logo URL must not paint an error box over the card —
+              // fall back to the same initials a missing logo gets.
+              errorBuilder: (_, _, _) => _Initials(name: organization.name, color: primary),
+            )
+          : _Initials(name: organization.name, color: primary),
+    );
+  }
+}
+
+/// Stand-in for a missing logo: the first letter of each of the first two
+/// words, so "Sunset Events d.o.o." reads as "SE".
+class _Initials extends StatelessWidget {
+  final String name;
+  final Color color;
+
+  const _Initials({required this.name, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .take(2)
+        .map((word) => word[0].toUpperCase())
+        .join();
+
+    return Center(
+      child: Text(
+        initials,
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }

@@ -42,12 +42,6 @@
               <span>{{ product.date | date: "d. MMMM y. 'u' HH:mm" }}</span>
             </div>
           }
-          @if (organization(); as organizer) {
-            <div class="info-row">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <span>Organizator: {{ organizer.name }}</span>
-            </div>
-          }
           @if (product.description) {
             <div class="description">
               <h2>O ponudi</h2>
@@ -73,6 +67,52 @@
               <div class="location-map location-map-placeholder">Učitavanje mape...</div>
             }
           </div>
+
+          @if (organization(); as organizer) {
+            <div class="organizer-section">
+              <h2>Organizator</h2>
+              <div class="organizer-head">
+                @if (organizer.logoUrl) {
+                  <img class="organizer-logo" [src]="organizer.logoUrl" [alt]="organizer.name" />
+                } @else {
+                  <div class="organizer-logo organizer-logo-fallback" aria-hidden="true">
+                    {{ organizerInitials(organizer.name) }}
+                  </div>
+                }
+                <div class="organizer-identity">
+                  <p class="organizer-name">{{ organizer.name }}</p>
+                  @if (organizer.address) {
+                    <p class="organizer-address">{{ organizer.address }}</p>
+                  }
+                </div>
+              </div>
+
+              @if (organizer.description) {
+                <p class="organizer-description">{{ organizer.description }}</p>
+              }
+
+              <div class="organizer-contact">
+                @if (organizer.email) {
+                  <a class="organizer-contact-item" [href]="'mailto:' + organizer.email">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+                    <span>{{ organizer.email }}</span>
+                  </a>
+                }
+                @if (organizer.phoneNumber) {
+                  <a class="organizer-contact-item" [href]="'tel:' + organizer.phoneNumber">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>
+                    <span>{{ organizer.phoneNumber }}</span>
+                  </a>
+                }
+                @if (organizer.website) {
+                  <a class="organizer-contact-item" [href]="organizer.website" target="_blank" rel="noopener">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg>
+                    <span>{{ organizer.website }}</span>
+                  </a>
+                }
+              </div>
+            </div>
+          }
         </div>
       </div>
 

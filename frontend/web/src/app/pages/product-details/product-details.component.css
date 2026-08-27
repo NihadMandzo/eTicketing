@@ -339,3 +339,90 @@
     position: static;
   }
 }
+
+/* ---- Organizator ------------------------------------------------------- */
+
+.organizer-section {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.organizer-section h2 {
+  font-size: 1.2rem;
+  margin-bottom: 14px;
+}
+
+.organizer-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.organizer-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  object-fit: contain;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.organizer-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-bold);
+  color: var(--primary);
+  letter-spacing: 0.02em;
+}
+
+.organizer-identity {
+  min-width: 0;
+}
+
+.organizer-name {
+  font-weight: var(--font-weight-bold);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.organizer-address {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.organizer-description {
+  color: var(--muted-foreground);
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+
+.organizer-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 16px;
+}
+
+.organizer-contact-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  text-decoration: none;
+  /* Long e-mails and URLs must wrap inside the card rather than widening it. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.organizer-contact-item svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.organizer-contact-item:hover span {
+  text-decoration: underline;
+}

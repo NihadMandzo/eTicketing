@@ -132,14 +132,23 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("Origin")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("PricePaid")
                         .HasColumnType("decimal(10,2)");
+
+                    b.Property<Guid?>("PrintBatchId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("SectorId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("SerialNumber")
+                        .HasColumnType("int");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -154,11 +163,10 @@ namespace eTicketing.Ticketing.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("UserEmail")
-                        .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateOnly?>("ValidDate")
@@ -180,6 +188,8 @@ namespace eTicketing.Ticketing.Data.Migrations
 
                     b.HasIndex("OrderId");
 
+                    b.HasIndex("PrintBatchId");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("SectorId");
@@ -190,7 +200,99 @@ namespace eTicketing.Ticketing.Data.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("ProductId", "SerialNumber")
+                        .IsUnique()
+                        .HasFilter("[SerialNumber] IS NOT NULL");
+
                     b.ToTable("Tickets");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketPrintBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DownloadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("NominalValue")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("PageCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("RenderedCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SerialFrom")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SerialTo")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TicketCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly?>("ValidDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("TicketPrintBatches");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketPrintBatchFile", b =>
+                {
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.HasKey("BatchId");
+
+                    b.ToTable("TicketPrintBatchFiles");
                 });
 
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketType", b =>
@@ -236,6 +338,11 @@ namespace eTicketing.Ticketing.Data.Migrations
 
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.Ticket", b =>
                 {
+                    b.HasOne("eTicketing.Ticketing.Data.Entities.TicketPrintBatch", "PrintBatch")
+                        .WithMany()
+                        .HasForeignKey("PrintBatchId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("eTicketing.Ticketing.Data.Entities.Sector", "Sector")
                         .WithMany()
                         .HasForeignKey("SectorId")
@@ -252,11 +359,24 @@ namespace eTicketing.Ticketing.Data.Migrations
                         .HasForeignKey("TicketTypeId")
                         .OnDelete(DeleteBehavior.ClientNoAction);
 
+                    b.Navigation("PrintBatch");
+
                     b.Navigation("Sector");
 
                     b.Navigation("Subscription");
 
                     b.Navigation("TicketType");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketPrintBatchFile", b =>
+                {
+                    b.HasOne("eTicketing.Ticketing.Data.Entities.TicketPrintBatch", "Batch")
+                        .WithOne()
+                        .HasForeignKey("eTicketing.Ticketing.Data.Entities.TicketPrintBatchFile", "BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
                 });
 
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.TicketType", b =>

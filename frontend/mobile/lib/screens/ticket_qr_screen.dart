@@ -1,9 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/responses/ticket_response.dart';
+import '../services/api_exception.dart';
+import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
 
@@ -179,10 +184,12 @@ class TicketQrScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
+                _DownloadPdfButton(ticket: ticket),
+                const SizedBox(height: 12),
                 Text(
                   ticket.status == 'Used'
                       ? 'Ova ulaznica je već iskorištena i više ne vrijedi za ulaz.'
-                      : 'PDF ulaznica je poslana na vaš email.',
+                      : 'PDF ulaznica je također poslana na vaš email.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: tertiaryText),
                 ),
@@ -275,6 +282,82 @@ class _InfoLine extends StatelessWidget {
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Preuzmi PDF" — saves this ticket's sheet to the device and opens it.
+///
+/// Owns its own loading state so [TicketQrScreen] can stay stateless. The
+/// download is instant by design: eTicketing.Ticketing renders the sheet per
+/// request rather than serving a stored file, so there is nothing to queue and
+/// nothing to wait for beyond the round-trip.
+class _DownloadPdfButton extends StatefulWidget {
+  final TicketResponse ticket;
+
+  const _DownloadPdfButton({required this.ticket});
+
+  @override
+  State<_DownloadPdfButton> createState() => _DownloadPdfButtonState();
+}
+
+class _DownloadPdfButtonState extends State<_DownloadPdfButton> {
+  final _purchaseService = PurchaseService();
+  bool _isDownloading = false;
+
+  Future<void> _download() async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
+
+    try {
+      final bytes = await _purchaseService.downloadTicketPdf(widget.ticket.id);
+      if (bytes.isEmpty) {
+        // An unexpected empty response body — writing it would produce a broken 0-byte .pdf that
+        // still looks like a successful download. Treat it as the same failure as a network error.
+        throw Exception('Empty PDF response');
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+      final shortId = widget.ticket.id.replaceAll('-', '').substring(0, 8).toUpperCase();
+      final file = File('${directory.path}/ulaznica-$shortId.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+      final opened = await OpenFilex.open(file.path);
+
+      if (!mounted) return;
+      if (opened.type != ResultType.done) {
+        // Saved but nothing on the device can display a PDF — say where it went
+        // rather than reporting a failure for something that did work.
+        _notify('Ulaznica je sačuvana: ${file.path}');
+      }
+    } on ApiException catch (e) {
+      if (mounted) _notify(e.apiError.displayMessage);
+    } catch (_) {
+      if (mounted) _notify('Preuzimanje PDF-a nije uspjelo. Pokušajte ponovo.');
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  void _notify(String message) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _isDownloading ? null : _download,
+        icon: _isDownloading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Icon(Icons.download_rounded, size: 18),
+        label: Text(_isDownloading ? 'Preuzimanje…' : 'Preuzmi PDF'),
       ),
     );
   }

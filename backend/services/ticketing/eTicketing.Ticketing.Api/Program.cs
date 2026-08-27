@@ -35,6 +35,7 @@ app.MapSectorEndpoints();
 app.MapTicketTypeEndpoints();
 app.MapPurchaseEndpoints();
 app.MapTicketEndpoints();
+app.MapTicketPrintEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

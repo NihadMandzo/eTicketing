@@ -43,6 +43,12 @@ dependencies:
   # needs no package at all: the API returns a ready-to-render data-URI PNG
   # (see TicketResponse.qrImage), so web and mobile share one implementation.
   mobile_scanner: ^7.1.4
+  # Opens the ticket PDF this app just saved in whatever viewer the device has.
+  # The download itself goes through the shared Dio client (see
+  # PurchaseService.downloadTicketPdf) because the session lives in that
+  # client's cookie jar — handing the URL to an external browser would arrive
+  # unauthenticated and 401.
+  open_filex: ^4.5.0
   # Read-only pin display on product detail screens — officially supported on Android/iOS,
   # unlike desktop which has no google_maps_flutter implementation at all (see
   # frontend/desktop's ProductLocationPicker, which embeds the Maps JS API via a webview instead).

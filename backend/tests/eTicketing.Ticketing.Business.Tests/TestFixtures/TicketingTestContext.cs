@@ -4,6 +4,7 @@ using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.TicketPrint;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data;
@@ -39,6 +40,7 @@ public sealed class TicketingTestContext : IDisposable
     public ITicketTypeRepository TicketTypeRepository { get; }
     public ITicketRepository TicketRepository { get; }
     public ISubscriptionRepository SubscriptionRepository { get; }
+    public ITicketPrintBatchRepository TicketPrintBatchRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public Mock<ICatalogClient> CatalogClient { get; } = new();
     public Mock<ISectorCapacityLock> CapacityLock { get; } = new();
@@ -89,6 +91,7 @@ public sealed class TicketingTestContext : IDisposable
         TicketTypeRepository = new TicketTypeRepository(DbContext);
         TicketRepository = new TicketRepository(DbContext);
         SubscriptionRepository = new SubscriptionRepository(DbContext);
+        TicketPrintBatchRepository = new TicketPrintBatchRepository(DbContext);
         UnitOfWork = DbContext;
 
         ValidationLock
@@ -126,6 +129,22 @@ public sealed class TicketingTestContext : IDisposable
     public IProductChangeNotifier CreateProductChangeNotifier() =>
         new ProductChangeNotifier(TicketRepository, EventPublisher.Object, PlatformClock, NullLogger<ProductChangeNotifier>.Instance);
 
+    /// <summary>Records what the service asked to render without doing any of it, so a print test
+    /// can assert on the queue hand-off and drive the renderer itself when it wants to.</summary>
+    public RecordingTicketPrintQueue PrintQueue { get; } = new();
+
+    public ITicketPrintService CreateTicketPrintService() =>
+        new TicketPrintService(
+            SectorRepository, TicketRepository, TicketPrintBatchRepository, CapacityLock.Object,
+            CatalogClient.Object, PrintQueue, UnitOfWork, PlatformClock,
+            NullLogger<TicketPrintService>.Instance);
+
+    public ITicketPrintRenderer CreateTicketPrintRenderer() =>
+        new TicketPrintRenderer(
+            TicketPrintBatchRepository, TicketRepository, CatalogClient.Object, QrCodec,
+            MsOptions.Create(new TicketSupportOptions { Email = "podrska@ekarta.ba", Phone = "+387 33 555 120" }),
+            UnitOfWork, PlatformClock, NullLogger<TicketPrintRenderer>.Instance);
+
     public IPurchaseService CreatePurchaseService() =>
         new PurchaseService(
             SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
@@ -136,4 +155,13 @@ public sealed class TicketingTestContext : IDisposable
         DbContext.Dispose();
         _connection.Dispose();
     }
+}
+
+/// <summary>The real queue is a Channel drained by a hosted service; tests only need to know which
+/// batch ids were handed to it.</summary>
+public sealed class RecordingTicketPrintQueue : ITicketPrintQueue
+{
+    public List<Guid> Enqueued { get; } = [];
+
+    public void Enqueue(Guid batchId) => Enqueued.Add(batchId);
 }

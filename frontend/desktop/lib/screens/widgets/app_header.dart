@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import '../../models/responses/user_profile.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_controller.dart';
+import '../../core/export_notifications.dart';
+import '../../models/responses/ticket_print_batch_response.dart';
+import '../../providers/ticket_print_provider.dart';
+import '../../main.dart';
+import 'ticket_export_download.dart';
 
 class AppHeader extends StatefulWidget {
   final UserProfile user;
@@ -477,6 +482,13 @@ class _DropdownActionState extends State<_DropdownAction> {
 
 // ─── Notification bell ────────────────────────────────────────────────────────
 
+/// Tells the organizer when a ticket export they started elsewhere in the app
+/// has finished rendering, and lets them collect it without navigating back to
+/// the product it belongs to.
+///
+/// The dot is not decorative: it appears only when there is a PDF waiting or a
+/// render that failed. With nothing outstanding the bell stays quiet, so a lit
+/// dot always means there is something to act on.
 class _BellButton extends StatefulWidget {
   const _BellButton();
 
@@ -487,52 +499,249 @@ class _BellButton extends StatefulWidget {
 class _BellButtonState extends State<_BellButton> {
   bool _hovered = false;
 
+  /// Always opens, even with nothing outstanding — the panel renders its own
+  /// empty state, which is friendlier than a bell that ignores the click.
+  Future<void> _openPanel() =>
+      showDialog<void>(context: context, builder: (_) => const _ExportsDialog());
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: () {},
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: _hovered
-                ? (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Icon(
-                  Icons.notifications_outlined,
-                  size: 22,
+
+    return ValueListenableBuilder<List<TicketPrintBatchResponse>>(
+      valueListenable: exportNotifications.batches,
+      builder: (context, batches, _) {
+        final hasReady = batches.any((b) => b.isDownloadable);
+        final hasFailed = batches.any((b) => b.status == TicketPrintBatchStatus.failed);
+        final showDot = hasReady || hasFailed;
+
+        return Tooltip(
+          message: hasReady
+              ? 'PDF sa ulaznicama je spreman za preuzimanje'
+              : hasFailed
+                  ? 'Izvoz ulaznica nije uspio'
+                  : 'Obavještenja',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              onTap: _openPanel,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
                   color: _hovered
-                      ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)
-                      : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
+                      ? (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Icon(
+                        Icons.notifications_outlined,
+                        size: 22,
+                        color: _hovered
+                            ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary)
+                            : (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary),
+                      ),
+                    ),
+                    if (showDot)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: hasFailed ? AppColors.error : AppColors.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The list behind the bell — one row per outstanding ticket export.
+class _ExportsDialog extends StatelessWidget {
+  const _ExportsDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.darkSurface : Colors.white;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Material(
+            color: surface,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                   decoration: const BoxDecoration(
-                    color: AppColors.accent,
-                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.primaryDark],
+                    ),
                   ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Izvoz ulaznica',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, size: 20, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: ValueListenableBuilder<List<TicketPrintBatchResponse>>(
+                    valueListenable: exportNotifications.batches,
+                    builder: (context, batches, _) {
+                      if (batches.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(28),
+                          child: Text('Trenutno nema izvoza ulaznica.', textAlign: TextAlign.center),
+                        );
+                      }
+
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: batches.length,
+                        separatorBuilder: (_, _) => Divider(color: border, height: 20),
+                        itemBuilder: (context, index) => _ExportRow(batch: batches[index]),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExportRow extends StatefulWidget {
+  final TicketPrintBatchResponse batch;
+
+  const _ExportRow({required this.batch});
+
+  @override
+  State<_ExportRow> createState() => _ExportRowState();
+}
+
+class _ExportRowState extends State<_ExportRow> {
+  bool _isBusy = false;
+
+  Future<void> _download() async {
+    setState(() => _isBusy = true);
+    await saveTicketExport(context, widget.batch);
+    if (mounted) setState(() => _isBusy = false);
+  }
+
+  Future<void> _retry() async {
+    setState(() => _isBusy = true);
+    try {
+      await TicketPrintProvider().retry(widget.batch.id);
+      await exportNotifications.refresh();
+    } catch (e) {
+      handleApiError(e);
+    }
+    if (mounted) setState(() => _isBusy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final batch = widget.batch;
+
+    final subtitle = switch (batch.status) {
+      TicketPrintBatchStatus.queued => '${batch.ticketCount} karata · u redu čekanja',
+      TicketPrintBatchStatus.rendering => '${batch.renderedCount}/${batch.ticketCount} karata · priprema PDF-a',
+      TicketPrintBatchStatus.ready => '${batch.ticketCount} karata · ${batch.pageCount} stranica',
+      TicketPrintBatchStatus.failed => batch.errorMessage ?? 'Izvoz nije uspio.',
+    };
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                batch.productName,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: batch.status == TicketPrintBatchStatus.failed ? AppColors.error : tertiary,
                 ),
               ),
             ],
           ),
         ),
-      ),
+        const SizedBox(width: 12),
+        if (_isBusy)
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        else if (batch.isDownloadable)
+          FilledButton.icon(
+            onPressed: _download,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.successDark,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.download_rounded, size: 14),
+            label: const Text('Preuzmi', style: TextStyle(fontSize: 12)),
+          )
+        else if (batch.status == TicketPrintBatchStatus.failed)
+          OutlinedButton(
+            onPressed: _retry,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Pokušaj ponovo', style: TextStyle(fontSize: 12)),
+          )
+        else
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+      ],
     );
   }
 }

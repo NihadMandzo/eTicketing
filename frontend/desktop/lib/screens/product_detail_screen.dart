@@ -15,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../utility/image_validation.dart';
 import '../utility/snackbar_service.dart';
 import '../widgets/confirm_dialog.dart';
+import 'ticket_export_screen.dart';
 import 'widgets/product_delete_helper.dart';
 import 'widgets/product_location_picker.dart';
 import 'widgets/product_upsert_dialog.dart';
@@ -90,6 +91,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         onSaved: (updated) => setState(() => _product = updated),
       ),
     );
+  }
+
+  Future<void> _openTicketExport() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TicketExportScreen(product: _product)),
+    );
+    // An export claims sector capacity, so the counts shown here are stale the
+    // moment a batch is created.
+    if (mounted) _loadSectors();
   }
 
   Future<void> _publishProduct() async {
@@ -271,6 +281,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               icon: Icon(LucideIcons.send, size: 16, color: AppColors.successDark),
               label: Text('Objavi', style: TextStyle(color: AppColors.successDark, fontWeight: FontWeight.w600)),
             ),
+          // Box-office side: mint physical tickets for this product and get an
+          // A4 sheet to print. Bordered rather than plain so it reads as a
+          // distinct action next to the plain edit/delete verbs.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: OutlinedButton.icon(
+              onPressed: _openTicketExport,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primary,
+                side: BorderSide(color: primary.withValues(alpha: 0.25)),
+                backgroundColor: primary.withValues(alpha: 0.08),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              ),
+              icon: const Icon(LucideIcons.ticket, size: 15),
+              label: const Text('Izvezi ulaznice (PDF)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            ),
+          ),
           TextButton.icon(
             onPressed: _editProduct,
             icon: Icon(LucideIcons.pencil, size: 16, color: primary),

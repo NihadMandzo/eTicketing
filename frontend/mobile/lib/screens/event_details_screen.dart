@@ -330,13 +330,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                               icon: Icons.calendar_today_rounded,
                               text: _formatDateTime(product.date!),
                             ),
-                          if (_organization != null) ...[
-                            const SizedBox(height: 12),
-                            InfoRow(
-                              icon: Icons.person_outline_rounded,
-                              text: 'Organizator: ${_organization!.name}',
-                            ),
-                          ],
                           const SizedBox(height: 20),
                           const Divider(),
                           const SizedBox(height: 12),
@@ -364,6 +357,18 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             longitude: product.longitude,
                             city: product.city,
                           ),
+                          if (_organization != null) ...[
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Organizator',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OrganizerCard(organization: _organization!),
+                          ],
                           const SizedBox(height: 24),
                           const Text(
                             'Sektori',
