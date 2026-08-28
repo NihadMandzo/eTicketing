@@ -275,6 +275,87 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.ToTable("ProductImages");
                 });
 
+            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.RecommendationModelSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BlobName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("InteractionCount")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("TrainedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("TrainingDurationMs")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("TrainedAt");
+
+                    b.ToTable("RecommendationModelSnapshots");
+                });
+
+            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.UserInteraction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastOccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "Type");
+
+                    b.HasIndex("UserId", "ProductId", "Type")
+                        .IsUnique();
+
+                    b.ToTable("UserInteractions");
+                });
+
             modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Product", b =>
                 {
                     b.HasOne("eTicketing.Catalog.Data.Entities.Category", "Category")
@@ -290,6 +371,17 @@ namespace eTicketing.Catalog.Data.Migrations
                 {
                     b.HasOne("eTicketing.Catalog.Data.Entities.Product", "Product")
                         .WithMany("Images")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("eTicketing.Catalog.Data.Entities.UserInteraction", b =>
+                {
+                    b.HasOne("eTicketing.Catalog.Data.Entities.Product", "Product")
+                        .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

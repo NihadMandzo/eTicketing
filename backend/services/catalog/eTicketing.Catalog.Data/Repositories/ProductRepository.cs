@@ -42,4 +42,22 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
             .Include(p => p.Category)
             .Where(p => ids.Contains(p.Id))
             .ToListAsync(ct);
+
+    public Task<List<Product>> GetPublishedByIdsWithDetailsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Images)
+            .Where(p => ids.Contains(p.Id) && p.Status == PublishStatus.Published)
+            .ToListAsync(ct);
+
+    public Task<List<Product>> GetPublishedCandidatesAsync(int take, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Images)
+            .Where(p => p.Status == PublishStatus.Published)
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(take)
+            .ToListAsync(ct);
 }

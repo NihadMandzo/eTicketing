@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/session.dart';
 import '../models/city.dart';
 import '../models/responses/category_response.dart';
 import '../models/responses/product_response.dart';
+import '../models/responses/recommendation_response.dart';
 import '../models/ticketing_mode.dart';
 import '../services/api_exception.dart';
 import '../services/catalog_service.dart';
+import '../services/recommendation_service.dart';
 import '../theme/app_colors.dart';
-import '../utils/category_icon.dart';
+import '../widgets/product_card.dart';
+import '../widgets/recommendation_row.dart';
 import '../widgets/responsive_page.dart';
 import 'event_details_screen.dart';
 import 'museum_ticket_screen.dart';
@@ -29,6 +33,7 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   final _catalogService = CatalogService();
+  final _recommendationService = RecommendationService();
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
 
@@ -40,10 +45,21 @@ class _EventsScreenState extends State<EventsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  List<ProductResponse> _recommendations = [];
+  String _recommendationTitle = recommendationTitle(RecommendationSource.popular);
+  bool _isLoadingRecommendations = true;
+
+  /// The row belongs to the default browse state only. Once someone is searching or filtering they
+  /// have told us what they want, and a "preporučeno za vas" strip above their results is in the
+  /// way rather than helpful.
+  bool get _showRecommendations =>
+      _searchCtrl.text.trim().isEmpty && _selectedCategoryId == null && _selectedCity == null;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadRecommendations();
   }
 
   @override
@@ -88,6 +104,40 @@ class _EventsScreenState extends State<EventsScreen> {
       setState(() {
         _errorMessage = 'Događaje nije moguće učitati. Pokušajte ponovo.';
         _isLoading = false;
+      });
+    }
+  }
+
+  /// Loaded once, on entry, rather than on every filter change: the row is hidden while a filter
+  /// is active anyway, and the recommendations themselves don't depend on the filters.
+  ///
+  /// Every failure just hides the row — recommendations are an enhancement to this screen, and a
+  /// broken one must not cost the browsing experience anything.
+  Future<void> _loadRecommendations() async {
+    try {
+      if (Session.isAuthenticated) {
+        final result = await _recommendationService.getForMe(take: 8);
+        if (!mounted) return;
+        setState(() {
+          _recommendations = result.items;
+          _recommendationTitle = recommendationTitle(result.source);
+          _isLoadingRecommendations = false;
+        });
+        return;
+      }
+
+      final popular = await _recommendationService.getPopular(take: 8);
+      if (!mounted) return;
+      setState(() {
+        _recommendations = popular;
+        _recommendationTitle = recommendationTitle(RecommendationSource.popular);
+        _isLoadingRecommendations = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recommendations = [];
+        _isLoadingRecommendations = false;
       });
     }
   }
@@ -140,6 +190,16 @@ class _EventsScreenState extends State<EventsScreen> {
               ),
             ),
           ),
+          if (_showRecommendations)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: RecommendationRow(
+                title: _recommendationTitle,
+                products: _recommendations,
+                isLoading: _isLoadingRecommendations,
+                onProductTap: _openProduct,
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
             child: Row(
@@ -215,7 +275,7 @@ class _EventsScreenState extends State<EventsScreen> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         itemCount: _products.length,
         separatorBuilder: (_, _) => const SizedBox(height: 16),
-        itemBuilder: (context, index) => _ProductCard(product: _products[index], onTap: () => _openProduct(_products[index])),
+        itemBuilder: (context, index) => ProductCard(product: _products[index], onTap: () => _openProduct(_products[index])),
       ),
     );
   }
@@ -256,114 +316,6 @@ class _FilterDropdown<T> extends StatelessWidget {
           ),
           items: items,
           onChanged: (v) => onChanged(v as T),
-        ),
-      ),
-    );
-  }
-}
-
-/// Deliberately omits a price/location teaser — `Product` carries neither
-/// (only `Sector` has a price, and there is no venue/location field), same
-/// reasoning as `ProductCardComponent` on `frontend/web`.
-class _ProductCard extends StatelessWidget {
-  final ProductResponse product;
-  final VoidCallback onTap;
-
-  const _ProductCard({required this.product, required this.onTap});
-
-  String get _subtitle => switch (product.ticketingMode) {
-        TicketingMode.dailyEntry => 'Otvoreno svaki dan',
-        TicketingMode.recurringReservation => 'Mjesečna pretplata',
-        TicketingMode.singleOccurrence =>
-          product.date != null ? _formatDate(product.date!) : 'Datum nije naveden',
-      };
-
-  static String _formatDate(DateTime date) {
-    const months = [
-      'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Juni', 'Juli', 'August', 'Septembar', 'Oktobar', 'Novembar', 'Decembar',
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        margin: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Stack(
-              children: [
-                Container(
-                  height: 130,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.secondary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: product.images.isNotEmpty
-                      ? Image.network(product.images.first.url, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink())
-                      : null,
-                ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CategoryIconGlyph(name: product.categoryName, size: 12, color: Colors.white),
-                        const SizedBox(width: 5),
-                        Text(
-                          product.categoryName,
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_subtitle, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: primary)),
-                  const SizedBox(height: 4),
-                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Pogledaj detalje', style: TextStyle(fontSize: 13, color: tertiaryText)),
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkSurfaceMuted : const Color(0xFFF5F5F5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.chevron_right_rounded, size: 18),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );

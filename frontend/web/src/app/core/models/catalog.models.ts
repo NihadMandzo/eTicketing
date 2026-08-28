@@ -60,6 +60,29 @@ export interface Product {
   createdAt: string;
 }
 
+/**
+ * `ticketingMode`/`status`/`city` arrive as integer ordinals, not names — see `coerceEnum`.
+ * Normalizing here, once on the way in, is what keeps every downstream
+ * `@switch (product.ticketingMode)` and `=== 'DailyEntry'` comparison working; without it they
+ * silently compare a string literal against a number and never match.
+ *
+ * Lives on the model rather than inside `CatalogService` because `RecommendationService` returns
+ * the same `Product` shape and must normalize it identically — two copies of this would be two
+ * places for the ordinal mapping to drift.
+ */
+export function normalizeProduct(raw: Product): Product {
+  return {
+    ...raw,
+    ticketingMode: toTicketingMode(raw.ticketingMode),
+    status: toPublishStatus(raw.status),
+    city: toCity(raw.city),
+  };
+}
+
+export function normalizeCategory(raw: Category): Category {
+  return { ...raw, ticketingMode: toTicketingMode(raw.ticketingMode) };
+}
+
 export interface ProductQuery {
   page?: number;
   pageSize?: number;

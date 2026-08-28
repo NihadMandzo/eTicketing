@@ -30,6 +30,38 @@ public class AzureBlobStorageService : IBlobStorageService
         return blob.Uri.ToString();
     }
 
+    public async Task UploadPrivateAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default)
+    {
+        var container = _client.GetBlobContainerClient(containerName);
+        // PublicAccessType.None, unlike UploadAsync's PublicAccessType.Blob — this container's
+        // contents are only ever read back through DownloadAsync with the account credential.
+        await container.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: ct);
+
+        var blob = container.GetBlobClient(blobName);
+        await blob.UploadAsync(
+            content,
+            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = contentType } },
+            ct);
+    }
+
+    public async Task<Stream?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default)
+    {
+        var blob = _client.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+
+        // ExistsAsync rather than catching RequestFailedException: a missing container returns 404
+        // just like a missing blob does, and both are the ordinary "nothing uploaded yet" case.
+        if (!await blob.ExistsAsync(ct))
+            return null;
+
+        // Copied into memory rather than handing back the network stream: callers (the model
+        // loader) read it after the response would otherwise have been disposed, and a serialized
+        // model is small enough that buffering it is not a concern.
+        var buffer = new MemoryStream();
+        await blob.DownloadToAsync(buffer, ct);
+        buffer.Position = 0;
+        return buffer;
+    }
+
     public async Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(containerName);

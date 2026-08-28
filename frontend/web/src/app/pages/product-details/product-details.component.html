@@ -243,5 +243,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Sits outside .details-grid so the row spans the full page width rather than being
+         squeezed into the left column beside the purchase panel. -->
+    <div class="container similar-products">
+      <app-recommendation-row
+        title="Slično ovome"
+        [products]="similarProducts()"
+        [isLoading]="isLoadingSimilar()"
+      />
+    </div>
   </div>
 }

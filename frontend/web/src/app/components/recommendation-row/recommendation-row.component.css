@@ -1,0 +1,41 @@
+.recommendation-row {
+  margin-bottom: 48px;
+}
+
+.recommendation-header {
+  margin-bottom: 24px;
+}
+
+.recommendation-header h2 {
+  margin-bottom: 8px;
+}
+
+.recommendation-description {
+  color: var(--muted-foreground);
+}
+
+.recommendation-status {
+  color: var(--muted-foreground);
+  padding: 24px 0;
+}
+
+/* Same auto-fit track sizing as the home page's .events-grid, so a recommendation row lines up
+   with the browse grid above it instead of introducing a second card width. */
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+}
+
+@media (max-width: 768px) {
+  .recommendation-row {
+    margin-bottom: 32px;
+  }
+
+  /* Single column below the 320px card minimum — matching .events-grid's breakpoint keeps the
+     page from having two different collapse points. */
+  .recommendation-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}

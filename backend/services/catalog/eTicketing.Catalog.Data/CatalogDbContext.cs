@@ -11,6 +11,8 @@ public class CatalogDbContext : DbContext, IUnitOfWork
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+    public DbSet<UserInteraction> UserInteractions => Set<UserInteraction>();
+    public DbSet<RecommendationModelSnapshot> RecommendationModelSnapshots => Set<RecommendationModelSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,6 +1,9 @@
 using eTicketing.Catalog.Business;
+using eTicketing.Catalog.Api.Infrastructure.Messaging;
 using eTicketing.Catalog.Business.Categories;
 using eTicketing.Catalog.Business.Products;
+using eTicketing.Catalog.Business.Products.Mapping;
+using eTicketing.Catalog.Business.Recommendations;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
@@ -22,12 +25,25 @@ public static class CatalogServiceCollectionExtensions
         builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();
         builder.Services.AddScoped<IProductImageRepository, ProductImageRepository>();
+        builder.Services.AddScoped<IUserInteractionRepository, UserInteractionRepository>();
+        builder.Services.AddScoped<IRecommendationModelSnapshotRepository, RecommendationModelSnapshotRepository>();
 
         builder.AddAzureBlobStorage();
 
         builder.Services.AddScoped<ICategoryService, CategoryService>();
         builder.Services.AddScoped<IProductService, ProductService>();
+        builder.Services.AddScoped<ProductResponseFactory>();
         builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+
+        // Recommendations. The model is a singleton because it is expensive to build and shared by
+        // every request; everything around it is scoped like the rest of the service.
+        builder.Services.Configure<RecommendationOptions>(builder.Configuration.GetSection("Recommendations"));
+        builder.Services.AddSingleton<IRecommendationModel, MatrixFactorizationModel>();
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+        builder.Services.AddScoped<PurchaseInteractionRecorder>();
+        builder.Services.AddHostedService<RecommendationTrainingHostedService>();
+        builder.Services.AddHostedService<CatalogRabbitMqConsumerService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ICategoryService).Assembly);
         // Mapster's IRegister configs (CategoryMappingConfig, ProductMappingConfig) are scanned
         // into TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in

@@ -33,6 +33,7 @@ app.UseAuthorization();
 
 app.MapCategoryEndpoints();
 app.MapProductEndpoints();
+app.MapRecommendationEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

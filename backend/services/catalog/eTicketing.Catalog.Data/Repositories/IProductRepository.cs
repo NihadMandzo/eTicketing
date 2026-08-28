@@ -33,4 +33,17 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// needs Name/Date/TicketingMode, and pulling up to 5 image rows per product for it would be
     /// pure waste.</summary>
     Task<List<Product>> GetByIdsWithCategoryAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+
+    /// <summary>Published products by id, WITH Images — the recommendation surfaces render full
+    /// product cards, so unlike <see cref="GetByIdsWithCategoryAsync"/> above they do need the
+    /// image rows. Unknown, Draft, or deleted ids are simply absent from the result rather than an
+    /// error: a recommendation list is built from interaction history that can outlive the product
+    /// it points at.</summary>
+    Task<List<Product>> GetPublishedByIdsWithDetailsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+
+    /// <summary>The candidate pool a recommendation is ranked out of: published products with
+    /// Category and Images, newest first, hard-capped at <paramref name="take"/>. Scoring happens
+    /// in memory afterwards (the model's predictions aren't expressible in SQL), so this cap is the
+    /// only thing bounding that work.</summary>
+    Task<List<Product>> GetPublishedCandidatesAsync(int take, CancellationToken ct = default);
 }

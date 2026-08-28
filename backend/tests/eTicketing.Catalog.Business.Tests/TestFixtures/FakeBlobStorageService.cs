@@ -24,6 +24,22 @@ public sealed class FakeBlobStorageService : IBlobStorageService
         return Task.FromResult(GetPublicUrl(containerName, blobName));
     }
 
+    /// <summary>Stored in the same dictionary as public blobs — the fake doesn't model access
+    /// levels, only content. What it does let a test assert is the round trip: upload a trained
+    /// model, download it back, and confirm it still scores identically.</summary>
+    public Task UploadPrivateAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        content.CopyTo(ms);
+        _blobs[Key(containerName, blobName)] = ms.ToArray();
+        return Task.CompletedTask;
+    }
+
+    public Task<Stream?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default) =>
+        Task.FromResult(_blobs.TryGetValue(Key(containerName, blobName), out var bytes)
+            ? (Stream)new MemoryStream(bytes)
+            : null);
+
     public Task DeleteAsync(string containerName, string blobName, CancellationToken ct = default)
     {
         if (ThrowOnDelete) throw new InvalidOperationException("Simulated blob storage outage.");

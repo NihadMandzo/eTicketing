@@ -20,6 +20,18 @@
     </div>
   </section>
 
+  <!-- Recommendations: personalized for a signed-in visitor, popularity otherwise. Sits above the
+       browse grid because it is the reason a returning buyer opens this page. -->
+  <section class="recommendations-section">
+    <div class="container">
+      <app-recommendation-row
+        [title]="recommendationTitle()"
+        [products]="recommendations()"
+        [isLoading]="isLoadingRecommendations()"
+      />
+    </div>
+  </section>
+
   <!-- Popular Events Section -->
   <section class="popular-events-section">
     <div class="container">
