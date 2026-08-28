@@ -3,27 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { Category, PagedResult, Product, ProductQuery, toCity, toPublishStatus, toTicketingMode } from '../models/catalog.models';
-
-/**
- * `ticketingMode`/`status` arrive as integer ordinals, not names — see
- * `coerceEnum`. Normalizing here, once on the way in, is what keeps every
- * downstream `@switch (product.ticketingMode)` and `=== 'DailyEntry'`
- * comparison working; without it they silently compare a string literal
- * against a number and never match.
- */
-function normalizeProduct(raw: Product): Product {
-  return {
-    ...raw,
-    ticketingMode: toTicketingMode(raw.ticketingMode),
-    status: toPublishStatus(raw.status),
-    city: toCity(raw.city),
-  };
-}
-
-function normalizeCategory(raw: Category): Category {
-  return { ...raw, ticketingMode: toTicketingMode(raw.ticketingMode) };
-}
+import {
+  Category,
+  PagedResult,
+  Product,
+  ProductQuery,
+  normalizeCategory,
+  normalizeProduct,
+} from '../models/catalog.models';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {

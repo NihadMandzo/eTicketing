@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eTicketing.Catalog.Business.Products.Mapping;
 using eTicketing.Catalog.Business.Products.Validators;
 using eTicketing.Catalog.Business.Security;
 using eTicketing.Catalog.Data.Entities;
@@ -23,6 +24,7 @@ public class ProductService : IProductService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
     private readonly IEventPublisher _eventPublisher;
+    private readonly ProductResponseFactory _responseFactory;
 
     public ProductService(
         IProductRepository productRepository,
@@ -30,7 +32,8 @@ public class ProductService : IProductService
         ICategoryRepository categoryRepository,
         IUnitOfWork unitOfWork,
         IBlobStorageService blobStorageService,
-        IEventPublisher eventPublisher)
+        IEventPublisher eventPublisher,
+        ProductResponseFactory responseFactory)
     {
         _productRepository = productRepository;
         _productImageRepository = productImageRepository;
@@ -38,6 +41,7 @@ public class ProductService : IProductService
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
         _eventPublisher = eventPublisher;
+        _responseFactory = responseFactory;
     }
 
     public async Task<Result<ProductPreviewResponse>> PreviewAsync(UpsertProductRequest request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -360,13 +364,8 @@ public class ProductService : IProductService
         });
 
     // ImageUrls are derived from Azure Blob Storage (never stored columns) — same reasoning as
-    // CategoryService.ToResponse/BuildIconUrl, generalized to a list ordered by DisplayOrder.
-    private ProductResponse ToResponse(Product product) =>
-        product.Adapt<ProductResponse>() with { Images = BuildImages(product) };
-
-    private List<ProductImageResponse> BuildImages(Product product) =>
-        product.Images
-            .OrderBy(i => i.DisplayOrder)
-            .Select(i => new ProductImageResponse(i.Id, _blobStorageService.GetPublicUrl(ContainerName, i.BlobName), i.DisplayOrder))
-            .ToList();
+    // CategoryService.ToResponse/BuildIconUrl, generalized to a list ordered by DisplayOrder. The
+    // derivation itself lives in ProductResponseFactory so RecommendationService renders identical
+    // product cards from the same code.
+    private ProductResponse ToResponse(Product product) => _responseFactory.ToResponse(product);
 }

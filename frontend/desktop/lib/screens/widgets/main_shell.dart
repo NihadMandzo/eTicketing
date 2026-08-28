@@ -7,6 +7,7 @@ import '../categories_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
 import '../products_screen.dart';
+import '../recommendations_screen.dart';
 import '../users_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
@@ -132,6 +133,14 @@ class _PageContent extends StatelessWidget {
     if (page == 'users') {
       return UsersScreen(currentUser: user);
     }
+    if (page == 'recommendations') {
+      // Guarded on the role here as well as in the sidebar: hiding a nav item is not
+      // authorization, and the screen must not be reachable by any other route either
+      // (.claude/rules/21-frontend-desktop.md). The API enforces PlatformStaff regardless.
+      if (user.roleName == 'SuperAdmin' || user.roleName == 'Admin') {
+        return const RecommendationsScreen();
+      }
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -188,6 +197,8 @@ class _PageContent extends StatelessWidget {
         return 'Organizacije';
       case 'users':
         return 'Korisnici';
+      case 'recommendations':
+        return 'Preporuke';
       case 'reports':
         return 'Izvještaji';
       case 'settings':

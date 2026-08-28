@@ -1,0 +1,23 @@
+@if (isLoading()) {
+  <section class="recommendation-row" aria-busy="true">
+    <div class="recommendation-header">
+      <h2>{{ title() }}</h2>
+    </div>
+    <p class="recommendation-status">Učitavanje preporuka...</p>
+  </section>
+} @else if (products().length > 0) {
+  <section class="recommendation-row" [attr.aria-label]="title()">
+    <div class="recommendation-header">
+      <h2>{{ title() }}</h2>
+      @if (description(); as text) {
+        <p class="recommendation-description">{{ text }}</p>
+      }
+    </div>
+
+    <div class="recommendation-grid">
+      @for (product of products(); track product.id) {
+        <app-product-card [product]="product" />
+      }
+    </div>
+  </section>
+}

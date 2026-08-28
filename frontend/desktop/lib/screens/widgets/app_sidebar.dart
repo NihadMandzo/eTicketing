@@ -58,6 +58,12 @@ const List<NavItem> kNavItems = [
     allowedRoles: ['SuperAdmin', 'OrganizationSuperAdmin'],
   ),
   NavItem(
+    id: 'recommendations',
+    label: 'Preporuke',
+    icon: Icons.auto_awesome_rounded,
+    allowedRoles: ['Admin', 'SuperAdmin'],
+  ),
+  NavItem(
     id: 'reports',
     label: 'Izvještaji',
     icon: Icons.bar_chart_rounded,

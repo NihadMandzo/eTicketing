@@ -86,6 +86,18 @@
   background-color: color-mix(in srgb, var(--background) 50%, var(--card) 50%);
 }
 
+/* No bottom padding: RecommendationRowComponent already carries its own bottom margin, and the
+   browse section below opens with its own top padding. */
+.recommendations-section {
+  padding: 64px 24px 0;
+}
+
+@media (max-width: 768px) {
+  .recommendations-section {
+    padding: 40px 16px 0;
+  }
+}
+
 .section-header {
   text-align: center;
   margin-bottom: 48px;

@@ -243,5 +243,19 @@
         </div>
       </div>
     </div>
+
+    <!-- Sits outside .details-grid so the row spans the full page width rather than being
+         squeezed into the left column beside the purchase panel. Dropped entirely when there is
+         nothing to show: the row renders nothing on an empty list, but this wrapper's margin-top
+         would still leave a gap hanging off the bottom of the page. -->
+    @if (isLoadingSimilar() || similarProducts().length > 0) {
+      <div class="container similar-products">
+        <app-recommendation-row
+          title="Slično ovome"
+          [products]="similarProducts()"
+          [isLoading]="isLoadingSimilar()"
+        />
+      </div>
+    }
   </div>
 }

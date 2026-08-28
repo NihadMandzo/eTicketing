@@ -13,6 +13,9 @@ import { CartHoldGroup, CartService } from '../../core/services/cart.service';
 import { CITY_LABELS, Product } from '../../core/models/catalog.models';
 import { Sector } from '../../core/models/sector.models';
 import { Organization } from '../../core/models/organization.models';
+import { RecommendationService } from '../../core/services/recommendation.service';
+import { AuthService } from '../../core/services/auth.service';
+import { RecommendationRowComponent } from '../../components/recommendation-row/recommendation-row.component';
 
 /** One purchasable row on the SingleOccurrence/DailyEntry purchase card — one
  * per Sector.TicketType, or one per Sector itself when it has no TicketTypes
@@ -47,7 +50,7 @@ function toIsoDate(date: Date): string {
 
 @Component({
   selector: 'app-product-details',
-  imports: [RouterLink, DatePipe, GoogleMap, MapMarker],
+  imports: [RouterLink, DatePipe, GoogleMap, MapMarker, RecommendationRowComponent],
   templateUrl: './product-details.component.html',
   styleUrl: './product-details.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,6 +62,8 @@ export class ProductDetailsComponent {
   private readonly sectorService = inject(SectorService);
   private readonly organizationService = inject(OrganizationService);
   private readonly cartService = inject(CartService);
+  private readonly recommendationService = inject(RecommendationService);
+  private readonly authService = inject(AuthService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   readonly cityLabels = CITY_LABELS;
@@ -87,6 +92,9 @@ export class ProductDetailsComponent {
   readonly organization = signal<Organization | null>(null);
   readonly isLoading = signal(true);
   readonly loadError = signal<string | null>(null);
+
+  readonly similarProducts = signal<Product[]>([]);
+  readonly isLoadingSimilar = signal(true);
 
   readonly activeImageIndex = signal(0);
 
@@ -179,6 +187,8 @@ export class ProductDetailsComponent {
         }
         this.isLoading.set(false);
         this.loadOrganization(product.organizationId);
+        this.trackView(product.id);
+        this.loadSimilar(product.id);
       },
       error: () => {
         this.loadError.set('Proizvod nije pronađen ili više nije dostupan.');
@@ -195,6 +205,36 @@ export class ProductDetailsComponent {
       .getById(organizationId)
       .pipe(catchError(() => of(null)))
       .subscribe((organization) => this.organization.set(organization));
+  }
+
+  /**
+   * Records that this product was opened, feeding the recommender. Signed-in visitors only —
+   * there is no anonymous identity to attribute a view to, and the endpoint requires auth.
+   *
+   * Browser-only (SSR would double-count every page render) and error-swallowing: a failed view
+   * write must never surface to someone who is just browsing. It still has to be subscribed,
+   * though — an unsubscribed HttpClient observable never issues the request at all.
+   */
+  private trackView(productId: string): void {
+    if (!this.isBrowser || !this.authService.isAuthenticated()) return;
+
+    this.recommendationService
+      .trackView(productId)
+      .pipe(catchError(() => of(void 0)))
+      .subscribe();
+  }
+
+  /** "Slično ovome" — public, so it loads for anonymous visitors too. Same treatment as
+   * loadOrganization: its own request, swallowing its own error, never blocking the page. */
+  private loadSimilar(productId: string): void {
+    this.isLoadingSimilar.set(true);
+    this.recommendationService
+      .getSimilar(productId, 3)
+      .pipe(catchError(() => of([] as Product[])))
+      .subscribe((products) => {
+        this.similarProducts.set(products);
+        this.isLoadingSimilar.set(false);
+      });
   }
 
   private tomorrowIso(): string {

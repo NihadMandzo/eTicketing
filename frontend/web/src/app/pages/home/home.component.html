@@ -20,6 +20,24 @@
     </div>
   </section>
 
+  <!-- Recommendations: personalized for a signed-in visitor, popularity otherwise. Sits above the
+       browse grid because it is the reason a returning buyer opens this page.
+
+       The section is dropped entirely when there is nothing to show — the row renders nothing on an
+       empty list, but this wrapper's padding would still push the page apart, leaving a gap that
+       reads as a broken layout rather than as an absent section. -->
+  @if (isLoadingRecommendations() || recommendations().length > 0) {
+    <section class="recommendations-section">
+      <div class="container">
+        <app-recommendation-row
+          [title]="recommendationTitle()"
+          [products]="recommendations()"
+          [isLoading]="isLoadingRecommendations()"
+        />
+      </div>
+    </section>
+  }
+
   <!-- Popular Events Section -->
   <section class="popular-events-section">
     <div class="container">

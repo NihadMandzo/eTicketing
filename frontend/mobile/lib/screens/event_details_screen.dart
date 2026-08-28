@@ -10,10 +10,12 @@ import '../services/api_exception.dart';
 import '../services/cart.dart';
 import '../services/catalog_service.dart';
 import '../services/organization_service.dart';
+import '../services/recommendation_service.dart';
 import '../services/sector_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/product_location_map.dart';
 import '../widgets/purchase_widgets.dart';
+import '../widgets/recommendation_row.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
 import 'payment_screen.dart';
@@ -55,12 +57,16 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   final _catalogService = CatalogService();
   final _sectorService = SectorService();
   final _organizationService = OrganizationService();
+  final _recommendationService = RecommendationService();
 
   ProductResponse? _product;
   List<SectorResponse> _sectors = [];
   OrganizationResponse? _organization;
   bool _isLoading = true;
   String? _loadError;
+
+  List<ProductResponse> _similar = [];
+  bool _isLoadingSimilar = true;
 
   final Map<String, int> _quantities = {};
   bool _isSubmitting = false;
@@ -89,6 +95,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         _organization = org;
         _isLoading = false;
       });
+
+      // Both deliberately unawaited: the screen is already usable, and neither must delay it.
+      unawaited(_recommendationService.trackView(product.id));
+      unawaited(_loadSimilar(product.id));
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -96,6 +106,33 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  /// "Slično ovome". Swallows its own error and simply leaves the row hidden — same treatment as
+  /// the organizer lookup above, for the same reason.
+  Future<void> _loadSimilar(String productId) async {
+    try {
+      final similar = await _recommendationService.getSimilar(productId, take: 6);
+      if (!mounted) return;
+      setState(() {
+        _similar = similar;
+        _isLoadingSimilar = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _similar = [];
+        _isLoadingSimilar = false;
+      });
+    }
+  }
+
+  void _openProduct(ProductResponse product) {
+    // Replaces rather than stacks: tapping through five similar events should not leave five
+    // detail screens on the back stack for the user to dismiss one at a time.
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => EventDetailsScreen(productId: product.id)),
+    );
   }
 
   List<_PurchaseRow> get _rows => _sectors.expand((sector) {
@@ -419,6 +456,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             ),
                           ],
                         ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: RecommendationRow(
+                        title: 'Slično ovome',
+                        products: _similar,
+                        isLoading: _isLoadingSimilar,
+                        onProductTap: _openProduct,
                       ),
                     ),
                   ],
