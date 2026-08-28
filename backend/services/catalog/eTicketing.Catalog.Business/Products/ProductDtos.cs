@@ -83,6 +83,18 @@ public record ProductInternalResponse(
     DateTime? Date,
     City City);
 
+/// <summary>Catalogue-side counts for one organization, returned by the internal
+/// GET /internal/products/organization-stats that eTicketing.Ticketing's Organizacije report
+/// calls. Internal-only, like ProductInternalResponse above: this is deliberately not exposed
+/// through the Gateway, because "how many drafts does that organization have" is not something a
+/// public caller should be able to enumerate.</summary>
+public record OrganizationProductStatsResponse(
+    Guid OrganizationId,
+    int Total,
+    int Published,
+    int Draft,
+    int WithoutImage);
+
 /// <summary>Plain mutable class, not a record — carries an IFormFile, bound via [FromForm].
 /// Shape for POST /products/{id}/images (there is no PUT/replace equivalent — a full product can
 /// carry up to 5 images, so "replace" is just "delete one, upload another").</summary>

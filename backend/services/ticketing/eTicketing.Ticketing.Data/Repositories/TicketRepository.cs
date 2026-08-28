@@ -93,4 +93,121 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Skip(skip)
             .Take(take)
             .ToListAsync(ct);
+
+    // ── Reporting aggregations ───────────────────────────────────────────────────────────────
+    //
+    // Every status test below is written out as explicit == comparisons rather than pulled from
+    // the LiveStatuses array above, for the same reason GetValidationCountsAsync inlines its
+    // date logic: EF Core can only translate an expression tree it can see through, and an array
+    // .Contains() nested inside an aggregate (g.Count(t => ...)) is not reliably translated
+    // across both the SQL Server provider and the Sqlite one the tests run on.
+    //
+    // "Sold" means Confirmed, Ready or Used — a sale that stands, wherever the ticket is in its
+    // lifecycle. Processing never completed and is excluded from every figure; Cancelled is
+    // counted on its own so the reports can show gross and what came off it, never a silently
+    // netted number.
+
+    public async Task<List<DailySalesFacts>> GetDailySalesAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+    {
+        var rows = await ReportScope(organizationId, fromUtc, toUtcExclusive)
+            // Grouping key is the UTC calendar day. The alternative — shifting each row into the
+            // platform's local zone inside SQL — would need a DST-aware conversion no provider
+            // offers portably; the service re-labels these days and buckets them, and a report
+            // spanning days or months is not moved by the sub-day boundary this glosses over.
+            .GroupBy(t => t.CreatedAt.Date)
+            .Select(g => new
+            {
+                Day = g.Key,
+                Sold = g.Count(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used),
+                Revenue = g.Sum(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used
+                    ? t.PricePaid
+                    : 0m),
+                Cancelled = g.Count(t => t.Status == TicketStatus.Cancelled),
+                CancelledAmount = g.Sum(t => t.Status == TicketStatus.Cancelled ? t.PricePaid : 0m),
+            })
+            .OrderBy(r => r.Day)
+            .ToListAsync(ct);
+
+        // DateOnly.FromDateTime is applied here rather than inside the projection: no EF provider
+        // translates it, and pushing it into the Select fails the whole query at runtime. The
+        // conversion is free — the range is capped at 366 days, so this is at most 366 rows.
+        return [.. rows.Select(r => new DailySalesFacts(
+            DateOnly.FromDateTime(r.Day), r.Sold, r.Revenue, r.Cancelled, r.CancelledAmount))];
+    }
+
+    public Task<List<ProductSalesFacts>> GetProductSalesAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => ReportScope(organizationId, fromUtc, toUtcExclusive)
+            .GroupBy(t => t.ProductId)
+            .Select(g => new ProductSalesFacts(
+                g.Key,
+                g.Count(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used),
+                g.Sum(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used
+                    ? t.PricePaid
+                    : 0m),
+                g.Count(t => t.Status == TicketStatus.Cancelled),
+                g.Sum(t => t.Status == TicketStatus.Cancelled ? t.PricePaid : 0m)))
+            .ToListAsync(ct);
+
+    public Task<List<ProductRedemptionFacts>> GetRedemptionByProductAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => ReportScope(organizationId, fromUtc, toUtcExclusive)
+            .GroupBy(t => t.ProductId)
+            .Select(g => new ProductRedemptionFacts(
+                g.Key,
+                g.Count(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used),
+                g.Count(t => t.Status == TicketStatus.Used),
+                // Printed stubs that were cancelled are not "printed tickets in circulation", so
+                // the same sold-status filter applies here as everywhere else.
+                g.Count(t => t.Origin == TicketOrigin.Printed
+                    && (t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used))))
+            .ToListAsync(ct);
+
+    public async Task<List<HourlyCheckinFacts>> GetCheckinsByHourAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+    {
+        // The one aggregation here that is NOT a GROUP BY in SQL. Grouping on
+        // ValidatedAt.Value.Hour is untranslatable — no provider maps the Hour component of a
+        // *nullable* DateTime, and the query fails outright rather than falling back. Pulling one
+        // narrow column and bucketing it in memory is the honest alternative: 24 buckets out of at
+        // most one range's worth of scans, with no entity materialisation at all.
+        var scannedAt = await Query()
+            .AsNoTracking()
+            .Where(t => organizationId == null || t.Sector!.OrganizationId == organizationId)
+            // Keyed on ValidatedAt, not CreatedAt: this chart answers "when do people arrive",
+            // which is a different question from when they bought, so a ticket bought in June and
+            // scanned in August belongs to August's histogram.
+            .Where(t => t.ValidatedAt != null && t.ValidatedAt >= fromUtc && t.ValidatedAt < toUtcExclusive)
+            .Select(t => t.ValidatedAt!.Value)
+            .ToListAsync(ct);
+
+        return [.. scannedAt
+            .GroupBy(at => at.Hour)
+            .Select(g => new HourlyCheckinFacts(g.Key, g.Count()))
+            .OrderBy(h => h.Hour)];
+    }
+
+    public Task<List<OrganizationSalesFacts>> GetOrganizationSalesAsync(
+        DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => ReportScope(organizationId: null, fromUtc, toUtcExclusive)
+            .GroupBy(t => t.Sector!.OrganizationId)
+            .Select(g => new OrganizationSalesFacts(
+                g.Key,
+                g.Count(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used),
+                g.Sum(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used
+                    ? t.PricePaid
+                    : 0m)))
+            .ToListAsync(ct);
+
+    /// <summary>The window every report aggregation starts from: tickets minted inside the range,
+    /// optionally narrowed to one organization, with Processing rows dropped up front so no
+    /// downstream projection has to remember to exclude them. The upper bound is exclusive so a
+    /// ticket bought at 23:59:59.9 on the last day still counts.</summary>
+    private IQueryable<Ticket> ReportScope(Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive)
+        => Query()
+            .AsNoTracking()
+            .Where(t => organizationId == null || t.Sector!.OrganizationId == organizationId)
+            .Where(t => t.CreatedAt >= fromUtc && t.CreatedAt < toUtcExclusive)
+            .Where(t => t.Status != TicketStatus.Processing);
 }

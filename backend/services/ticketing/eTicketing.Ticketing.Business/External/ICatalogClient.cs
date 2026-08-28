@@ -29,4 +29,21 @@ public interface ICatalogClient
     /// the name and date of every product they have live tickets for today — one call, not one per
     /// product. Unknown ids are simply absent from the result, never an error.</summary>
     Task<IReadOnlyList<CatalogProductResponse>> GetProductsAsync(IReadOnlyList<Guid> productIds, CancellationToken ct = default);
+
+    /// <summary>Catalogue-side counts per organization, for the Organizacije tab of GET /reports.
+    /// Ticketing knows how many tickets an organization sold but nothing about how many products
+    /// it has, how many are still drafts, or which are missing a photo — those are Catalog's to
+    /// answer. Returns a row for every organization that owns at least one product; an
+    /// organization with none is simply absent.</summary>
+    Task<IReadOnlyList<CatalogOrganizationProductStats>> GetOrganizationProductStatsAsync(CancellationToken ct = default);
 }
+
+/// <summary>Mirrors eTicketing.Catalog.Business.Products.OrganizationProductStatsResponse's JSON
+/// shape — duplicated across the service boundary for the same reason as
+/// <see cref="CatalogProductResponse"/>.</summary>
+public record CatalogOrganizationProductStats(
+    Guid OrganizationId,
+    int Total,
+    int Published,
+    int Draft,
+    int WithoutImage);

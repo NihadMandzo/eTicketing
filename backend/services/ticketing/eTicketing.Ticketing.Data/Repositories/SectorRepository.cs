@@ -23,4 +23,19 @@ public class SectorRepository : Repository<Sector, Guid>, ISectorRepository
 
     public Task<Sector?> GetByIdWithTicketTypesAsync(Guid id, CancellationToken ct = default)
         => Query().Include(s => s.TicketTypes).FirstOrDefaultAsync(s => s.Id == id, ct);
+
+    public Task<List<ProductCapacity>> GetPublishedCapacityByProductAsync(
+        IReadOnlyList<Guid> productIds, CancellationToken ct = default)
+    {
+        if (productIds.Count == 0)
+            return Task.FromResult(new List<ProductCapacity>());
+
+        return Query()
+            .AsNoTracking()
+            .Where(s => productIds.Contains(s.ProductId))
+            .Where(s => s.Status == PublishStatus.Published)
+            .GroupBy(s => s.ProductId)
+            .Select(g => new ProductCapacity(g.Key, g.Sum(s => s.Capacity), g.Count()))
+            .ToListAsync(ct);
+    }
 }

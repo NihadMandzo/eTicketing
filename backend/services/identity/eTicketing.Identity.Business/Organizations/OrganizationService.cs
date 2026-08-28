@@ -61,6 +61,31 @@ public class OrganizationService : IOrganizationService
             : Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
+    /// <summary>Upper bound on <see cref="GetInternalByIdsAsync"/>, mirroring Catalog's
+    /// MaxInternalByIdsCount: the id list arrives as a bare List&lt;Guid&gt; body rather than a
+    /// validated request DTO, so this is the only thing standing between a caller bug and an
+    /// unbounded IN (...) clause. 200 is far above the number of organizations a report will ever
+    /// name.</summary>
+    private const int MaxInternalByIdsCount = 200;
+
+    public async Task<Result<List<OrganizationInternalResponse>>> GetInternalByIdsAsync(
+        IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return Result<List<OrganizationInternalResponse>>.Success([]);
+
+        if (ids.Count > MaxInternalByIdsCount)
+        {
+            return Result<List<OrganizationInternalResponse>>.Failure(Error.Validation(
+                "organization.too_many_ids", $"Moguće je zatražiti najviše {MaxInternalByIdsCount} organizacija odjednom."));
+        }
+
+        var organizations = await _organizationRepository.GetByIdsAsync(ids, ct);
+        return Result<List<OrganizationInternalResponse>>.Success(organizations
+            .Select(o => new OrganizationInternalResponse(o.Id, o.Name, o.Address, o.IsActive))
+            .ToList());
+    }
+
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
     {
         if (await _userRepository.ExistsByEmailOrUsernameAsync(request.AdminEmail, request.AdminUsername, ct))

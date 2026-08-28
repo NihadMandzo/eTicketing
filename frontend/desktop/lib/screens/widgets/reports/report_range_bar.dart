@@ -1,0 +1,371 @@
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../../core/formatting.dart';
+import '../../../theme/app_colors.dart';
+
+/// A named shortcut in the period bar. `days` counts inclusively (7 dana =
+/// today and the six before it); `months` steps back by calendar month, so
+/// "3 mjeseca" lands on the same day-of-month rather than on day 90.
+class ReportPreset {
+  final String id;
+  final String label;
+  final int? days;
+  final int? months;
+
+  const ReportPreset(this.id, this.label, {this.days, this.months});
+
+  /// The six shortcuts from docs/Design/Reports.dc.html.
+  static const all = [
+    ReportPreset('7d', '7 dana', days: 7),
+    ReportPreset('30d', '30 dana', days: 30),
+    ReportPreset('90d', '90 dana', days: 90),
+    ReportPreset('3m', '3 mjeseca', months: 3),
+    ReportPreset('6m', '6 mjeseci', months: 6),
+    ReportPreset('1y', 'Godina', months: 12),
+  ];
+
+  /// The range this preset means, ending today.
+  (DateTime from, DateTime to) resolve(DateTime today) {
+    final to = DateTime(today.year, today.month, today.day);
+    final from = months != null
+        ? DateTime(to.year, to.month - months!, to.day)
+        : to.subtract(Duration(days: days! - 1));
+    return (from, to);
+  }
+}
+
+/// The date-range bar: preset pills on top, explicit Od/Do pickers underneath,
+/// and the inline warning the design specifies for an inverted range.
+class ReportRangeBar extends StatelessWidget {
+  final DateTime from;
+  final DateTime to;
+
+  /// Null once the user picks explicit dates — no pill is highlighted then.
+  final String? activePresetId;
+
+  /// Today, in the app's own clock. The pickers refuse anything later: the API
+  /// rejects a future `Do` outright, and offering it would only produce a 400.
+  final DateTime today;
+
+  final ValueChanged<ReportPreset> onPreset;
+  final ValueChanged<DateTime> onFrom;
+  final ValueChanged<DateTime> onTo;
+
+  const ReportRangeBar({
+    super.key,
+    required this.from,
+    required this.to,
+    required this.activePresetId,
+    required this.today,
+    required this.onPreset,
+    required this.onFrom,
+    required this.onTo,
+  });
+
+  /// The longest range the API will accept, inclusive of both endpoints —
+  /// mirrors `ReportRangeValidator.MaxRangeDays`. The backend re-checks it
+  /// regardless (.claude/rules/21-frontend-desktop.md); this copy exists so the
+  /// user sees why the report stopped updating instead of a 400.
+  static const maxRangeDays = 366;
+
+  bool get _isInverted => from.isAfter(to);
+
+  bool get _isTooLong => !_isInverted && _days > maxRangeDays;
+
+  bool get _isInvalid => _isInverted || _isTooLong;
+
+  int get _days => to.difference(from).inDays + 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border.all(color: AppColors.border(brightness)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Wrap throughout, not Row: at ~700px the six pills cannot share a
+          // line with their label, and a Row would overflow rather than reflow
+          // (.claude/rules/21-frontend-desktop.md).
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              Icon(LucideIcons.calendarRange, size: 16, color: AppColors.textTertiary(brightness)),
+              Text(
+                'Period:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary(brightness),
+                ),
+              ),
+              for (final preset in ReportPreset.all)
+                _PresetPill(
+                  label: preset.label,
+                  selected: preset.id == activePresetId,
+                  onTap: () => onPreset(preset),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
+          const SizedBox(height: 12),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _DateField(
+                label: 'Od',
+                value: from,
+                // The picker itself enforces the ordering the API validates:
+                // "Od" can never be dragged past "Do".
+                lastDate: to,
+                onChanged: onFrom,
+              ),
+              _DateField(
+                label: 'Do',
+                value: to,
+                firstDate: from,
+                lastDate: today,
+                onChanged: onTo,
+              ),
+              Text(
+                '${formatLongDate(from)} – ${formatLongDate(to)}',
+                style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _isInverted ? 'nevažeći raspon' : '$_days ${_days == 1 ? 'dan' : 'dana'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? AppColors.accent : AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_isInvalid) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.errorBgDarkMode : AppColors.errorBg,
+                border: Border.all(color: isDark ? AppColors.errorDarkest : AppColors.errorBorder),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.circleAlert, size: 14, color: AppColors.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _isInverted
+                          ? 'Datum "Od" mora biti prije datuma "Do".'
+                          : 'Period ne može biti duži od $maxRangeDays dana.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.error : AppColors.errorText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PresetPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PresetPill({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.transparent,
+          border: Border.all(color: selected ? AppColors.primary : AppColors.border(brightness)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : AppColors.textTertiary(brightness),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  final String label;
+  final DateTime value;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+  final ValueChanged<DateTime> onChanged;
+
+  const _DateField({
+    required this.label,
+    required this.value,
+    this.firstDate,
+    this.lastDate,
+    required this.onChanged,
+  });
+
+  Future<void> _pick(BuildContext context) async {
+    // The floor is deliberately generous rather than tied to the API's 366-day
+    // cap: the cap is about the span, not about how far back a date may sit,
+    // and a hard floor here would make a report on last year's festival
+    // unpickable.
+    final earliest = DateTime(value.year - 5);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: value,
+      firstDate: firstDate ?? earliest,
+      lastDate: lastDate ?? DateTime(value.year + 1),
+      // No `locale:` — the app registers no localization delegates, so asking
+      // for 'bs' would throw. The picker's own chrome stays English; the labels
+      // around it are Bosnian, same as ticket_export_screen.dart's picker.
+      helpText: 'Odaberite datum',
+      cancelText: 'Odustani',
+      confirmText: 'Potvrdi',
+    );
+    if (picked != null) onChanged(DateTime(picked.year, picked.month, picked.day));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textTertiary(brightness),
+          ),
+        ),
+        const SizedBox(width: 7),
+        InkWell(
+          onTap: () => _pick(context),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
+              border: Border.all(color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.calendar, size: 14, color: AppColors.textTertiary(brightness)),
+                const SizedBox(width: 7),
+                Text(
+                  formatDate(value),
+                  style: TextStyle(fontSize: 13, color: AppColors.textPrimary(brightness)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The underlined tab strip above the report body.
+class ReportTabBar extends StatelessWidget {
+  final List<String> labels;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  const ReportTabBar({
+    super.key,
+    required this.labels,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+    final active = isDark ? AppColors.accent : AppColors.primary;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border(brightness))),
+      ),
+      // Scrolls rather than wraps: four tabs at a narrow width would otherwise
+      // spill onto a second row and detach the underline from the strip.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < labels.length; i++)
+              InkWell(
+                onTap: () => onSelect(i),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: i == selectedIndex ? active : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: i == selectedIndex ? active : AppColors.textTertiary(brightness),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

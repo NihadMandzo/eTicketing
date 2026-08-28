@@ -72,6 +72,13 @@ public sealed record UpdateOrganizationUserRequest : IStaffProfileRequest
 /// POST/PUT /organizations/{id}/logo endpoints — organizations no longer carry logo bytes at
 /// all (see Organization.LogoBlobName); it's derived from Azure Blob Storage, not a stored
 /// column.</summary>
+/// <summary>The internal-only shape returned by POST /internal/organizations/by-ids, for
+/// eTicketing.Ticketing's Izvještaji reports. Deliberately far narrower than
+/// <see cref="OrganizationResponse"/>: a report labels rows, so it gets a name, an address and
+/// whether the organization is live — never contact details, logos or user counts, none of which
+/// another service has any business holding.</summary>
+public record OrganizationInternalResponse(Guid Id, string Name, string Address, bool IsActive);
+
 public record OrganizationResponse(
     Guid Id,
     string Name,

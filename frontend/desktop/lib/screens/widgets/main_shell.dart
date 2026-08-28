@@ -8,6 +8,7 @@ import '../login_screen.dart';
 import '../organizations_screen.dart';
 import '../products_screen.dart';
 import '../recommendations_screen.dart';
+import '../reports_screen.dart';
 import '../users_screen.dart';
 import 'app_header.dart';
 import 'app_sidebar.dart';
@@ -119,6 +120,15 @@ class _PageContent extends StatelessWidget {
 
   const _PageContent({required this.page, required this.user});
 
+  /// The four staff roles that have a report matrix at all. `User` (a buyer)
+  /// never reaches this shell, but the guard is explicit rather than implied.
+  static const _reportRoles = {
+    'SuperAdmin',
+    'Admin',
+    'OrganizationSuperAdmin',
+    'OrganizationAdmin',
+  };
+
   @override
   Widget build(BuildContext context) {
     if (page == 'categories') {
@@ -132,6 +142,15 @@ class _PageContent extends StatelessWidget {
     }
     if (page == 'users') {
       return UsersScreen(currentUser: user);
+    }
+    if (page == 'reports') {
+      // Guarded here as well as in the sidebar, same as `recommendations` below:
+      // hiding a nav item is not authorization. Only the four staff roles have a
+      // report matrix at all, and the API refuses every request regardless
+      // (.claude/rules/21-frontend-desktop.md).
+      if (_reportRoles.contains(user.roleName)) {
+        return ReportsScreen(user: user);
+      }
     }
     if (page == 'recommendations') {
       // Guarded on the role here as well as in the sidebar: hiding a nav item is not

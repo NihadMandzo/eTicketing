@@ -54,6 +54,11 @@ public interface IProductService
     /// so the cap is enforced here rather than by a FluentValidation validator.</summary>
     Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
 
+    /// <summary>Per-organization catalogue counts for eTicketing.Ticketing's Organizacije report —
+    /// internal only, never routed through the Gateway. Takes no arguments: that report is
+    /// platform-staff-only and always covers every organization.</summary>
+    Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default);
+
     /// <summary>Uploads one gallery photo (up to 5 per product, see ProductImageValidation.MaxCount)
     /// to Azure Blob Storage ("product-images" container). Ownership-checked.</summary>
     Task<Result<ProductResponse>> UploadImageAsync(Guid id, IFormFile image, ClaimsPrincipal user, CancellationToken ct = default);

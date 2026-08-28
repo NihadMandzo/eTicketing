@@ -26,6 +26,12 @@ public static class OrganizationEndpoints
         group.MapPut("/{id:guid}/logo", ReplaceLogo).RequireAuthorization("PlatformStaff")
             .WithValidation<OrganizationLogoUploadRequest>().DisableAntiforgery();
 
+        // Internal only — mapped on `app`, not on the /organizations group, so it never picks up
+        // that group's public prefix or any auth the group later gains. Same convention as
+        // Catalog's /internal/products/* routes: no Gateway route points here, so it is reachable
+        // only from inside the compose network (see .claude/rules/01-domain.md).
+        app.MapPost("/internal/organizations/by-ids", GetInternalByIds).WithTags("Organizations (internal)");
+
         group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization("Organizer").WithValidation<OrganizationUserQuery>();
         group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("Organizer").WithValidation<AddOrganizationUserRequest>();
         group.MapPut("/{id:guid}/users/{userId:guid}", UpdateUser).RequireAuthorization("Organizer").WithValidation<UpdateOrganizationUserRequest>();
@@ -41,6 +47,12 @@ public static class OrganizationEndpoints
     private static async Task<IResult> GetById(Guid id, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.GetByIdAsync(id, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetInternalByIds(List<Guid> ids, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.GetInternalByIdsAsync(ids, ct);
         return result.ToHttpResult();
     }
 

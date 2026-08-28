@@ -46,9 +46,69 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// printed sheet shows. The render worker pulls a batch through in chunks rather than
     /// materialising thousands of entities at once.</summary>
     Task<List<Ticket>> GetForPrintBatchAsync(Guid batchId, int skip, int take, CancellationToken ct = default);
+
+    // ── Reporting aggregations (GET /reports/*) ──────────────────────────────────────────────
+    // All five follow the convention GetValidationCountsAsync already established: a null
+    // organizationId means "no org filter" (PlatformStaff), a non-null one scopes to that
+    // organization via Sector.OrganizationId, which is denormalized onto Sector precisely so
+    // ownership questions never need a cross-service call. [from, to] are inclusive local
+    // calendar dates; the caller converts them to the half-open UTC instant range the CreatedAt
+    // column is stored in, because comparing a DateTime column against a DateOnly can't be
+    // translated to SQL.
+
+    /// <summary>One row per calendar day that saw any activity, ordered by day. The service
+    /// re-buckets these into days/weeks/months in memory rather than pushing three different
+    /// GROUP BY shapes into SQL — the range is capped at 366 days by ReportQueryValidator, so
+    /// this is at most 366 rows.</summary>
+    Task<List<DailySalesFacts>> GetDailySalesAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>Per-product sales tallies for the range. Product names are not here — they live in
+    /// Catalog and are resolved by the caller through ICatalogClient.</summary>
+    Task<List<ProductSalesFacts>> GetProductSalesAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>Per-product check-in tallies. Sold counts every admittable ticket minted in the
+    /// range; CheckedIn counts the ones that have actually walked through a gate (Status=Used),
+    /// and Printed the box-office ones (Origin=Printed).</summary>
+    Task<List<ProductRedemptionFacts>> GetRedemptionByProductAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>Histogram of gate scans by hour-of-day, keyed on ValidatedAt (not CreatedAt) —
+    /// this answers "when do people actually arrive", which is a different question from when
+    /// they bought. Hours with no scans are simply absent.</summary>
+    Task<List<HourlyCheckinFacts>> GetCheckinsByHourAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>Per-organization sales tallies — the platform-staff Organizations tab. Called
+    /// twice by the service (current range and the immediately preceding equal-length one) to
+    /// compute period-over-period growth.</summary>
+    Task<List<OrganizationSalesFacts>> GetOrganizationSalesAsync(
+        DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
 }
 
 /// <summary>Projection, not an entity — one row per (product, mode) with today's ticket tallies.</summary>
 public record TicketValidationCounts(Guid ProductId, TicketingMode TicketingMode, int TotalToday, int ValidatedToday);
 
 public record TicketBuyer(Guid UserId, string UserEmail);
+
+// ── Reporting projections ────────────────────────────────────────────────────────────────────
+// Cancelled tickets are counted separately everywhere rather than folded into Sold/Revenue: a
+// cancelled ticket was a real sale that was then undone, so the reports show both the gross
+// figure and what came off it, never a silently netted number.
+
+/// <summary>Sales for one calendar day (platform-local), split into what stands and what was
+/// cancelled.</summary>
+public record DailySalesFacts(DateOnly Day, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+
+/// <summary>Sales for one product over the whole reporting range.</summary>
+public record ProductSalesFacts(Guid ProductId, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+
+/// <summary>Gate usage for one product over the whole reporting range.</summary>
+public record ProductRedemptionFacts(Guid ProductId, int Sold, int CheckedIn, int Printed);
+
+/// <summary>Number of gate scans that happened in a given hour of the day (0-23).</summary>
+public record HourlyCheckinFacts(int Hour, int Count);
+
+/// <summary>Sales for one organization over the whole reporting range.</summary>
+public record OrganizationSalesFacts(Guid OrganizationId, int Sold, decimal Revenue);
