@@ -52,6 +52,23 @@ public class PurchaseInteractionRecorderTests : IDisposable
     }
 
     [Fact]
+    public async Task RecordAsync_WhenAConcurrentWriterInsertedTheSameRowFirst_IncrementsInsteadOfFailing()
+    {
+        // The consumer competes with the buyer's own product-detail view for the same
+        // (user, product) key — a redelivered event alongside a live view is enough. Failing here
+        // would send the message back around the retry loop over a row that already exists.
+        var racing = new RacingUnitOfWork(_fixture.UnitOfWork, InsertPurchaseThroughAnotherWriterAsync);
+        var sut = _fixture.CreatePurchaseInteractionRecorder(racing);
+
+        await sut.RecordAsync(PurchaseOf(_product));
+
+        racing.SaveAttempts.Should().Be(2, "the first commit lost the race and the recovery re-ran the upsert");
+
+        var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
+        history.Should().ContainSingle().Which.Count.Should().Be(2);
+    }
+
+    [Fact]
     public async Task RecordAsync_ForAnUnknownProduct_SkipsInsteadOfThrowing()
     {
         // A product deleted between purchase and delivery. Throwing would send the message around
@@ -109,6 +126,25 @@ public class PurchaseInteractionRecorderTests : IDisposable
                 new PurchasedTicket(Guid.NewGuid(), "qr-2", "Odrasli", 30m, null, null, null),
                 new PurchasedTicket(Guid.NewGuid(), "qr-3", "Djeca", 30m, null, null, null),
             ]);
+
+    /// <summary>Commits the same (user, product, Purchase) row through a genuinely separate
+    /// DbContext, so the recorder's own insert loses to the unique index for real.</summary>
+    private async Task InsertPurchaseThroughAnotherWriterAsync()
+    {
+        await using var other = _fixture.NewDbContext();
+
+        other.Add(new UserInteraction
+        {
+            Id = Guid.NewGuid(),
+            UserId = _buyer,
+            ProductId = _product.Id,
+            Type = InteractionType.Purchase,
+            Count = 1,
+            LastOccurredAt = DateTime.UtcNow,
+        });
+
+        await other.SaveChangesAsync();
+    }
 
     private async Task SeedAsync()
     {

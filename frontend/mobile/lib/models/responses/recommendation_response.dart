@@ -18,10 +18,15 @@ RecommendationSource recommendationSourceFromJson(dynamic value) =>
 
 /// Row heading per strategy. Personalized and ContentBased deliberately share one: the distinction
 /// is real to us but meaningless to a shopper, who only needs to know the row is about them.
+///
+/// [RecommendationSource.popular] is titled without a place on purpose. The API ranks that row
+/// across the whole catalog — it falls back to Popular precisely when it knows nothing about the
+/// visitor, including where they are — so promising "u vašem gradu" would be the exact dishonesty
+/// `source` exists to prevent.
 String recommendationTitle(RecommendationSource source) => switch (source) {
       RecommendationSource.personalized => 'Preporučeno za vas',
       RecommendationSource.contentBased => 'Preporučeno za vas',
-      RecommendationSource.popular => 'Popularno u vašem gradu',
+      RecommendationSource.popular => 'Popularno',
     };
 
 class RecommendationResponse {

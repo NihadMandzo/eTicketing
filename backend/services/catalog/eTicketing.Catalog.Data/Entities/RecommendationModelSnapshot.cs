@@ -32,6 +32,8 @@ public class RecommendationModelSnapshot : BaseEntity
     public int TrainingDurationMs { get; set; }
 
     /// <summary>Exactly one row carries this at a time — the model currently loaded and scoring.
-    /// Enforced by a filtered unique index, not by convention.</summary>
+    /// Enforced by application code (see RecommendationModelSnapshotRepository.AddAndActivateAsync),
+    /// not by a database constraint — see RecommendationModelSnapshotConfiguration for why a
+    /// filtered unique index isn't used here.</summary>
     public bool IsActive { get; set; }
 }

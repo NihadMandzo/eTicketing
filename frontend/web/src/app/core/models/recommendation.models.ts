@@ -25,9 +25,13 @@ export interface RecommendationResult {
 }
 
 /** Row heading per strategy. Personalized and ContentBased deliberately share one: the distinction
- * is real to us but meaningless to a shopper, who only needs to know the row is about them. */
+ * is real to us but meaningless to a shopper, who only needs to know the row is about them.
+ *
+ * 'Popular' is titled without a place on purpose. The API ranks this row across the whole catalog —
+ * it reaches Popular precisely when it knows nothing about the visitor, including where they are —
+ * so promising "u vašem gradu" would be the exact dishonesty `source` exists to prevent. */
 export const RECOMMENDATION_TITLES: Readonly<Record<RecommendationSource, string>> = {
   Personalized: 'Preporučeno za vas',
   ContentBased: 'Preporučeno za vas',
-  Popular: 'Popularno u vašem gradu',
+  Popular: 'Popularno',
 };

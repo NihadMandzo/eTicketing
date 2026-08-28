@@ -54,8 +54,7 @@ public class PurchaseInteractionRecorder
             return;
         }
 
-        await _interactions.UpsertAsync(
-            purchase.UserId, purchase.ProductId, InteractionType.Purchase, purchase.PurchasedAt, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await _interactions.RecordOccurrenceAsync(
+            _unitOfWork, purchase.UserId, purchase.ProductId, InteractionType.Purchase, purchase.PurchasedAt, ct);
     }
 }

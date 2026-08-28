@@ -69,6 +69,15 @@ public sealed class CatalogTestContext : IDisposable
         UnitOfWork = DbContext;
     }
 
+    /// <summary>A second DbContext over the SAME in-memory database — a genuinely independent
+    /// writer, which is the only way to reproduce a lost insert race against a unique index for
+    /// real instead of mocking the failure. See <see cref="RacingUnitOfWork"/>.</summary>
+    public CatalogDbContext NewDbContext() =>
+        new(new DbContextOptionsBuilder<CatalogDbContext>()
+            .UseSqlite(_connection)
+            .AddInterceptors(new AuditableEntitySaveChangesInterceptor())
+            .Options);
+
     public ICategoryService CreateCategoryService() =>
         new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
@@ -79,14 +88,18 @@ public sealed class CatalogTestContext : IDisposable
 
     public ProductResponseFactory CreateResponseFactory() => new(BlobStorage);
 
-    public IRecommendationService CreateRecommendationService() =>
+    /// <summary><paramref name="unitOfWork"/> is overridable so a test can slip a
+    /// <see cref="RacingUnitOfWork"/> in front of the real one; every other test passes nothing and
+    /// gets the plain DbContext.</summary>
+    public IRecommendationService CreateRecommendationService(IUnitOfWork? unitOfWork = null) =>
         new RecommendationService(
-            UserInteractionRepository, ProductRepository, ModelSnapshotRepository, UnitOfWork,
+            UserInteractionRepository, ProductRepository, ModelSnapshotRepository, unitOfWork ?? UnitOfWork,
             RecommendationModel, CreateResponseFactory(), Options.Create(RecommendationOptions),
             NullLogger<RecommendationService>.Instance);
 
-    public PurchaseInteractionRecorder CreatePurchaseInteractionRecorder() =>
-        new(UserInteractionRepository, ProductRepository, UnitOfWork, NullLogger<PurchaseInteractionRecorder>.Instance);
+    public PurchaseInteractionRecorder CreatePurchaseInteractionRecorder(IUnitOfWork? unitOfWork = null) =>
+        new(UserInteractionRepository, ProductRepository, unitOfWork ?? UnitOfWork,
+            NullLogger<PurchaseInteractionRecorder>.Instance);
 
     public void Dispose()
     {

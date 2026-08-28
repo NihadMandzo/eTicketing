@@ -36,6 +36,10 @@ public sealed class InteractionPrediction
 /// Thread safety: the trained transformer and its prediction engine are swapped in atomically
 /// behind a lock, and every read takes that lock. A retrain running concurrently with scoring is
 /// therefore safe, and scoring keeps using the OLD model until the new one is completely ready.
+/// Two retrains running concurrently are a separate problem — they would both write through the
+/// same MLContext, which ML.NET does not document as safe — so training is additionally serialized
+/// on its own semaphore. That is not hypothetical: the nightly job and the staff-triggered
+/// POST /recommendations/retrain can fire at the same moment.
 /// </summary>
 public sealed class MatrixFactorizationModel : IRecommendationModel
 {
@@ -52,6 +56,13 @@ public sealed class MatrixFactorizationModel : IRecommendationModel
     private readonly ILogger<MatrixFactorizationModel> _logger;
 
     private readonly Lock _gate = new();
+
+    /// <summary>Serializes TrainAsync. Separate from <see cref="_gate"/> because a training run
+    /// spans awaits (blob upload) and a plain lock cannot be held across those — and because
+    /// holding the read lock for the whole run would block scoring, which the swap-at-the-end
+    /// design exists precisely to avoid.</summary>
+    private readonly SemaphoreSlim _trainingGate = new(1, 1);
+
     private readonly MLContext _mlContext = new(seed: 0);
 
     private PredictionEngine<InteractionRecord, InteractionPrediction>? _engine;
@@ -74,6 +85,21 @@ public sealed class MatrixFactorizationModel : IRecommendationModel
     }
 
     public async Task<TrainingOutcome> TrainAsync(IReadOnlyList<InteractionTrainingRow> rows, CancellationToken ct = default)
+    {
+        // A manual "Ponovo treniraj" landing inside the nightly window waits for it instead of
+        // fitting a second pipeline through the same MLContext at the same time.
+        await _trainingGate.WaitAsync(ct);
+        try
+        {
+            return await TrainCoreAsync(rows, ct);
+        }
+        finally
+        {
+            _trainingGate.Release();
+        }
+    }
+
+    private async Task<TrainingOutcome> TrainCoreAsync(IReadOnlyList<InteractionTrainingRow> rows, CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();
 

@@ -133,6 +133,25 @@ public class MatrixFactorizationModelTests
         model.IsTrained.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task TrainAsync_RunConcurrently_SerializesTheTrainingRuns()
+    {
+        // The nightly job and a staff-triggered "Ponovo treniraj" can fire at the same moment, and
+        // both fit a pipeline through the same MLContext — which ML.NET does not document as safe.
+        // The delay widens the window so an unguarded implementation would actually overlap here.
+        _blobStorage.UploadDelay = TimeSpan.FromMilliseconds(50);
+        var model = CreateModel();
+        var rows = BuildTrainingData();
+
+        await Task.WhenAll(model.TrainAsync(rows), model.TrainAsync(rows));
+
+        _blobStorage.MaxConcurrentUploads.Should().Be(
+            1, "a retrain landing inside another one must queue behind it, not race it");
+        model.IsTrained.Should().BeTrue();
+        model.TryScore(rows[0].UserId, _concert, out _).Should()
+            .BeTrue("the model left standing after two overlapping runs must still be a usable one");
+    }
+
     private MatrixFactorizationModel CreateModel() =>
         new(_blobStorage, Options.Create(_options), NullLogger<MatrixFactorizationModel>.Instance);
 

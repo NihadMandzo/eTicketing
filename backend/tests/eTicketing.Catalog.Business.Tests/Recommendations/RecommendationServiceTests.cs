@@ -54,6 +54,26 @@ public class RecommendationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TrackViewAsync_WhenAConcurrentWriterInsertedTheSameRowFirst_IncrementsInsteadOfFailing()
+    {
+        // Two tabs on the same product: both read no row, both try to insert, and the unique index
+        // rejects whoever commits second. The loser must land as an increment, not as a 500.
+        var racing = new RacingUnitOfWork(
+            _fixture.UnitOfWork,
+            () => InsertInteractionThroughAnotherWriterAsync(_buyer, _concertMostar.Id, InteractionType.View));
+
+        var result = await _fixture.CreateRecommendationService(racing)
+            .TrackViewAsync(new TrackViewRequest(_concertMostar.Id), Buyer());
+
+        result.IsSuccess.Should().BeTrue();
+        racing.SaveAttempts.Should().Be(2, "the first commit lost the race and the recovery re-ran the upsert");
+
+        var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
+        history.Should().ContainSingle()
+            .Which.Count.Should().Be(2, "the winner's row plus this view — both views actually happened");
+    }
+
+    [Fact]
     public async Task TrackViewAsync_ForAnUnknownProduct_ReturnsNotFound()
     {
         var result = await _sut.TrackViewAsync(new TrackViewRequest(Guid.NewGuid()), Buyer());
@@ -246,6 +266,41 @@ public class RecommendationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPopularAsync_ForABestSellerOlderThanTheCandidateCap_StillRanksItFirst()
+    {
+        // MaxCandidates bounds in-memory scoring, and the pool it keeps is the NEWEST products —
+        // so a best seller old enough to fall out of it used to vanish from the popularity list
+        // entirely. Popularity is ranked in SQL across the whole catalog precisely so it can't.
+        _fixture.RecommendationOptions.MaxCandidates = 2;
+        await BackdateAsync(_concertMostar, TimeSpan.FromDays(30));
+        await TrackAsync(_buyer, _concertMostar, InteractionType.Purchase);
+        await TrackAsync(_otherBuyer, _concertMostar, InteractionType.Purchase);
+
+        var result = await _sut.GetPopularAsync(new PopularProductsQuery { Take = 24 });
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value![0].Id.Should().Be(
+            _concertMostar.Id, "the most-bought product in the catalog heads the popularity list whatever its age");
+    }
+
+    [Fact]
+    public async Task GetForMeAsync_ForAUserWithNoHistory_SurfacesABestSellerOlderThanTheCandidateCap()
+    {
+        _fixture.RecommendationOptions.MaxCandidates = 2;
+        await BackdateAsync(_concertMostar, TimeSpan.FromDays(30));
+
+        // Bought by somebody else: a product the caller already owns is excluded from their own
+        // recommendations, and this test is about the caller having no history at all.
+        await TrackAsync(_otherBuyer, _concertMostar, InteractionType.Purchase);
+
+        var result = await _sut.GetForMeAsync(new RecommendationQuery { Take = 6 }, Buyer());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Source.Should().Be(RecommendationSource.Popular);
+        result.Value.Items[0].Id.Should().Be(_concertMostar.Id);
+    }
+
+    [Fact]
     public async Task GetPopularAsync_WithNoPurchasesAtAll_StillReturnsPublishedProducts()
     {
         var result = await _sut.GetPopularAsync(new PopularProductsQuery { Take = 24 });
@@ -367,6 +422,36 @@ public class RecommendationServiceTests : IDisposable
     private async Task TrackAsync(Guid userId, Product product, InteractionType type)
     {
         await _fixture.UserInteractionRepository.UpsertAsync(userId, product.Id, type, DateTime.UtcNow);
+        await _fixture.UnitOfWork.SaveChangesAsync();
+    }
+
+    /// <summary>Commits an interaction through a genuinely separate DbContext — the competing
+    /// writer in the upsert-race tests. The audit interceptor only stamps CreatedAt on insert, so
+    /// this row looks exactly like one written by another request.</summary>
+    private async Task InsertInteractionThroughAnotherWriterAsync(Guid userId, Guid productId, InteractionType type)
+    {
+        await using var other = _fixture.NewDbContext();
+
+        other.Add(new UserInteraction
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            ProductId = productId,
+            Type = type,
+            Count = 1,
+            LastOccurredAt = DateTime.UtcNow,
+        });
+
+        await other.SaveChangesAsync();
+    }
+
+    /// <summary>Pushes a product out of the newest-MaxCandidates window. CreatedAt is set by the
+    /// audit interceptor on insert only, so re-saving it as Modified is how a test gets a product
+    /// with a genuinely older creation date.</summary>
+    private async Task BackdateAsync(Product product, TimeSpan age)
+    {
+        product.CreatedAt = DateTime.UtcNow - age;
+        _fixture.ProductRepository.Update(product);
         await _fixture.UnitOfWork.SaveChangesAsync();
     }
 

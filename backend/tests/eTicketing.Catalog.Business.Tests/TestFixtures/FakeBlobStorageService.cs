@@ -24,15 +24,49 @@ public sealed class FakeBlobStorageService : IBlobStorageService
         return Task.FromResult(GetPublicUrl(containerName, blobName));
     }
 
+    /// <summary>Artificial time spent inside <see cref="UploadPrivateAsync"/>. Widens the window in
+    /// which two uploads could overlap, so <see cref="MaxConcurrentUploads"/> is a meaningful
+    /// observation rather than a coincidence of how fast the fake happens to be.</summary>
+    public TimeSpan UploadDelay { get; set; } = TimeSpan.Zero;
+
+    /// <summary>Highest number of uploads seen in flight at the same moment. A model that serializes
+    /// its training runs can never exceed 1 here, whatever the caller does.</summary>
+    public int MaxConcurrentUploads { get; private set; }
+
+    private int _uploadsInFlight;
+    private readonly Lock _gate = new();
+
     /// <summary>Stored in the same dictionary as public blobs — the fake doesn't model access
     /// levels, only content. What it does let a test assert is the round trip: upload a trained
     /// model, download it back, and confirm it still scores identically.</summary>
-    public Task UploadPrivateAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default)
+    public async Task UploadPrivateAsync(string containerName, string blobName, Stream content, string contentType, CancellationToken ct = default)
     {
-        using var ms = new MemoryStream();
-        content.CopyTo(ms);
-        _blobs[Key(containerName, blobName)] = ms.ToArray();
-        return Task.CompletedTask;
+        lock (_gate)
+        {
+            _uploadsInFlight++;
+            MaxConcurrentUploads = Math.Max(MaxConcurrentUploads, _uploadsInFlight);
+        }
+
+        try
+        {
+            using var ms = new MemoryStream();
+            await content.CopyToAsync(ms, ct);
+
+            if (UploadDelay > TimeSpan.Zero)
+                await Task.Delay(UploadDelay, ct);
+
+            lock (_gate)
+            {
+                _blobs[Key(containerName, blobName)] = ms.ToArray();
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _uploadsInFlight--;
+            }
+        }
     }
 
     public Task<Stream?> DownloadAsync(string containerName, string blobName, CancellationToken ct = default) =>

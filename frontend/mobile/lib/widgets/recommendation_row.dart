@@ -4,7 +4,7 @@ import '../models/responses/product_response.dart';
 import 'product_card.dart';
 
 /// A titled horizontal strip of [ProductCard]s, used by every recommendation surface
-/// ("Preporučeno za vas", "Slično ovome", "Popularno u vašem gradu"). Purely presentational — it
+/// ("Preporučeno za vas", "Slično ovome", "Popularno"). Purely presentational — it
 /// takes products and a title and knows nothing about how either was chosen.
 ///
 /// Renders nothing when the list is empty rather than an empty-state message: an absent row reads

@@ -5,7 +5,7 @@ import { ProductCardComponent } from '../product-card/product-card.component';
 
 /**
  * A titled strip of product cards, used by every recommendation surface ("Preporučeno za vas",
- * "Slično ovome", "Popularno u vašem gradu"). Purely presentational — it takes products and a
+ * "Slično ovome", "Popularno"). Purely presentational — it takes products and a
  * title, and knows nothing about how either was chosen.
  *
  * Renders nothing at all when the list is empty rather than an empty-state message: an absent row

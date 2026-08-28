@@ -33,6 +33,18 @@ public class UserInteractionRepository : Repository<UserInteraction, Guid>, IUse
         }, ct);
     }
 
+    public void DiscardPendingInsert()
+    {
+        // EF leaves a rejected INSERT sitting in the Added state, so a caller that retries its
+        // SaveChangesAsync without this would re-issue the very statement the unique index just
+        // refused, forever.
+        foreach (var entry in Context.ChangeTracker.Entries<UserInteraction>()
+                     .Where(e => e.State == EntityState.Added))
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
     public Task<List<InteractionTrainingRow>> GetTrainingRowsAsync(CancellationToken ct = default)
         => Query()
             .AsNoTracking()

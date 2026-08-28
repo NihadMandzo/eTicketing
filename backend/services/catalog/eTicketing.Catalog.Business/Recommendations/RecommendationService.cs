@@ -64,8 +64,8 @@ public class RecommendationService : IRecommendationService
         if (product is null || product.Status != PublishStatus.Published)
             return Result.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
-        await _interactions.UpsertAsync(user.GetUserId(), request.ProductId, InteractionType.View, DateTime.UtcNow, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await _interactions.RecordOccurrenceAsync(
+            _unitOfWork, user.GetUserId(), request.ProductId, InteractionType.View, DateTime.UtcNow, ct);
 
         return Result.Success();
     }
@@ -94,7 +94,13 @@ public class RecommendationService : IRecommendationService
         {
             RecommendationSource.Personalized => RankPersonalized(userId, candidates),
             RecommendationSource.ContentBased => RankContentBased(history, candidates),
-            _ => await RankPopularAsync(PreferredCity(history), candidates, ct),
+            // Deliberately not city-scoped. This arm is reached only when the user has no history
+            // at all (see ResolveSource), and Catalog cannot know where such a user is — the
+            // profile address lives in Identity, which this service never calls. The clients title
+            // the row "Popularno" rather than "Popularno u vašem gradu" for exactly that reason;
+            // the only genuinely city-scoped list is GetPopularAsync, where the caller names it.
+            _ => await RankPopularAsync(
+                city: null, candidates, p => IsStillOffered(p) && !alreadyBought.Contains(p.Id), ct),
         };
 
         // Pad from the strategies below, in order, so a model that only recognises three of the
@@ -139,7 +145,7 @@ public class RecommendationService : IRecommendationService
             .Where(IsStillOffered)
             .ToList();
 
-        var ranked = await RankPopularAsync(query.City, candidates, ct);
+        var ranked = await RankPopularAsync(query.City, candidates, IsStillOffered, ct);
 
         return Result<List<ProductResponse>>.Success(_responseFactory.ToResponses(ranked.Take(query.Take).ToList()));
     }
@@ -294,17 +300,32 @@ public class RecommendationService : IRecommendationService
                 Imminence(p))
             .ToList();
 
-    private async Task<List<Product>> RankPopularAsync(City? city, List<Product> candidates, CancellationToken ct)
+    /// <summary>
+    /// Ranks by how many people bought each product, across the WHOLE published catalog — the ids
+    /// come back ranked from SQL and are then hydrated by id, deliberately not intersected with
+    /// <paramref name="candidates"/>. That intersection is what an earlier version did, and it
+    /// silently dropped any best-seller older than the newest MaxCandidates products: a popularity
+    /// list that can't reach the most-bought product in the catalog isn't a popularity list.
+    /// <paramref name="candidates"/> is still the tail — which is the entire ranking on a catalog
+    /// with no sales yet — and <paramref name="isEligible"/> re-applies the caller's exclusions
+    /// (past events, products the user already bought) to the separately loaded popular half.
+    /// </summary>
+    private async Task<List<Product>> RankPopularAsync(
+        City? city, List<Product> candidates, Func<Product, bool> isEligible, CancellationToken ct)
     {
         var popularIds = await _interactions.GetPopularProductIdsAsync(city, _options.MaxCandidates, ct);
-        var rank = popularIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+        var mostBought = InIdOrder(await _products.GetPublishedByIdsWithDetailsAsync(popularIds, ct), popularIds)
+            .Where(isEligible)
+            .ToList();
 
         // Products nobody has bought sort after every product somebody has, newest first among
-        // themselves — which is the whole ranking on a catalog with no sales yet.
-        return candidates
-            .OrderBy(p => rank.TryGetValue(p.Id, out var index) ? index : int.MaxValue)
-            .ThenByDescending(p => p.CreatedAt)
-            .ToList();
+        // themselves.
+        var alreadyRanked = mostBought.Select(p => p.Id).ToHashSet();
+        return
+        [
+            .. mostBought,
+            .. candidates.Where(p => !alreadyRanked.Contains(p.Id)).OrderByDescending(p => p.CreatedAt),
+        ];
     }
 
     // ─── Shared helpers ──────────────────────────────────────────────────────────────────────
@@ -371,16 +392,6 @@ public class RecommendationService : IRecommendationService
     }
 
     private static double ToRadians(double degrees) => degrees * Math.PI / 180.0;
-
-    /// <summary>The city the user engages with most — the sensible default for "Popularno u vašem
-    /// gradu" given Catalog has no access to a user's profile address (that lives in Identity).</summary>
-    private static City? PreferredCity(List<UserInteraction> history) =>
-        history
-            .Where(i => i.Product is not null)
-            .GroupBy(i => i.Product!.City)
-            .OrderByDescending(g => g.Sum(i => i.Count))
-            .Select(g => (City?)g.Key)
-            .FirstOrDefault();
 
     private static IEnumerable<Product> InIdOrder(List<Product> products, List<Guid> ids)
     {

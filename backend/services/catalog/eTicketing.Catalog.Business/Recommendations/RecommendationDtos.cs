@@ -5,7 +5,7 @@ namespace eTicketing.Catalog.Business.Recommendations;
 
 /// <summary>Which of the three ranking strategies actually produced a list. Persisted nowhere and
 /// travelling on the wire deliberately: the frontends title the row from it ("Preporučeno za vas"
-/// vs "Popularno u vašem gradu"), and it makes the fallback chain observable instead of guesswork
+/// vs "Popularno"), and it makes the fallback chain observable instead of guesswork
 /// when a demo shows something unexpected.
 ///
 /// Serialized as the integer ordinal, like every other enum crossing this boundary — mirrored by
