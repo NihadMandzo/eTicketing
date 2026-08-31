@@ -56,11 +56,17 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     // column is stored in, because comparing a DateTime column against a DateOnly can't be
     // translated to SQL.
 
-    /// <summary>One row per calendar day that saw any activity, ordered by day. The service
-    /// re-buckets these into days/weeks/months in memory rather than pushing three different
-    /// GROUP BY shapes into SQL — the range is capped at 366 days by ReportQueryValidator, so
-    /// this is at most 366 rows.</summary>
-    Task<List<DailySalesFacts>> GetDailySalesAsync(
+    /// <summary>One row per UTC hour that saw any activity, ordered by hour.
+    ///
+    /// Hourly rather than daily on purpose. A local calendar day is what the report actually
+    /// wants, but this layer cannot know what "local" means (see PlatformClock.ToLocal), and a
+    /// UTC *day* cannot be converted to one afterwards — it straddles two local days. A UTC hour
+    /// can: every DST transition falls on an hour boundary, so each of these rows belongs to
+    /// exactly one local date, and ReportService folds them accordingly.
+    ///
+    /// Still an aggregate, not one row per ticket: the 366-day cap in ReportQueryValidator bounds
+    /// this at 8,784 rows however many tickets were sold.</summary>
+    Task<List<HourlySalesFacts>> GetHourlySalesAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
 
     /// <summary>Per-product sales tallies for the range. Product names are not here — they live in
@@ -74,10 +80,13 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     Task<List<ProductRedemptionFacts>> GetRedemptionByProductAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
 
-    /// <summary>Histogram of gate scans by hour-of-day, keyed on ValidatedAt (not CreatedAt) —
-    /// this answers "when do people actually arrive", which is a different question from when
-    /// they bought. Hours with no scans are simply absent.</summary>
-    Task<List<HourlyCheckinFacts>> GetCheckinsByHourAsync(
+    /// <summary>The UTC instant of every gate scan in the range, keyed on ValidatedAt (not
+    /// CreatedAt) — this answers "when do people actually arrive", which is a different question
+    /// from when they bought, so a ticket sold in June and scanned in August belongs to August.
+    ///
+    /// Returns the raw instants rather than an hour histogram because the hour that matters is the
+    /// *local* one, and only the Business layer can convert (see PlatformClock.ToLocal).</summary>
+    Task<List<DateTime>> GetCheckinTimestampsAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
 
     /// <summary>Per-organization sales tallies — the platform-staff Organizations tab. Called
@@ -97,18 +106,15 @@ public record TicketBuyer(Guid UserId, string UserEmail);
 // cancelled ticket was a real sale that was then undone, so the reports show both the gross
 // figure and what came off it, never a silently netted number.
 
-/// <summary>Sales for one calendar day (platform-local), split into what stands and what was
-/// cancelled.</summary>
-public record DailySalesFacts(DateOnly Day, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+/// <summary>Sales for one UTC hour, split into what stands and what was cancelled.
+/// <paramref name="HourUtc"/> is truncated to the hour.</summary>
+public record HourlySalesFacts(DateTime HourUtc, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
 
 /// <summary>Sales for one product over the whole reporting range.</summary>
 public record ProductSalesFacts(Guid ProductId, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
 
 /// <summary>Gate usage for one product over the whole reporting range.</summary>
 public record ProductRedemptionFacts(Guid ProductId, int Sold, int CheckedIn, int Printed);
-
-/// <summary>Number of gate scans that happened in a given hour of the day (0-23).</summary>
-public record HourlyCheckinFacts(int Hour, int Count);
 
 /// <summary>Sales for one organization over the whole reporting range.</summary>
 public record OrganizationSalesFacts(Guid OrganizationId, int Sold, decimal Revenue);

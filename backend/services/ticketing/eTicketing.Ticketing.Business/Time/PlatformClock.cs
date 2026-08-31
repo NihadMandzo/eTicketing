@@ -54,4 +54,20 @@ public sealed class PlatformClock
         TimeZoneInfo.ConvertTimeToUtc(
             DateTime.SpecifyKind(localDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified),
             _timeZone);
+
+    /// <summary>
+    /// The local wall-clock time of a stored UTC instant — the direction the reports need when
+    /// they turn <c>Ticket.CreatedAt</c> or <c>Ticket.ValidatedAt</c> back into "which day was
+    /// that here" / "what time did they actually arrive".
+    ///
+    /// This exists so no caller has to hold a <see cref="TimeZoneInfo"/> of its own. In
+    /// particular the repositories cannot: eTicketing.Ticketing.Data references only
+    /// eTicketing.Contracts (Business → Data, never the reverse), so it has no way to see this
+    /// class at all. That is why every reporting aggregation returns UTC-keyed rows and
+    /// ReportService — which does hold a clock — decides what a local day or hour is.
+    /// </summary>
+    public DateTime ToLocal(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(utc, _timeZone);
+
+    /// <summary>The local calendar date a stored UTC instant falls on.</summary>
+    public DateOnly LocalDateOf(DateTime utc) => DateOnly.FromDateTime(ToLocal(utc));
 }

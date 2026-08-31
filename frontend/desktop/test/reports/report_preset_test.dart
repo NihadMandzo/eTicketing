@@ -60,6 +60,51 @@ void main() {
     });
   });
 
+  group('end-of-month subtraction', () {
+    // DateTime normalises an out-of-range day instead of rejecting it, so a naive
+    // DateTime(y, m - 3, 31) for 31 May becomes "31 February" = 3 March: the wrong
+    // month, and two days short of the range the user asked for.
+    test('3 mjeseca from 31 May clamps to the last day of February', () {
+      final (from, to) = presetById('3m').resolve(DateTime(2026, 5, 31));
+
+      expect(from, DateTime(2026, 2, 28));
+      expect(to, DateTime(2026, 5, 31));
+      expect(from.month, 2, reason: 'must not spill over into March');
+    });
+
+    test('1 mjesec-equivalent subtraction never leaves the target month', () {
+      // 31 March minus one month is 28 February 2026, not 3 March.
+      final (from, _) = ReportPreset('1m', '1 mjesec', months: 1).resolve(DateTime(2026, 3, 31));
+
+      expect(from, DateTime(2026, 2, 28));
+    });
+
+    test('clamps to 29 February in a leap year', () {
+      final (from, _) = presetById('3m').resolve(DateTime(2024, 5, 31));
+
+      expect(from, DateTime(2024, 2, 29));
+    });
+
+    test('keeps the day when the target month is long enough', () {
+      final (from, _) = presetById('3m').resolve(DateTime(2026, 5, 30));
+
+      expect(from, DateTime(2026, 2, 28), reason: 'February still clamps');
+
+      final (marchFrom, _) = presetById('3m').resolve(DateTime(2026, 6, 30));
+      expect(marchFrom, DateTime(2026, 3, 30), reason: 'March has a 30th, so no clamping');
+    });
+
+    test('a clamped range is still within the API cap and never inverted', () {
+      for (final today in [DateTime(2026, 5, 31), DateTime(2026, 3, 31), DateTime(2024, 5, 31)]) {
+        for (final preset in ReportPreset.all) {
+          final (from, to) = preset.resolve(today);
+          expect(from.isAfter(to), isFalse, reason: '${preset.id} on $today is inverted');
+          expect(inclusiveDays(from, to), lessThanOrEqualTo(ReportRangeBar.maxRangeDays));
+        }
+      }
+    });
+  });
+
   group('boundaries', () {
     test('drops the time component so a range never depends on the hour', () {
       final (from, to) = presetById('7d').resolve(DateTime(2026, 8, 21, 23, 45));

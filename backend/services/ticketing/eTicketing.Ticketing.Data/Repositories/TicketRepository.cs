@@ -107,18 +107,25 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
     // counted on its own so the reports can show gross and what came off it, never a silently
     // netted number.
 
-    public async Task<List<DailySalesFacts>> GetDailySalesAsync(
+    public async Task<List<HourlySalesFacts>> GetHourlySalesAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
     {
         var rows = await ReportScope(organizationId, fromUtc, toUtcExclusive)
-            // Grouping key is the UTC calendar day. The alternative — shifting each row into the
-            // platform's local zone inside SQL — would need a DST-aware conversion no provider
-            // offers portably; the service re-labels these days and buckets them, and a report
-            // spanning days or months is not moved by the sub-day boundary this glosses over.
-            .GroupBy(t => t.CreatedAt.Date)
+            // Grouped by UTC date + UTC hour, never by UTC *day* alone. A day boundary here is not
+            // a day boundary in the platform's own time zone, and once rows are folded into a UTC
+            // day the split is unrecoverable — the caller could no longer tell which of the two
+            // local days each ticket belonged to. An hour survives that conversion intact, because
+            // every DST transition happens on an hour boundary.
+            //
+            // Date and Hour are separate keys rather than one truncated DateTime because that is
+            // what both providers translate: DATEPART on SQL Server, strftime on Sqlite. (The
+            // equivalent on a *nullable* column does not translate at all — see
+            // GetCheckinTimestampsAsync, which is why that one materialises instead.)
+            .GroupBy(t => new { Date = t.CreatedAt.Date, Hour = t.CreatedAt.Hour })
             .Select(g => new
             {
-                Day = g.Key,
+                g.Key.Date,
+                g.Key.Hour,
                 Sold = g.Count(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used),
                 Revenue = g.Sum(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used
                     ? t.PricePaid
@@ -126,14 +133,16 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
                 Cancelled = g.Count(t => t.Status == TicketStatus.Cancelled),
                 CancelledAmount = g.Sum(t => t.Status == TicketStatus.Cancelled ? t.PricePaid : 0m),
             })
-            .OrderBy(r => r.Day)
             .ToListAsync(ct);
 
-        // DateOnly.FromDateTime is applied here rather than inside the projection: no EF provider
-        // translates it, and pushing it into the Select fails the whole query at runtime. The
-        // conversion is free — the range is capped at 366 days, so this is at most 366 rows.
-        return [.. rows.Select(r => new DailySalesFacts(
-            DateOnly.FromDateTime(r.Day), r.Sold, r.Revenue, r.Cancelled, r.CancelledAmount))];
+        // Recombining date+hour happens here rather than in the projection for the same reason
+        // DateOnly.FromDateTime used to: AddHours inside a Select is not something to rely on
+        // across providers, and the row count is bounded at 8,784 by the 366-day range cap.
+        return [.. rows
+            .Select(r => new HourlySalesFacts(
+                DateTime.SpecifyKind(r.Date.AddHours(r.Hour), DateTimeKind.Utc),
+                r.Sold, r.Revenue, r.Cancelled, r.CancelledAmount))
+            .OrderBy(r => r.HourUtc)];
     }
 
     public Task<List<ProductSalesFacts>> GetProductSalesAsync(
@@ -164,15 +173,17 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
                     && (t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used))))
             .ToListAsync(ct);
 
-    public async Task<List<HourlyCheckinFacts>> GetCheckinsByHourAsync(
+    public Task<List<DateTime>> GetCheckinTimestampsAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
-    {
-        // The one aggregation here that is NOT a GROUP BY in SQL. Grouping on
-        // ValidatedAt.Value.Hour is untranslatable — no provider maps the Hour component of a
-        // *nullable* DateTime, and the query fails outright rather than falling back. Pulling one
-        // narrow column and bucketing it in memory is the honest alternative: 24 buckets out of at
-        // most one range's worth of scans, with no entity materialisation at all.
-        var scannedAt = await Query()
+        // The one reporting query here that does not aggregate in SQL, for two reasons. Grouping
+        // on ValidatedAt.Value.Hour is untranslatable — no provider maps the Hour component of a
+        // *nullable* DateTime, and the query fails outright rather than falling back. And the hour
+        // the report wants is the local one, which this layer cannot compute at all (see
+        // PlatformClock.ToLocal), so bucketing here would only produce the wrong answer faster.
+        //
+        // One narrow column, no entity materialisation: the caller gets the instants and decides
+        // what hour each one falls in.
+        => Query()
             .AsNoTracking()
             .Where(t => organizationId == null || t.Sector!.OrganizationId == organizationId)
             // Keyed on ValidatedAt, not CreatedAt: this chart answers "when do people arrive",
@@ -181,12 +192,6 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Where(t => t.ValidatedAt != null && t.ValidatedAt >= fromUtc && t.ValidatedAt < toUtcExclusive)
             .Select(t => t.ValidatedAt!.Value)
             .ToListAsync(ct);
-
-        return [.. scannedAt
-            .GroupBy(at => at.Hour)
-            .Select(g => new HourlyCheckinFacts(g.Key, g.Count()))
-            .OrderBy(h => h.Hour)];
-    }
 
     public Task<List<OrganizationSalesFacts>> GetOrganizationSalesAsync(
         DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)

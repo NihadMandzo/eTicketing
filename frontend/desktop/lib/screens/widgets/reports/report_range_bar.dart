@@ -28,10 +28,25 @@ class ReportPreset {
   /// The range this preset means, ending today.
   (DateTime from, DateTime to) resolve(DateTime today) {
     final to = DateTime(today.year, today.month, today.day);
-    final from = months != null
-        ? DateTime(to.year, to.month - months!, to.day)
-        : to.subtract(Duration(days: days! - 1));
+    final from = months != null ? _monthsBefore(to, months!) : to.subtract(Duration(days: days! - 1));
     return (from, to);
+  }
+
+  /// [count] calendar months before [date], clamped to the target month's last
+  /// day.
+  ///
+  /// The clamp is the whole point. `DateTime` normalises an out-of-range day
+  /// instead of rejecting it, so the obvious `DateTime(y, m - count, d)` turns
+  /// 31 May minus three months into 31 February — which becomes 3 March, a date
+  /// in the *wrong month* and two days short of the range the user asked for.
+  static DateTime _monthsBefore(DateTime date, int count) {
+    // Day 0 of the following month is the last day of the month itself.
+    final lastDayOfTargetMonth = DateTime(date.year, date.month - count + 1, 0).day;
+    return DateTime(
+      date.year,
+      date.month - count,
+      date.day < lastDayOfTargetMonth ? date.day : lastDayOfTargetMonth,
+    );
   }
 }
 

@@ -124,7 +124,15 @@ class _Bar extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                Expanded(flex: ((1 - ratio) * 1000).round(), child: const SizedBox()),
+                // clamped, not raw: a full-height bar makes this 0, and while
+                // RenderFlex handles a zero flex by treating the child as
+                // inflexible (which for a bare SizedBox is the zero height we
+                // want anyway), spelling the floor out keeps the intent legible
+                // and the widget safe if that spacer ever gains a real child.
+                Expanded(
+                  flex: ((1 - ratio) * 1000).round().clamp(0, 1000),
+                  child: const SizedBox(),
+                ),
                 Expanded(
                   flex: (ratio * 1000).round().clamp(1, 1000),
                   child: Container(

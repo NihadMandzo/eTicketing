@@ -56,6 +56,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _isExporting = false;
   String? _errorMessage;
 
+  /// Incremented on every [_load]. A response whose generation no longer matches
+  /// has been superseded and is discarded — see [_load].
+  int _loadGeneration = 0;
+
   SalesReport? _sales;
   ProductReport? _products;
   RedemptionReport? _redemption;
@@ -111,6 +115,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _load() async {
     if (_rangeInvalid) return;
 
+    // Supersedes any request still in flight. The user can change tab, preset or
+    // date faster than a wide range answers, and a wider range is the slower one
+    // — so without this the older response is actually the likelier to land last
+    // and paint stale figures under the newly selected filter.
+    final requestId = ++_loadGeneration;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -120,28 +130,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
       switch (_tab) {
         case ReportTab.sales:
           _sales = await _provider.getSales(_from, _to);
+          break;
         case ReportTab.products:
           _products = await _provider.getProducts(_from, _to);
+          break;
         case ReportTab.redemption:
           _redemption = await _provider.getRedemption(_from, _to);
+          break;
         case ReportTab.organizations:
           _organizations = await _provider.getOrganizations(_from, _to);
+          break;
       }
 
-      if (!mounted) return;
+      if (!mounted || requestId != _loadGeneration) return;
       setState(() {
         _loadedFrom = _from;
         _loadedTo = _to;
         _isLoading = false;
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _loadGeneration) return;
       setState(() {
         _errorMessage = e.apiError.displayMessage;
         _isLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _loadGeneration) return;
       setState(() {
         _errorMessage = 'Izvještaj nije moguće učitati. Pokušajte ponovo.';
         _isLoading = false;

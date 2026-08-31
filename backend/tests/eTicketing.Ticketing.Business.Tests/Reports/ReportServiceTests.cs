@@ -355,6 +355,55 @@ public class ReportServiceTests : IDisposable
         result.Value!.RevenueChangePercent.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetSalesAsync_PlacesASaleJustAfterLocalMidnightInThatLocalDaysBucket()
+    {
+        // 2026-08-17T22:05Z is 2026-08-18 00:05 in Sarajevo — the first few minutes of the range.
+        // Keyed by UTC day it would land on the 17th, a day the bucket cursor never visits, and
+        // vanish from the chart while still counting toward the headline total.
+        SeedTicket(_sectorA, _productA, 90m, new DateTime(2026, 8, 17, 22, 5, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(
+            Range(new DateOnly(2026, 8, 18), new DateOnly(2026, 8, 24)), Caller("SuperAdmin"));
+
+        var buckets = result.Value!.Buckets;
+        buckets.Should().HaveCount(7);
+        buckets[0].Label.Should().Be("18. avg");
+        buckets[0].Revenue.Should().Be(90m, "the sale happened just after local midnight on the 18th");
+        buckets[0].Sold.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_ExcludesASaleJustBeforeLocalMidnightOnTheDayBeforeTheRange()
+    {
+        // The mirror of the test above: 21:55Z on the 17th is still 23:55 local on the 17th, one
+        // day before the range starts, so it must not appear at all.
+        SeedTicket(_sectorA, _productA, 90m, new DateTime(2026, 8, 17, 21, 55, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(
+            Range(new DateOnly(2026, 8, 18), new DateOnly(2026, 8, 24)), Caller("SuperAdmin"));
+
+        result.Value!.GrossRevenue.Should().Be(0m);
+        result.Value.Buckets.Sum(b => b.Revenue).Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_BucketRevenueAlwaysSumsToTheHeadlineTotal()
+    {
+        // The invariant the UTC/local mismatch broke: the chart and the tile above it are two
+        // views of one list, so they cannot disagree. Seeded across both midnight boundaries and
+        // the middle of the range.
+        SeedTicket(_sectorA, _productA, 90m, new DateTime(2026, 8, 17, 22, 5, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorA, _productA, 40m, new DateTime(2026, 8, 20, 12, 0, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorA, _productA, 25m, new DateTime(2026, 8, 24, 21, 30, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(
+            Range(new DateOnly(2026, 8, 18), new DateOnly(2026, 8, 24)), Caller("SuperAdmin"));
+
+        result.Value!.Buckets.Sum(b => b.Revenue).Should().Be(result.Value.GrossRevenue);
+        result.Value.Buckets.Sum(b => b.Sold).Should().Be(result.Value.TicketsSold);
+    }
+
     [Theory]
     // The bucket unit is picked from the range length: daily bars up to a fortnight, weekly up to
     // a quarter, monthly beyond. These are the exact boundaries.
@@ -450,6 +499,42 @@ public class ReportServiceTests : IDisposable
         row.Revenue.Should().Be(20m);
     }
 
+    [Fact]
+    public async Task GetProductsAsync_WithMoreProductsThanOneLookupAllows_SplitsTheCatalogCallIntoBatches()
+    {
+        // Catalog and Identity both refuse an id list longer than 200 with a 400, which the HTTP
+        // clients turn into an exception rather than a Result — so an unbatched call would surface
+        // as an opaque 500 on exactly the platform-wide reports the tab exists for.
+        var products = new List<CatalogProductResponse>();
+        for (var i = 0; i < 250; i++)
+        {
+            var productId = Guid.NewGuid();
+            var sectorId = SeedSector(_orgA, productId, capacity: 10, price: 5);
+            SeedTicket(sectorId, productId, 5m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+            products.Add(new CatalogProductResponse(
+                productId, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
+                $"Proizvod {i}", null, City.Mostar));
+        }
+
+        var requestedBatches = new List<int>();
+        _fixture.CatalogClient
+            .Setup(c => c.GetProductsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Guid> ids, CancellationToken _) =>
+            {
+                requestedBatches.Add(ids.Count);
+                return products.Where(p => ids.Contains(p.Id)).ToList();
+            });
+
+        var result = await _sut.GetProductsAsync(Range(), Caller("OrganizationSuperAdmin", _orgA));
+
+        result.IsSuccess.Should().BeTrue();
+        // Split at the downstream cap of 200, in order.
+        requestedBatches.Should().Equal(new[] { 200, 50 });
+        // Every row still resolved a real name — batching must not cost any labels.
+        result.Value!.Rows.Should().HaveCount(250);
+        result.Value.Rows.Should().NotContain(r => r.Name == "Obrisani proizvod");
+    }
+
     // ── Redemption ───────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -472,8 +557,10 @@ public class ReportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetRedemptionAsync_ReportsThePeakArrivalHourFromValidationTimestamps()
+    public async Task GetRedemptionAsync_ReportsThePeakArrivalHourInPlatformLocalTime()
     {
+        // Scans stored at 19:xx UTC. August in Europe/Sarajevo is CEST (UTC+2), so the hour the
+        // gate staff actually lived through — and the only one worth charting — is 21:00.
         foreach (var minute in new[] { 0, 10, 20 })
         {
             SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
@@ -484,9 +571,27 @@ public class ReportServiceTests : IDisposable
 
         var result = await _sut.GetRedemptionAsync(Range(), Caller("OrganizationSuperAdmin", _orgA));
 
-        result.Value!.PeakHour.Should().Be(19);
+        result.Value!.PeakHour.Should().Be(21, "19:00 UTC is 21:00 in Sarajevo during summer time");
         result.Value.PeakHourSharePercent.Should().Be(75m);
         result.Value.CheckinsByHour.Should().HaveCount(2);
+        result.Value.CheckinsByHour.Select(h => h.Hour).Should().Equal(21, 23);
+    }
+
+    [Fact]
+    public async Task GetRedemptionAsync_AppliesTheWinterOffsetToArrivalHours()
+    {
+        // The companion to the test above, and the reason the conversion cannot be a hardcoded
+        // +2: January is CET (UTC+1), so the same 19:xx UTC scan is a 20:00 arrival, not 21:00.
+        // No need to move the fixture clock — it is pinned to August 2026, so a January range is
+        // already in the past and passes the "not in the future" rule as-is.
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 1, 10, 12, 0, 0, DateTimeKind.Utc),
+            validatedAtUtc: new DateTime(2026, 1, 12, 19, 30, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetRedemptionAsync(
+            Range(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 20)),
+            Caller("OrganizationSuperAdmin", _orgA));
+
+        result.Value!.PeakHour.Should().Be(20);
     }
 
     [Fact]

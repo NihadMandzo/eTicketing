@@ -41,19 +41,25 @@ public class ReportService : IReportService
             return Result<SalesReportResponse>.Failure(access.Error);
 
         var range = ReportRange.Create(query, _clock);
-        var daily = await _tickets.GetDailySalesAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct);
+        var daily = ToLocalDays(
+            await _tickets.GetHourlySalesAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct));
 
         // The comparison period is the same length immediately before this one, so "12,4% više"
         // always means "than the equivalent stretch of time", not "than last calendar month".
         var previous = range.Preceding();
-        var previousDaily = await _tickets.GetDailySalesAsync(
-            access.OrganizationId, previous.FromUtc, previous.ToUtcExclusive, ct);
+        var previousDaily = ToLocalDays(
+            await _tickets.GetHourlySalesAsync(access.OrganizationId, previous.FromUtc, previous.ToUtcExclusive, ct));
 
-        var gross = daily.Sum(d => d.Revenue);
-        var sold = daily.Sum(d => d.Sold);
-        var cancelledCount = daily.Sum(d => d.Cancelled);
-        var cancelledAmount = daily.Sum(d => d.CancelledAmount);
-        var previousGross = previousDaily.Sum(d => d.Revenue);
+        // Every total below is summed over the SAME local-day list the chart is built from, so the
+        // headline figures and the bars can never disagree. They could before: the rows were keyed
+        // by UTC day while BuildBuckets walked local days, so a sale in the first hour or two of
+        // the range landed on a day the cursor never visited — counted in the total, invisible in
+        // every bar.
+        var gross = daily.Values.Sum(d => d.Revenue);
+        var sold = daily.Values.Sum(d => d.Sold);
+        var cancelledCount = daily.Values.Sum(d => d.Cancelled);
+        var cancelledAmount = daily.Values.Sum(d => d.CancelledAmount);
+        var previousGross = previousDaily.Values.Sum(d => d.Revenue);
 
         var scope = await ResolveScopeLabelAsync(access.OrganizationId, ct);
 
@@ -84,7 +90,7 @@ public class ReportService : IReportService
         var facts = await _tickets.GetProductSalesAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct);
 
         var productIds = facts.Select(f => f.ProductId).ToList();
-        var products = (await _catalog.GetProductsAsync(productIds, ct)).ToDictionary(p => p.Id);
+        var products = (await FetchProductsAsync(productIds, ct)).ToDictionary(p => p.Id);
         var capacities = (await _sectors.GetPublishedCapacityByProductAsync(productIds, ct))
             .ToDictionary(c => c.ProductId);
 
@@ -149,9 +155,19 @@ public class ReportService : IReportService
 
         var range = ReportRange.Create(query, _clock);
         var facts = await _tickets.GetRedemptionByProductAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct);
-        var byHour = await _tickets.GetCheckinsByHourAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct);
+        var scannedAtUtc = await _tickets.GetCheckinTimestampsAsync(
+            access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct);
 
-        var products = (await _catalog.GetProductsAsync(facts.Select(f => f.ProductId).ToList(), ct))
+        // Converted here, not in the repository: the hour a report shows is the hour the gate
+        // staff experienced, and only this layer knows the platform's time zone. Grouping the raw
+        // UTC instants would put a 21:00 CEST arrival in the 19h column, every night.
+        var byHour = scannedAtUtc
+            .GroupBy(at => _clock.ToLocal(at).Hour)
+            .Select(g => new CheckinHourPoint(g.Key, g.Count()))
+            .OrderBy(h => h.Hour)
+            .ToList();
+
+        var products = (await FetchProductsAsync([.. facts.Select(f => f.ProductId)], ct))
             .ToDictionary(p => p.Id);
 
         var rows = facts
@@ -168,7 +184,7 @@ public class ReportService : IReportService
 
         var totalSold = facts.Sum(f => f.Sold);
         var totalCheckedIn = facts.Sum(f => f.CheckedIn);
-        var totalScans = byHour.Sum(h => h.Count);
+        var totalScans = scannedAtUtc.Count;
         var peak = byHour.Count == 0 ? null : byHour.MaxBy(h => h.Count);
 
         return new RedemptionReportResponse(
@@ -179,7 +195,7 @@ public class ReportService : IReportService
             PeakHour: peak?.Hour,
             PeakHourSharePercent: peak is null ? null : Round2(Divide(peak.Count, totalScans) * 100m),
             PrintedTickets: facts.Sum(f => f.Printed),
-            CheckinsByHour: [.. byHour.Select(h => new CheckinHourPoint(h.Hour, h.Count))],
+            CheckinsByHour: byHour,
             Rows: rows);
     }
 
@@ -354,13 +370,45 @@ public class ReportService : IReportService
         ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"];
 
     /// <summary>
+    /// Sales for one local calendar day. The Data layer cannot produce this — it has no time zone
+    /// (see PlatformClock.ToLocal) — so it hands back UTC hours and ToLocalDays folds them here.
+    /// </summary>
+    private readonly record struct LocalDaySales(int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+
+    /// <summary>
+    /// Folds UTC-hour rows into local calendar days.
+    ///
+    /// An hour is the finest grain that survives the conversion unambiguously: DST transitions
+    /// land on hour boundaries, so every row belongs to exactly one local date. Because
+    /// ReportRange.Create builds the SQL window as exactly [local From 00:00, local To+1 00:00),
+    /// every key produced here is guaranteed to fall inside [range.From, range.To] — which is what
+    /// lets BuildBuckets visit all of them.
+    /// </summary>
+    private Dictionary<DateOnly, LocalDaySales> ToLocalDays(List<HourlySalesFacts> hourly)
+    {
+        var byDay = new Dictionary<DateOnly, LocalDaySales>();
+
+        foreach (var row in hourly)
+        {
+            var day = _clock.LocalDateOf(row.HourUtc);
+            byDay.TryGetValue(day, out var running);
+            byDay[day] = new LocalDaySales(
+                running.Sold + row.Sold,
+                running.Revenue + row.Revenue,
+                running.Cancelled + row.Cancelled,
+                running.CancelledAmount + row.CancelledAmount);
+        }
+
+        return byDay;
+    }
+
+    /// <summary>
     /// Folds the per-day rows into the chart's bars. Buckets are generated from the range itself
     /// rather than from the rows, so a week nobody bought anything in is drawn as a zero-height bar
     /// instead of vanishing and silently compressing the timeline.
     /// </summary>
-    private static List<ReportBucket> BuildBuckets(ReportRange range, List<DailySalesFacts> daily)
+    private static List<ReportBucket> BuildBuckets(ReportRange range, Dictionary<DateOnly, LocalDaySales> byDay)
     {
-        var byDay = daily.ToDictionary(d => d.Day);
         var buckets = new List<ReportBucket>();
 
         // Week and month buckets are anchored at the start of the range and walk forward, so the
@@ -421,8 +469,46 @@ public class ReportService : IReportService
         if (ids.Count == 0)
             return new Dictionary<Guid, IdentityOrganizationResponse>();
 
-        var organizations = await _identity.GetOrganizationsAsync(ids, ct);
+        var organizations = await FetchInBatchesAsync(ids, _identity.GetOrganizationsAsync, ct);
         return organizations.ToDictionary(o => o.Id);
+    }
+
+    /// <summary>Product lookup, batched. Split out so both the Proizvodi and the Iskorištenost
+    /// report hit the same path.</summary>
+    private Task<List<CatalogProductResponse>> FetchProductsAsync(
+        IReadOnlyList<Guid> productIds, CancellationToken ct)
+        => FetchInBatchesAsync(productIds, _catalog.GetProductsAsync, ct);
+
+    /// <summary>
+    /// Upper bound on how many ids one internal lookup may carry, mirroring the identical cap in
+    /// Catalog's ProductService and Identity's OrganizationService.
+    ///
+    /// Duplicated rather than shared because the two sides are separate services that only share
+    /// an HTTP contract — but it has to be respected here, because those services answer a longer
+    /// list with a 400 and both HTTP clients call EnsureSuccessStatusCode, which turns that into an
+    /// HttpRequestException and an opaque 500. A platform-wide year-long report can easily name
+    /// more than 200 products, and the range validator accepts exactly that request.
+    /// </summary>
+    private const int MaxIdsPerLookup = 200;
+
+    /// <summary>Runs a batch lookup in chunks of <see cref="MaxIdsPerLookup"/> and concatenates the
+    /// results, so a wide report resolves every name instead of failing outright.</summary>
+    private static async Task<List<T>> FetchInBatchesAsync<T>(
+        IReadOnlyList<Guid> ids,
+        Func<IReadOnlyList<Guid>, CancellationToken, Task<IReadOnlyList<T>>> fetch,
+        CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        var results = new List<T>(ids.Count);
+        for (var offset = 0; offset < ids.Count; offset += MaxIdsPerLookup)
+        {
+            var batch = ids.Skip(offset).Take(MaxIdsPerLookup).ToList();
+            results.AddRange(await fetch(batch, ct));
+        }
+
+        return results;
     }
 
     // ── Arithmetic helpers ───────────────────────────────────────────────────────────────────

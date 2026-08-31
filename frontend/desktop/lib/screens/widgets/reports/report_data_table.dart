@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 
 /// One column of a report table. [flex] mirrors the fractional grid columns of
-/// the design (2.2fr for the name column, 1fr for the numeric ones); [minWidth]
-/// is what that column collapses to before the whole table starts scrolling.
+/// the design — 2.2fr for the name column, 1fr for the numeric ones. The point
+/// at which the table stops shrinking and scrolls instead is a property of the
+/// table as a whole, not of any one column: see [ReportDataTable.minWidth].
 class ReportColumn {
   final String header;
   final int flex;
