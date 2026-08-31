@@ -37,6 +37,7 @@ public static class ProductEndpoints
         // string. Long, but not unbounded — ProductService caps it, see MaxInternalByIdsCount.
         app.MapPost("/internal/products/by-ids", GetInternalByIds).WithTags("Products (internal)");
         app.MapGet("/internal/products/organization-stats", GetOrganizationStats).WithTags("Products (internal)");
+        app.MapGet("/internal/products/upcoming", GetUpcoming).WithTags("Products (internal)");
     }
 
     private static async Task<IResult> GetPublished([AsParameters] ProductQuery query, IProductService service, CancellationToken ct)
@@ -121,6 +122,12 @@ public static class ProductEndpoints
     private static async Task<IResult> GetOrganizationStats(IProductService service, CancellationToken ct)
     {
         var result = await service.GetOrganizationStatsAsync(ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetUpcoming(Guid? organizationId, IProductService service, CancellationToken ct, int count = 4)
+    {
+        var result = await service.GetUpcomingAsync(organizationId, count, ct);
         return result.ToHttpResult();
     }
 

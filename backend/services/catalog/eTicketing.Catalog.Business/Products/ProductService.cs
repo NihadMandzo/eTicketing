@@ -311,6 +311,13 @@ public class ProductService : IProductService
         return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
     }
 
+    public async Task<Result<List<ProductInternalResponse>>> GetUpcomingAsync(
+        Guid? organizationId, int count, CancellationToken ct = default)
+    {
+        var products = await _productRepository.GetUpcomingAsync(organizationId, DateTime.UtcNow, count, ct);
+        return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
+    }
+
     public async Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default)
     {
         var stats = await _productRepository.GetOrganizationStatsAsync(ct);

@@ -333,6 +333,38 @@ public class ReportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSalesAsync_SplitsSoldTicketsByOrigin()
+    {
+        SeedTicket(_sectorA, _productA, 100m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
+            origin: TicketOrigin.Online);
+        SeedTicket(_sectorA, _productA, 100m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
+            origin: TicketOrigin.Online);
+        SeedTicket(_sectorA, _productA, 100m, new DateTime(2026, 8, 11, 12, 0, 0, DateTimeKind.Utc),
+            origin: TicketOrigin.Printed);
+
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.Value!.TicketsSold.Should().Be(3);
+        result.Value.OnlineSold.Should().Be(2);
+        result.Value.PrintedSold.Should().Be(1);
+        (result.Value.OnlineSold + result.Value.PrintedSold).Should().Be(result.Value.TicketsSold);
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_ExcludesCancelledAndProcessingTicketsFromTheOriginSplit()
+    {
+        SeedTicket(_sectorA, _productA, 100m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
+            status: TicketStatus.Cancelled, origin: TicketOrigin.Online);
+        SeedTicket(_sectorA, _productA, 100m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
+            status: TicketStatus.Processing, origin: TicketOrigin.Printed);
+
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.Value!.OnlineSold.Should().Be(0);
+        result.Value.PrintedSold.Should().Be(0);
+    }
+
+    [Fact]
     public async Task GetSalesAsync_ComparesAgainstTheImmediatelyPrecedingEqualLengthPeriod()
     {
         // 1-10 August is a 10-day range, so the baseline is 22-31 July.
@@ -683,6 +715,116 @@ public class ReportServiceTests : IDisposable
         row.Tickets.Should().Be(0);
         row.Revenue.Should().Be(0m);
         row.GrowthPercent.Should().BeNull();
+    }
+
+    // ── Nadolazeći događaji ──────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_ForOrganizer_ScopesCatalogToTheCallersOrganization()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(It.Is<Guid?>(id => id == _orgA), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("OrganizationSuperAdmin", _orgA));
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CatalogClient.Verify(
+            c => c.GetUpcomingProductsAsync(_orgA, 4, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_ForPlatformStaff_AsksCatalogPlatformWide()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CatalogClient.Verify(
+            c => c.GetUpcomingProductsAsync(null, 4, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_IsForbiddenToNoOne_TheProductsTabAccessMatrixAdmitsEveryStaffRole()
+    {
+        // Unlike Sales/Redemption, every staff role reaches Products — Nadolazeći događaji reuses
+        // exactly that matrix, so OrganizationAdmin (the narrowest role) must not be refused here.
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("OrganizationAdmin", _orgA));
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_ReturnsCurrentSoldAndCapacityRegardlessOfWhenTicketsWereBought()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(_orgA, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CatalogProductResponse(
+                _productA, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
+                "Ljetni Festival", new DateTime(2026, 9, 10, 20, 0, 0, DateTimeKind.Utc), City.Mostar)]);
+
+        // Bought well before the reporting-style "recent" window a Sales/Products report would use
+        // — GetUpcomingEventsAsync has no date range at all, it wants the event's real current state.
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 1, 6, 12, 0, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("OrganizationSuperAdmin", _orgA));
+
+        var row = result.Value!.Should().ContainSingle().Subject;
+        row.ProductId.Should().Be(_productA);
+        row.Sold.Should().Be(2);
+        row.Capacity.Should().Be(100); // SeedSector(_orgA, _productA, capacity: 100, ...) from the constructor
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_ForOrganizer_LabelsMetaWithSectorCountRatherThanOrganizationName()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(_orgA, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CatalogProductResponse(
+                _productA, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
+                "Ljetni Festival", new DateTime(2026, 9, 10, 20, 0, 0, DateTimeKind.Utc), City.Mostar)]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("OrganizationSuperAdmin", _orgA));
+
+        result.Value!.Should().ContainSingle().Which.Meta.Should().Be("1 sektor · Mostar");
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_ForPlatformStaff_LabelsMetaWithTheOrganizationName()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CatalogProductResponse(
+                _productA, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
+                "Ljetni Festival", new DateTime(2026, 9, 10, 20, 0, 0, DateTimeKind.Utc), City.Mostar)]);
+        _fixture.IdentityClient
+            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", IsActive: true)]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("SuperAdmin"));
+
+        result.Value!.Should().ContainSingle().Which.Meta.Should().Be("Sunset Events · Mostar");
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_WhenCatalogHasNothingUpcoming_ReturnsAnEmptyListRatherThanFailing()
+    {
+        _fixture.CatalogClient
+            .Setup(c => c.GetUpcomingProductsAsync(It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _sut.GetUpcomingEventsAsync(4, Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Should().BeEmpty();
     }
 
     public void Dispose() => _fixture.Dispose();

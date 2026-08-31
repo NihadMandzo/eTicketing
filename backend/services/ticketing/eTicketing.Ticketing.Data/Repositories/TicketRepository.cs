@@ -132,6 +132,14 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
                     : 0m),
                 Cancelled = g.Count(t => t.Status == TicketStatus.Cancelled),
                 CancelledAmount = g.Sum(t => t.Status == TicketStatus.Cancelled ? t.PricePaid : 0m),
+                // Sales-channel split — "sold" tickets only, same definition as Sold above, grouped
+                // by Origin instead of summed across it. Online is bought through POST /purchases;
+                // Printed covers everything sold over a counter (physical-ticket export), see
+                // TicketOrigin's own doc comment — there is no third channel in this domain.
+                OnlineSold = g.Count(t => t.Origin == TicketOrigin.Online &&
+                    (t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used)),
+                PrintedSold = g.Count(t => t.Origin == TicketOrigin.Printed &&
+                    (t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used)),
             })
             .ToListAsync(ct);
 
@@ -141,7 +149,7 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
         return [.. rows
             .Select(r => new HourlySalesFacts(
                 DateTime.SpecifyKind(r.Date.AddHours(r.Hour), DateTimeKind.Utc),
-                r.Sold, r.Revenue, r.Cancelled, r.CancelledAmount))
+                r.Sold, r.Revenue, r.Cancelled, r.CancelledAmount, r.OnlineSold, r.PrintedSold))
             .OrderBy(r => r.HourUtc)];
     }
 
@@ -204,6 +212,21 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
                     ? t.PricePaid
                     : 0m)))
             .ToListAsync(ct);
+
+    public Task<List<ProductSoldCount>> GetSoldCountsByProductIdsAsync(
+        IReadOnlyList<Guid> productIds, CancellationToken ct = default)
+    {
+        if (productIds.Count == 0)
+            return Task.FromResult(new List<ProductSoldCount>());
+
+        return Query()
+            .AsNoTracking()
+            .Where(t => productIds.Contains(t.ProductId))
+            .Where(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used)
+            .GroupBy(t => t.ProductId)
+            .Select(g => new ProductSoldCount(g.Key, g.Count()))
+            .ToListAsync(ct);
+    }
 
     /// <summary>The window every report aggregation starts from: tickets minted inside the range,
     /// optionally narrowed to one organization, with Processing rows dropped up front so no

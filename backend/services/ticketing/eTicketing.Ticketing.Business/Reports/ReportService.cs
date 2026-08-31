@@ -59,6 +59,8 @@ public class ReportService : IReportService
         var sold = daily.Values.Sum(d => d.Sold);
         var cancelledCount = daily.Values.Sum(d => d.Cancelled);
         var cancelledAmount = daily.Values.Sum(d => d.CancelledAmount);
+        var onlineSold = daily.Values.Sum(d => d.OnlineSold);
+        var printedSold = daily.Values.Sum(d => d.PrintedSold);
         var previousGross = previousDaily.Values.Sum(d => d.Revenue);
 
         var scope = await ResolveScopeLabelAsync(access.OrganizationId, ct);
@@ -76,6 +78,8 @@ public class ReportService : IReportService
             // cancelled standing tickets, and the figure sits next to a money total.
             CancellationRatePercent: Round2(Divide(cancelledAmount, gross + cancelledAmount) * 100m),
             NetRevenue: gross - cancelledAmount,
+            OnlineSold: onlineSold,
+            PrintedSold: printedSold,
             Buckets: BuildBuckets(range, daily));
     }
 
@@ -267,6 +271,57 @@ public class ReportService : IReportService
                 : [.. rows.OrderByDescending(r => r.Pending).ThenBy(r => r.Name)]);
     }
 
+    public async Task<Result<List<UpcomingEventResponse>>> GetUpcomingEventsAsync(
+        int count, ClaimsPrincipal user, CancellationToken ct = default)
+    {
+        // Reuses the Products tab's access matrix rather than a bespoke check: every staff role may
+        // see it (unlike Sales/Redemption, which Admin/OrganizationAdmin are denied), scoped to the
+        // caller's own organization for Org* roles and platform-wide for SuperAdmin/Admin — exactly
+        // the shape "which events are coming up" needs for the Dashboard.
+        var access = Authorize(user, ReportTab.Products);
+        if (access.Error is not null)
+            return Result<List<UpcomingEventResponse>>.Failure(access.Error);
+
+        var products = await _catalog.GetUpcomingProductsAsync(access.OrganizationId, count, ct);
+        if (products.Count == 0)
+            return Result<List<UpcomingEventResponse>>.Success([]);
+
+        var productIds = products.Select(p => p.Id).ToList();
+        var capacities = (await _sectors.GetPublishedCapacityByProductAsync(productIds, ct)).ToDictionary(c => c.ProductId);
+        var sold = (await _tickets.GetSoldCountsByProductIdsAsync(productIds, ct)).ToDictionary(s => s.ProductId);
+
+        // Platform staff need to know whose event this is; an organizer already knows (they only
+        // see their own), so their line describes the product's own shape instead — the same split
+        // GetProductsAsync's Meta column uses.
+        var organizations = access.OrganizationId is null
+            ? await ResolveOrganizationsAsync(products.Select(p => p.OrganizationId), ct)
+            : new Dictionary<Guid, IdentityOrganizationResponse>();
+
+        var result = products.Select(p =>
+        {
+            capacities.TryGetValue(p.Id, out var capacity);
+            sold.TryGetValue(p.Id, out var soldCount);
+
+            var meta = access.OrganizationId is null
+                ? (organizations.TryGetValue(p.OrganizationId, out var owner)
+                    ? $"{owner.Name} · {p.City.ToDisplayName()}"
+                    : p.City.ToDisplayName())
+                : $"{capacity?.SectorCount ?? 0} {SectorWord(capacity?.SectorCount ?? 0)} · {p.City.ToDisplayName()}";
+
+            return new UpcomingEventResponse(
+                ProductId: p.Id,
+                Name: p.Name,
+                Meta: meta,
+                // Catalog's GetUpcomingAsync already filters to Date != null && Date >= now, so this
+                // is always populated for every row it returns.
+                Date: p.Date!.Value,
+                Sold: soldCount?.Sold ?? 0,
+                Capacity: capacity?.Capacity ?? 0);
+        }).ToList();
+
+        return Result<List<UpcomingEventResponse>>.Success(result);
+    }
+
     // ── Authorization ────────────────────────────────────────────────────────────────────────
 
     /// <summary>The outcome of the role/tab matrix check: either an <see cref="Error"/> to return,
@@ -373,7 +428,8 @@ public class ReportService : IReportService
     /// Sales for one local calendar day. The Data layer cannot produce this — it has no time zone
     /// (see PlatformClock.ToLocal) — so it hands back UTC hours and ToLocalDays folds them here.
     /// </summary>
-    private readonly record struct LocalDaySales(int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+    private readonly record struct LocalDaySales(
+        int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount, int OnlineSold, int PrintedSold);
 
     /// <summary>
     /// Folds UTC-hour rows into local calendar days.
@@ -396,7 +452,9 @@ public class ReportService : IReportService
                 running.Sold + row.Sold,
                 running.Revenue + row.Revenue,
                 running.Cancelled + row.Cancelled,
-                running.CancelledAmount + row.CancelledAmount);
+                running.CancelledAmount + row.CancelledAmount,
+                running.OnlineSold + row.OnlineSold,
+                running.PrintedSold + row.PrintedSold);
         }
 
         return byDay;

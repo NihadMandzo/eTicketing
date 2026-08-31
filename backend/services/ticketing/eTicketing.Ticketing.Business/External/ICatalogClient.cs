@@ -36,6 +36,13 @@ public interface ICatalogClient
     /// answer. Returns a row for every organization that owns at least one product; an
     /// organization with none is simply absent.</summary>
     Task<IReadOnlyList<CatalogOrganizationProductStats>> GetOrganizationProductStatsAsync(CancellationToken ct = default);
+
+    /// <summary>Published, SingleOccurrence products with a future date, soonest first — for the
+    /// Dashboard's "Nadolazeći događaji" card. Product identity/date lives in Catalog; Ticketing
+    /// adds capacity/sold once it has the candidate ids back (see ReportService.GetUpcomingEventsAsync).
+    /// organizationId null means platform-wide (SuperAdmin/Admin).</summary>
+    Task<IReadOnlyList<CatalogProductResponse>> GetUpcomingProductsAsync(
+        Guid? organizationId, int count, CancellationToken ct = default);
 }
 
 /// <summary>Mirrors eTicketing.Catalog.Business.Products.OrganizationProductStatsResponse's JSON

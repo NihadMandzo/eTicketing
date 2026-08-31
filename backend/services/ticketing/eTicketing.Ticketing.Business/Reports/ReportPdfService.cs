@@ -101,8 +101,6 @@ public class ReportPdfService : IReportPdfService
                     ReportPdfEmphasis.Positive),
                 new ReportPdfTile("Prodanih karata", Count(report.TicketsSold)),
                 new ReportPdfTile("Prosječna cijena karte", Money(report.AverageTicketPrice)),
-                new ReportPdfTile("Otkazane karte", Count(report.CancelledCount),
-                    $"Stopa otkaza {Percent(report.CancellationRatePercent)}", ReportPdfEmphasis.Negative),
             ],
             ChartTitle: $"Prihod {BucketTitle(report.Period.BucketUnit)}",
             Chart:
@@ -111,14 +109,6 @@ public class ReportPdfService : IReportPdfService
                     b.Label,
                     Money(b.Revenue),
                     peak == 0 ? 0f : (float)(b.Revenue / peak)))
-            ],
-            BreakdownTitle: "Razrada prihoda",
-            Breakdown:
-            [
-                new ReportPdfBreakdownRow("Bruto prodaja karata", Money(report.GrossRevenue), "100%"),
-                new ReportPdfBreakdownRow("Otkazane karte", "−" + Money(report.CancelledAmount),
-                    Percent(report.CancellationRatePercent), ReportPdfEmphasis.Negative),
-                new ReportPdfBreakdownRow("Neto prihod", Money(report.NetRevenue), null, ReportPdfEmphasis.Positive),
             ]);
     }
 
@@ -138,12 +128,11 @@ public class ReportPdfService : IReportPdfService
                 Title: $"Proizvodi ({Count(report.Rows.Count)})",
                 Columns:
                 [
-                    new ReportPdfColumn("Proizvod", 2.6f),
-                    new ReportPdfColumn("Prodano", 0.9f, RightAligned: true),
-                    new ReportPdfColumn("Popunjenost", 1.1f, RightAligned: true),
-                    new ReportPdfColumn("Pros. cijena", 1.2f, RightAligned: true),
-                    new ReportPdfColumn("Otkazano", 0.9f, RightAligned: true),
-                    new ReportPdfColumn("Prihod", 1.3f, RightAligned: true),
+                    new ReportPdfColumn("Proizvod", 2.8f),
+                    new ReportPdfColumn("Prodano", 1f, RightAligned: true),
+                    new ReportPdfColumn("Popunjenost", 1.3f, RightAligned: true),
+                    new ReportPdfColumn("Pros. cijena", 1.3f, RightAligned: true),
+                    new ReportPdfColumn("Prihod", 1.4f, RightAligned: true),
                 ],
                 Rows:
                 [
@@ -153,7 +142,6 @@ public class ReportPdfService : IReportPdfService
                         Count(r.Sold),
                         Percent(r.OccupancyPercent),
                         Money(r.AveragePrice),
-                        Count(r.Cancelled),
                         Money(r.Revenue),
                     })
                 ],
@@ -163,7 +151,6 @@ public class ReportPdfService : IReportPdfService
                     Count(report.TotalSold),
                     Percent(report.AverageOccupancyPercent),
                     Money(report.AveragePrice),
-                    Count(report.TotalCancelled),
                     Money(report.TotalRevenue),
                 ]));
 

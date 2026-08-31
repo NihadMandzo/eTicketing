@@ -60,6 +60,19 @@ class ReportProvider extends BaseProvider<SalesReport, String> {
   Future<OrganizationReport> getOrganizations(DateTime from, DateTime to) async =>
       OrganizationReport.fromJson(await _get('reports/organizations', from, to));
 
+  /// GET /api/reports/upcoming-events — the Dashboard's "Nadolazeći događaji" card. Not a
+  /// from/to report tab: no date range, just the next [count] published SingleOccurrence events.
+  Future<List<UpcomingEventResponse>> getUpcomingEvents({int count = 4}) async {
+    final response = await send(
+        () => apiClient.get('reports/upcoming-events', queryParameters: {'count': count.toString()}));
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return (response.data as List<dynamic>? ?? const [])
+        .map((e) => UpcomingEventResponse.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> _get(String path, DateTime from, DateTime to) async {
     final response = await send(() => apiClient.get(path, queryParameters: {
           'from': _asDateOnly(from),

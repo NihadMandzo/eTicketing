@@ -99,6 +99,12 @@ class SalesReport {
   final double cancelledAmount;
   final double cancellationRatePercent;
   final double netRevenue;
+
+  /// Sales-channel split — the two real `TicketOrigin` values. `onlineSold + printedSold ==
+  /// ticketsSold`. Not rendered on the Reports screen, only on the Dashboard's "Kanali prodaje" card.
+  final int onlineSold;
+  final int printedSold;
+
   final List<ReportBucket> buckets;
 
   const SalesReport({
@@ -112,6 +118,8 @@ class SalesReport {
     required this.cancelledAmount,
     required this.cancellationRatePercent,
     required this.netRevenue,
+    required this.onlineSold,
+    required this.printedSold,
     required this.buckets,
   });
 
@@ -126,6 +134,8 @@ class SalesReport {
         cancelledAmount: _toDouble(json['cancelledAmount']),
         cancellationRatePercent: _toDouble(json['cancellationRatePercent']),
         netRevenue: _toDouble(json['netRevenue']),
+        onlineSold: json['onlineSold'] as int? ?? 0,
+        printedSold: json['printedSold'] as int? ?? 0,
         buckets: _list(json['buckets'], ReportBucket.fromJson),
       );
 }
@@ -354,6 +364,37 @@ class OrganizationReport {
         period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
         view: OrganizationReportView.fromJson(json['view']),
         rows: _list(json['rows'], OrganizationReportRow.fromJson),
+      );
+}
+
+/// One row of the Dashboard's "Nadolazeći događaji" card — not part of the four report tabs above
+/// (no date range, no scope wrapper), returned by `GET /api/reports/upcoming-events`. `meta` is
+/// already formatted server-side: "{organizacija} · {grad}" for platform staff, "{N sektora} ·
+/// {grad}" for an organizer.
+class UpcomingEventResponse {
+  final String productId;
+  final String name;
+  final String meta;
+  final DateTime date;
+  final int sold;
+  final int capacity;
+
+  const UpcomingEventResponse({
+    required this.productId,
+    required this.name,
+    required this.meta,
+    required this.date,
+    required this.sold,
+    required this.capacity,
+  });
+
+  factory UpcomingEventResponse.fromJson(Map<String, dynamic> json) => UpcomingEventResponse(
+        productId: json['productId'] as String,
+        name: json['name'] as String? ?? '',
+        meta: json['meta'] as String? ?? '',
+        date: DateTime.parse(json['date'] as String),
+        sold: json['sold'] as int? ?? 0,
+        capacity: json['capacity'] as int? ?? 0,
       );
 }
 

@@ -25,6 +25,7 @@ public static class ReportEndpoints
         group.MapGet("/products", GetProducts).RequireAuthorization("Organizer").WithValidation<ReportQuery>();
         group.MapGet("/redemption", GetRedemption).RequireAuthorization("Organizer").WithValidation<ReportQuery>();
         group.MapGet("/organizations", GetOrganizations).RequireAuthorization("PlatformStaff").WithValidation<ReportQuery>();
+        group.MapGet("/upcoming-events", GetUpcomingEvents).RequireAuthorization("Organizer");
 
         group.MapGet("/export", Export).RequireAuthorization("Organizer").WithValidation<ReportExportQuery>();
     }
@@ -54,6 +55,13 @@ public static class ReportEndpoints
         [AsParameters] ReportQuery query, IReportService service, HttpContext http, CancellationToken ct)
     {
         var result = await service.GetOrganizationsAsync(query, http.User, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetUpcomingEvents(
+        IReportService service, HttpContext http, CancellationToken ct, int count = 4)
+    {
+        var result = await service.GetUpcomingEventsAsync(count, http.User, ct);
         return result.ToHttpResult();
     }
 
