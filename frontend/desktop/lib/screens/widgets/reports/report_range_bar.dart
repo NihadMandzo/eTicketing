@@ -86,6 +86,11 @@ class ReportRangeBar extends StatelessWidget {
   final ValueChanged<DateTime> onFrom;
   final ValueChanged<DateTime> onTo;
 
+  /// Pinned to the right edge of the date row — the export button, in practice.
+  /// Passed in rather than built here so this widget stays about picking a
+  /// period and knows nothing about PDFs or who is allowed to download one.
+  final Widget? trailing;
+
   const ReportRangeBar({
     super.key,
     required this.from,
@@ -95,6 +100,7 @@ class ReportRangeBar extends StatelessWidget {
     required this.onPreset,
     required this.onFrom,
     required this.onTo,
+    this.trailing,
   });
 
   /// The longest range the API will accept, inclusive of both endpoints —
@@ -154,45 +160,51 @@ class ReportRangeBar extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(height: 1, color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
           const SizedBox(height: 12),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 10,
+          // Row wrapping a Wrap, rather than one flat Wrap: a Wrap cannot push a
+          // single child to the far end, and `trailing` has to sit against the
+          // card's right edge. The date controls keep reflowing inside the
+          // Expanded half, so a narrow window still costs nothing.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _DateField(
-                label: 'Od',
-                value: from,
-                // The picker itself enforces the ordering the API validates:
-                // "Od" can never be dragged past "Do".
-                lastDate: to,
-                onChanged: onFrom,
-              ),
-              _DateField(
-                label: 'Do',
-                value: to,
-                firstDate: from,
-                lastDate: today,
-                onChanged: onTo,
-              ),
-              Text(
-                '${formatLongDate(from)} – ${formatLongDate(to)}',
-                style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                  borderRadius: BorderRadius.circular(20),
+              Expanded(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _DateField(
+                      label: 'Od',
+                      value: from,
+                      // The picker itself enforces the ordering the API validates:
+                      // "Od" can never be dragged past "Do".
+                      lastDate: to,
+                      onChanged: onFrom,
+                    ),
+                    _DateField(label: 'Do', value: to, firstDate: from, lastDate: today, onChanged: onTo),
+                    Text(
+                      '${formatLongDate(from)} – ${formatLongDate(to)}',
+                      style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _isInverted ? 'nevažeći raspon' : '$_days ${_days == 1 ? 'dan' : 'dana'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppColors.accent : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  _isInverted ? 'nevažeći raspon' : '$_days ${_days == 1 ? 'dan' : 'dana'}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.accent : AppColors.primary,
-                  ),
-                ),
               ),
+              if (trailing != null) ...[const SizedBox(width: 12), trailing!],
             ],
           ),
           if (_isInvalid) ...[
@@ -213,10 +225,7 @@ class ReportRangeBar extends StatelessWidget {
                       _isInverted
                           ? 'Datum "Od" mora biti prije datuma "Do".'
                           : 'Period ne može biti duži od $maxRangeDays dana.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.error : AppColors.errorText,
-                      ),
+                      style: TextStyle(fontSize: 12, color: isDark ? AppColors.error : AppColors.errorText),
                     ),
                   ),
                 ],
@@ -351,12 +360,7 @@ class ReportTabBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
 
-  const ReportTabBar({
-    super.key,
-    required this.labels,
-    required this.selectedIndex,
-    required this.onSelect,
-  });
+  const ReportTabBar({super.key, required this.labels, required this.selectedIndex, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -381,10 +385,7 @@ class ReportTabBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     border: Border(
-                      bottom: BorderSide(
-                        color: i == selectedIndex ? active : Colors.transparent,
-                        width: 2,
-                      ),
+                      bottom: BorderSide(color: i == selectedIndex ? active : Colors.transparent, width: 2),
                     ),
                   ),
                   child: Text(

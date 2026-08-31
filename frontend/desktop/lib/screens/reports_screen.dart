@@ -88,8 +88,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// year. Loading is skipped while it holds, so the figures on screen stay on
   /// the last period that was actually valid rather than blanking.
   bool get _rangeInvalid =>
-      _from.isAfter(_to) ||
-      _to.difference(_from).inDays + 1 > ReportRangeBar.maxRangeDays;
+      _from.isAfter(_to) || _to.difference(_from).inDays + 1 > ReportRangeBar.maxRangeDays;
 
   @override
   void initState() {
@@ -203,7 +202,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _export() async {
     // Matches the name the server puts in Content-Disposition, so the dialog
     // suggests what the file would have been called anyway.
-    final suggested = 'izvjestaj-${_tabSlug(_tab)}-'
+    final suggested =
+        'izvjestaj-${_tabSlug(_tab)}-'
         '${_isoDate(_loadedFrom)}-${_isoDate(_loadedTo)}.pdf';
 
     final path = await FilePicker.platform.saveFile(
@@ -245,6 +245,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             onPreset: _applyPreset,
             onFrom: _setFrom,
             onTo: _setTo,
+            // Sits with the period controls rather than up in the page header:
+            // what gets exported is whatever range is selected right here, so
+            // the button belongs next to the thing that decides it.
+            trailing: _canExport ? _exportButton() : null,
           ),
           if (_rangeInvalid) ...[
             const SizedBox(height: 10),
@@ -270,49 +274,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _header() {
     final brightness = Theme.of(context).brightness;
 
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 16,
-      runSpacing: 12,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Izvještaji',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.4),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _subtitle,
-                style: TextStyle(fontSize: 14, color: AppColors.textTertiary(brightness)),
-              ),
-            ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 620),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Izvještaji',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.4),
           ),
-        ),
-        if (_canExport)
-          FilledButton.icon(
-            onPressed: (_isExporting || _isLoading) ? null : _export,
-            icon: _isExporting
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(LucideIcons.fileDown, size: 16),
-            label: Text(_isExporting ? 'Izvoz...' : 'Izvezi PDF'),
-          ),
-      ],
+          const SizedBox(height: 6),
+          Text(_subtitle, style: TextStyle(fontSize: 14, color: AppColors.textTertiary(brightness))),
+        ],
+      ),
     );
   }
 
+  /// The export action, rendered by the range bar so it sits against the card's
+  /// right edge beside the dates it exports.
+  Widget _exportButton() => FilledButton.icon(
+    onPressed: (_isExporting || _isLoading) ? null : _export,
+    icon: _isExporting
+        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+        : const Icon(LucideIcons.fileDown, size: 16),
+    label: Text(_isExporting ? 'Izvoz...' : 'Izvezi PDF'),
+  );
+
   /// The design's per-role subtitle: what this role's copy of the screen is for.
   String get _subtitle => switch (widget.user.roleName) {
-        'SuperAdmin' => 'Puni uvid u prodaju, organizacije i iskorištenost karata na platformi',
-        'Admin' => 'Operativni izvještaji — učinak proizvoda i organizacija',
-        'OrganizationSuperAdmin' => 'Prodaja, popunjenost i iskorištenost karata vaše organizacije',
-        _ => 'Pregled prodaje i učinka proizvoda vaše organizacije',
-      };
+    'SuperAdmin' => 'Puni uvid u prodaju, organizacije i iskorištenost karata na platformi',
+    'Admin' => 'Operativni izvještaji — učinak proizvoda i organizacija',
+    'OrganizationSuperAdmin' => 'Prodaja, popunjenost i iskorištenost karata vaše organizacije',
+    _ => 'Pregled prodaje i učinka proizvoda vaše organizacije',
+  };
 
   Widget _body() {
     if (_isLoading) {
@@ -476,26 +471,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
       builder: (context, constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _tileGrid(
-            [
-              ReportMetricCard(label: 'Prodanih karata', value: formatCount(report.totalSold)),
-              ReportMetricCard(
-                label: 'Ukupan prihod',
-                value: formatMoney(report.totalRevenue),
-                emphasis: ReportEmphasis.positive,
-              ),
-              ReportMetricCard(label: 'Prosječna cijena', value: formatMoney(report.averagePrice)),
-              ReportMetricCard(
-                label: 'Prosječna popunjenost',
-                value: formatPercent(report.averageOccupancyPercent),
-              ),
-            ],
-            constraints.maxWidth,
-          ),
+          _tileGrid([
+            ReportMetricCard(label: 'Prodanih karata', value: formatCount(report.totalSold)),
+            ReportMetricCard(
+              label: 'Ukupan prihod',
+              value: formatMoney(report.totalRevenue),
+              emphasis: ReportEmphasis.positive,
+            ),
+            ReportMetricCard(label: 'Prosječna cijena', value: formatMoney(report.averagePrice)),
+            ReportMetricCard(
+              label: 'Prosječna popunjenost',
+              value: formatPercent(report.averageOccupancyPercent),
+            ),
+          ], constraints.maxWidth),
           const SizedBox(height: 16),
           ReportCard(
             title: 'Učinak proizvoda',
-            subtitle: '${formatCount(report.rows.length)} '
+            subtitle:
+                '${formatCount(report.rows.length)} '
                 '${report.rows.length == 1 ? 'proizvod' : 'proizvoda'} · ${report.scope}',
             child: ReportDataTable(
               columns: const [
@@ -511,21 +504,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   [
                     ReportCell.custom(ReportNameCell(name: row.name, meta: row.meta)),
                     ReportCell(formatCount(row.sold)),
-                    ReportCell.custom(ReportProgressCell(
-                      percent: row.occupancyPercent,
-                      color: _occupancyColor(row.occupancyPercent),
-                      label: formatPercent(row.occupancyPercent),
-                    )),
+                    ReportCell.custom(
+                      ReportProgressCell(
+                        percent: row.occupancyPercent,
+                        color: _occupancyColor(row.occupancyPercent),
+                        label: formatPercent(row.occupancyPercent),
+                      ),
+                    ),
                     ReportCell(formatMoney(row.averagePrice)),
-                    ReportCell(
-                      formatCount(row.cancelled),
-                      color: row.cancelled > 0 ? AppColors.error : null,
-                    ),
-                    ReportCell(
-                      formatMoney(row.revenue),
-                      color: _positive,
-                      bold: true,
-                    ),
+                    ReportCell(formatCount(row.cancelled), color: row.cancelled > 0 ? AppColors.error : null),
+                    ReportCell(formatMoney(row.revenue), color: _positive, bold: true),
                   ],
               ],
               totalsRow: [
@@ -557,38 +545,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
       builder: (context, constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _tileGrid(
-            [
-              ReportMetricCard(
-                label: 'Ukupno skenirano',
-                value: formatCount(report.totalCheckedIn),
-                hint: 'Na ulazima',
-                icon: LucideIcons.scanLine,
-              ),
-              ReportMetricCard(
-                label: 'Stopa nedolaska',
-                value: formatPercent(report.noShowRatePercent),
-                hint: 'Prodane, neiskorištene karte',
-                emphasis: ReportEmphasis.negative,
-                icon: LucideIcons.userX,
-              ),
-              ReportMetricCard(
-                label: 'Vrhunac dolaska',
-                value: formatHourWindow(report.peakHour),
-                hint: report.peakHourSharePercent == null
-                    ? null
-                    : '${formatPercent(report.peakHourSharePercent)} svih skeniranja',
-                icon: LucideIcons.clock,
-              ),
-              ReportMetricCard(
-                label: 'Štampane karte',
-                value: formatCount(report.printedTickets),
-                hint: 'Prodane na blagajni',
-                icon: LucideIcons.printer,
-              ),
-            ],
-            constraints.maxWidth,
-          ),
+          _tileGrid([
+            ReportMetricCard(
+              label: 'Ukupno skenirano',
+              value: formatCount(report.totalCheckedIn),
+              hint: 'Na ulazima',
+              icon: LucideIcons.scanLine,
+            ),
+            ReportMetricCard(
+              label: 'Stopa nedolaska',
+              value: formatPercent(report.noShowRatePercent),
+              hint: 'Prodane, neiskorištene karte',
+              emphasis: ReportEmphasis.negative,
+              icon: LucideIcons.userX,
+            ),
+            ReportMetricCard(
+              label: 'Vrhunac dolaska',
+              value: formatHourWindow(report.peakHour),
+              hint: report.peakHourSharePercent == null
+                  ? null
+                  : '${formatPercent(report.peakHourSharePercent)} svih skeniranja',
+              icon: LucideIcons.clock,
+            ),
+            ReportMetricCard(
+              label: 'Štampane karte',
+              value: formatCount(report.printedTickets),
+              hint: 'Prodane na blagajni',
+              icon: LucideIcons.printer,
+            ),
+          ], constraints.maxWidth),
           const SizedBox(height: 16),
           ReportCard(
             title: 'Dolazak po satu',
@@ -626,10 +611,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ReportCell(formatCount(row.checkedIn)),
                     ReportCell(formatCount(row.noShow), color: row.noShow > 0 ? AppColors.error : null),
                     ReportCell(formatCount(row.printed)),
-                    ReportCell.custom(ReportBadge(
-                      label: formatPercent(row.ratePercent),
-                      color: row.ratePercent >= 85 ? _positive : AppColors.warningDark,
-                    )),
+                    ReportCell.custom(
+                      ReportBadge(
+                        label: formatPercent(row.ratePercent),
+                        color: row.ratePercent >= 85 ? _positive : AppColors.warningDark,
+                      ),
+                    ),
                   ],
               ],
             ),
@@ -649,7 +636,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return ReportCard(
       title: 'Učinak organizacija',
-      subtitle: '${formatCount(report.rows.length)} '
+      subtitle:
+          '${formatCount(report.rows.length)} '
           '${report.rows.length == 1 ? 'organizacija' : 'organizacija'} na platformi',
       child: ReportDataTable(
         columns: financial
@@ -695,10 +683,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       color: (row.pending ?? 0) > 0 ? AppColors.warningDark : null,
                     ),
                     ReportCell(formatCount(row.withoutImage ?? 0)),
-                    ReportCell.custom(ReportBadge(
-                      label: row.isPending == true ? 'Na čekanju' : 'Aktivna',
-                      color: row.isPending == true ? AppColors.warningDark : _positive,
-                    )),
+                    ReportCell.custom(
+                      ReportBadge(
+                        label: row.isPending == true ? 'Na čekanju' : 'Aktivna',
+                        color: row.isPending == true ? AppColors.warningDark : _positive,
+                      ),
+                    ),
                   ],
         ],
       ),
@@ -718,9 +708,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Wrap(
       spacing: gap,
       runSpacing: gap,
-      children: [
-        for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
-      ],
+      children: [for (final tile in tiles) SizedBox(width: tileWidth, child: tile)],
     );
   }
 
@@ -735,11 +723,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   /// Mirrors `ReportPdfService.FileName`'s slugs.
   static String _tabSlug(ReportTab tab) => switch (tab) {
-        ReportTab.sales => 'prodaja',
-        ReportTab.products => 'proizvodi',
-        ReportTab.redemption => 'iskoristenost',
-        ReportTab.organizations => 'organizacije',
-      };
+    ReportTab.sales => 'prodaja',
+    ReportTab.products => 'proizvodi',
+    ReportTab.redemption => 'iskoristenost',
+    ReportTab.organizations => 'organizacije',
+  };
 
   static String _isoDate(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-'
@@ -786,16 +774,10 @@ class _BreakdownRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary(brightness)),
-            ),
+            child: Text(label, style: TextStyle(fontSize: 13, color: AppColors.textSecondary(brightness))),
           ),
           if (share != null) ...[
-            Text(
-              share!,
-              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
-            ),
+            Text(share!, style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness))),
             const SizedBox(width: 12),
           ],
           Text(
