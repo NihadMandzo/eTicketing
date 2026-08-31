@@ -94,8 +94,31 @@ void main() {
       expect(marchFrom, DateTime(2026, 3, 30), reason: 'March has a 30th, so no clamping');
     });
 
+    test('Godina clamps forward when the preceding year contains a leap day', () {
+      // 2023-05-31 .. 2024-05-31 is 367 days inclusive, because 29 Feb 2024
+      // falls inside it — one past the cap, so unclamped the preset would send
+      // a request the API refuses and the user would see the "period too long"
+      // banner instead of a year of data.
+      final (from, to) = presetById('1y').resolve(DateTime(2024, 5, 31));
+
+      expect(inclusiveDays(from, to), ReportRangeBar.maxRangeDays);
+      expect(from, DateTime(2023, 6, 1), reason: 'one day later than the naive 12-month subtraction');
+    });
+
+    test('Godina is left alone when the preceding year has no leap day', () {
+      final (from, to) = presetById('1y').resolve(DateTime(2026, 5, 31));
+
+      expect(from, DateTime(2025, 5, 31), reason: 'already 366 days, so no clamping');
+      expect(inclusiveDays(from, to), ReportRangeBar.maxRangeDays);
+    });
+
     test('a clamped range is still within the API cap and never inverted', () {
-      for (final today in [DateTime(2026, 5, 31), DateTime(2026, 3, 31), DateTime(2024, 5, 31)]) {
+      final dates = [
+        DateTime(2026, 5, 31), DateTime(2026, 3, 31), DateTime(2026, 1, 31),
+        DateTime(2024, 5, 31), DateTime(2024, 3, 1), DateTime(2025, 1, 1),
+        DateTime(2024, 2, 29), DateTime(2027, 12, 31),
+      ];
+      for (final today in dates) {
         for (final preset in ReportPreset.all) {
           final (from, to) = preset.resolve(today);
           expect(from.isAfter(to), isFalse, reason: '${preset.id} on $today is inverted');

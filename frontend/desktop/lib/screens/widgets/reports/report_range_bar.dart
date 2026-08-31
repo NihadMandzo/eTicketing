@@ -28,7 +28,26 @@ class ReportPreset {
   /// The range this preset means, ending today.
   (DateTime from, DateTime to) resolve(DateTime today) {
     final to = DateTime(today.year, today.month, today.day);
-    final from = months != null ? _monthsBefore(to, months!) : to.subtract(Duration(days: days! - 1));
+    var from = months != null
+        ? _monthsBefore(to, months!)
+        // Day arithmetic through the constructor, not `subtract(Duration)`:
+        // Duration is absolute time, so subtracting one across a DST change
+        // lands on 23:00 or 01:00 of the intended day rather than midnight.
+        // DateTime normalises an out-of-range day and keeps the wall clock.
+        : DateTime(to.year, to.month, to.day - (days! - 1));
+
+    // A calendar year is not always inside the API's limit. "Godina" from a
+    // date whose preceding 12 months contain a leap day spans 367 days — one
+    // past ReportRangeValidator.MaxRangeDays — and the report would answer 400
+    // and render the "period is too long" banner instead of any data. That is
+    // roughly one year in every four, for the whole year.
+    //
+    // Clamping forward keeps the preset usable and errs toward showing slightly
+    // less than a full year rather than nothing at all.
+    if (to.difference(from).inDays + 1 > ReportRangeBar.maxRangeDays) {
+      from = DateTime(to.year, to.month, to.day - (ReportRangeBar.maxRangeDays - 1));
+    }
+
     return (from, to);
   }
 
