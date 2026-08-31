@@ -311,6 +311,15 @@ public class ProductService : IProductService
         return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
     }
 
+    public async Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default)
+    {
+        var stats = await _productRepository.GetOrganizationStatsAsync(ct);
+        return Result<List<OrganizationProductStatsResponse>>.Success(stats
+            .Select(s => new OrganizationProductStatsResponse(
+                s.OrganizationId, s.Total, s.Published, s.Draft, s.WithoutImage))
+            .ToList());
+    }
+
     private static ProductInternalResponse ToInternalResponse(Product product) =>
         new(product.Id, product.OrganizationId, product.Status, product.Category!.TicketingMode,
             product.Name, product.Date, product.City);

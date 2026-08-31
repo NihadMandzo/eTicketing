@@ -1,0 +1,372 @@
+/// The four report shapes returned by `GET /api/reports/*`.
+///
+/// They live in one file rather than four because they share `ReportPeriod` and
+/// are always consumed together by a single screen — splitting them would mean
+/// four imports for every widget that renders a tab.
+///
+/// Enums are parsed from the string names ASP.NET serializes, not from
+/// ordinals: these are new contracts with no wire-format history to preserve,
+/// unlike `TicketStatus` (see `frontend/mobile`'s enum tables), and a name
+/// survives someone reordering the C# enum.
+library;
+
+/// How the sales chart is bucketed. The server picks this from the range
+/// length and tells the client, so the chart title can say which it is.
+enum ReportBucketUnit {
+  day('Day', 'po danu'),
+  week('Week', 'po sedmici'),
+  month('Month', 'po mjesecu');
+
+  const ReportBucketUnit(this.wireName, this.title);
+
+  final String wireName;
+
+  /// The tail of the chart heading — "Prihod po sedmici".
+  final String title;
+
+  static ReportBucketUnit fromJson(Object? value) => values.firstWhere(
+        (u) => u.wireName == value,
+        orElse: () => ReportBucketUnit.day,
+      );
+}
+
+/// Which column set the Organizacije table renders. SuperAdmin gets the
+/// financial view, Admin the operational one.
+enum OrganizationReportView {
+  financial('Financial'),
+  operational('Operational');
+
+  const OrganizationReportView(this.wireName);
+
+  final String wireName;
+
+  static OrganizationReportView fromJson(Object? value) => values.firstWhere(
+        (v) => v.wireName == value,
+        orElse: () => OrganizationReportView.operational,
+      );
+}
+
+/// The range a report actually covers, echoed back by the server.
+class ReportPeriod {
+  final DateTime from;
+  final DateTime to;
+  final int days;
+  final ReportBucketUnit bucketUnit;
+
+  const ReportPeriod({
+    required this.from,
+    required this.to,
+    required this.days,
+    required this.bucketUnit,
+  });
+
+  factory ReportPeriod.fromJson(Map<String, dynamic> json) => ReportPeriod(
+        from: DateTime.parse(json['from'] as String),
+        to: DateTime.parse(json['to'] as String),
+        days: json['days'] as int? ?? 0,
+        bucketUnit: ReportBucketUnit.fromJson(json['bucketUnit']),
+      );
+}
+
+/// One bar of the sales chart. The label arrives pre-formatted in Bosnian —
+/// the bucketing rules live on the server so all three clients agree.
+class ReportBucket {
+  final String label;
+  final double revenue;
+  final int sold;
+
+  const ReportBucket({required this.label, required this.revenue, required this.sold});
+
+  factory ReportBucket.fromJson(Map<String, dynamic> json) => ReportBucket(
+        label: json['label'] as String? ?? '',
+        revenue: _toDouble(json['revenue']),
+        sold: json['sold'] as int? ?? 0,
+      );
+}
+
+class SalesReport {
+  final ReportPeriod period;
+  final String scope;
+  final double grossRevenue;
+  final int ticketsSold;
+  final double averageTicketPrice;
+
+  /// Null when the preceding period sold nothing — the UI drops the comparison
+  /// line rather than showing an infinite increase.
+  final double? revenueChangePercent;
+
+  final int cancelledCount;
+  final double cancelledAmount;
+  final double cancellationRatePercent;
+  final double netRevenue;
+  final List<ReportBucket> buckets;
+
+  const SalesReport({
+    required this.period,
+    required this.scope,
+    required this.grossRevenue,
+    required this.ticketsSold,
+    required this.averageTicketPrice,
+    required this.revenueChangePercent,
+    required this.cancelledCount,
+    required this.cancelledAmount,
+    required this.cancellationRatePercent,
+    required this.netRevenue,
+    required this.buckets,
+  });
+
+  factory SalesReport.fromJson(Map<String, dynamic> json) => SalesReport(
+        period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
+        scope: json['scope'] as String? ?? '',
+        grossRevenue: _toDouble(json['grossRevenue']),
+        ticketsSold: json['ticketsSold'] as int? ?? 0,
+        averageTicketPrice: _toDouble(json['averageTicketPrice']),
+        revenueChangePercent: _toNullableDouble(json['revenueChangePercent']),
+        cancelledCount: json['cancelledCount'] as int? ?? 0,
+        cancelledAmount: _toDouble(json['cancelledAmount']),
+        cancellationRatePercent: _toDouble(json['cancellationRatePercent']),
+        netRevenue: _toDouble(json['netRevenue']),
+        buckets: _list(json['buckets'], ReportBucket.fromJson),
+      );
+}
+
+class ProductReportRow {
+  final String productId;
+  final String name;
+
+  /// The small grey second line: the owning organization for platform staff,
+  /// the product's sector count for an organizer.
+  final String meta;
+
+  final int sold;
+
+  /// Null for DailyEntry products, whose per-day capacity has no single
+  /// denominator — rendered as "—".
+  final double? occupancyPercent;
+
+  final double averagePrice;
+  final int cancelled;
+  final double revenue;
+
+  const ProductReportRow({
+    required this.productId,
+    required this.name,
+    required this.meta,
+    required this.sold,
+    required this.occupancyPercent,
+    required this.averagePrice,
+    required this.cancelled,
+    required this.revenue,
+  });
+
+  factory ProductReportRow.fromJson(Map<String, dynamic> json) => ProductReportRow(
+        productId: json['productId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        meta: json['meta'] as String? ?? '',
+        sold: json['sold'] as int? ?? 0,
+        occupancyPercent: _toNullableDouble(json['occupancyPercent']),
+        averagePrice: _toDouble(json['averagePrice']),
+        cancelled: json['cancelled'] as int? ?? 0,
+        revenue: _toDouble(json['revenue']),
+      );
+}
+
+class ProductReport {
+  final ReportPeriod period;
+  final String scope;
+  final List<ProductReportRow> rows;
+  final int totalSold;
+  final double? averageOccupancyPercent;
+  final double averagePrice;
+  final int totalCancelled;
+  final double totalRevenue;
+
+  const ProductReport({
+    required this.period,
+    required this.scope,
+    required this.rows,
+    required this.totalSold,
+    required this.averageOccupancyPercent,
+    required this.averagePrice,
+    required this.totalCancelled,
+    required this.totalRevenue,
+  });
+
+  factory ProductReport.fromJson(Map<String, dynamic> json) => ProductReport(
+        period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
+        scope: json['scope'] as String? ?? '',
+        rows: _list(json['rows'], ProductReportRow.fromJson),
+        totalSold: json['totalSold'] as int? ?? 0,
+        averageOccupancyPercent: _toNullableDouble(json['averageOccupancyPercent']),
+        averagePrice: _toDouble(json['averagePrice']),
+        totalCancelled: json['totalCancelled'] as int? ?? 0,
+        totalRevenue: _toDouble(json['totalRevenue']),
+      );
+}
+
+/// One bar of the "Dolazak po satu" chart. [hour] is 0-23.
+class CheckinHourPoint {
+  final int hour;
+  final int count;
+
+  const CheckinHourPoint({required this.hour, required this.count});
+
+  factory CheckinHourPoint.fromJson(Map<String, dynamic> json) => CheckinHourPoint(
+        hour: json['hour'] as int? ?? 0,
+        count: json['count'] as int? ?? 0,
+      );
+}
+
+class RedemptionReportRow {
+  final String productId;
+  final String name;
+  final int sold;
+  final int checkedIn;
+  final int noShow;
+  final int printed;
+  final double ratePercent;
+
+  const RedemptionReportRow({
+    required this.productId,
+    required this.name,
+    required this.sold,
+    required this.checkedIn,
+    required this.noShow,
+    required this.printed,
+    required this.ratePercent,
+  });
+
+  factory RedemptionReportRow.fromJson(Map<String, dynamic> json) => RedemptionReportRow(
+        productId: json['productId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        sold: json['sold'] as int? ?? 0,
+        checkedIn: json['checkedIn'] as int? ?? 0,
+        noShow: json['noShow'] as int? ?? 0,
+        printed: json['printed'] as int? ?? 0,
+        ratePercent: _toDouble(json['ratePercent']),
+      );
+}
+
+class RedemptionReport {
+  final ReportPeriod period;
+  final String scope;
+  final int totalCheckedIn;
+  final double noShowRatePercent;
+
+  /// Null when nothing was scanned in the range at all — there is no busiest
+  /// hour of an empty histogram.
+  final int? peakHour;
+  final double? peakHourSharePercent;
+
+  final int printedTickets;
+  final List<CheckinHourPoint> checkinsByHour;
+  final List<RedemptionReportRow> rows;
+
+  const RedemptionReport({
+    required this.period,
+    required this.scope,
+    required this.totalCheckedIn,
+    required this.noShowRatePercent,
+    required this.peakHour,
+    required this.peakHourSharePercent,
+    required this.printedTickets,
+    required this.checkinsByHour,
+    required this.rows,
+  });
+
+  factory RedemptionReport.fromJson(Map<String, dynamic> json) => RedemptionReport(
+        period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
+        scope: json['scope'] as String? ?? '',
+        totalCheckedIn: json['totalCheckedIn'] as int? ?? 0,
+        noShowRatePercent: _toDouble(json['noShowRatePercent']),
+        peakHour: json['peakHour'] as int?,
+        peakHourSharePercent: _toNullableDouble(json['peakHourSharePercent']),
+        printedTickets: json['printedTickets'] as int? ?? 0,
+        checkinsByHour: _list(json['checkinsByHour'], CheckinHourPoint.fromJson),
+        rows: _list(json['rows'], RedemptionReportRow.fromJson),
+      );
+}
+
+/// One row of the Organizacije table. Half the fields are null depending on
+/// [OrganizationReport.view] — the server nulls the columns the caller's role
+/// has no business seeing rather than zero-filling them.
+class OrganizationReportRow {
+  final String organizationId;
+  final String name;
+  final String address;
+  final int products;
+
+  // Financial view (SuperAdmin)
+  final int? tickets;
+  final double? averagePrice;
+  final double? growthPercent;
+  final double? revenue;
+
+  // Operational view (Admin)
+  final int? published;
+  final int? pending;
+  final int? withoutImage;
+  final bool? isPending;
+
+  const OrganizationReportRow({
+    required this.organizationId,
+    required this.name,
+    required this.address,
+    required this.products,
+    required this.tickets,
+    required this.averagePrice,
+    required this.growthPercent,
+    required this.revenue,
+    required this.published,
+    required this.pending,
+    required this.withoutImage,
+    required this.isPending,
+  });
+
+  factory OrganizationReportRow.fromJson(Map<String, dynamic> json) => OrganizationReportRow(
+        organizationId: json['organizationId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+        products: json['products'] as int? ?? 0,
+        tickets: json['tickets'] as int?,
+        averagePrice: _toNullableDouble(json['averagePrice']),
+        growthPercent: _toNullableDouble(json['growthPercent']),
+        revenue: _toNullableDouble(json['revenue']),
+        published: json['published'] as int?,
+        pending: json['pending'] as int?,
+        withoutImage: json['withoutImage'] as int?,
+        isPending: json['isPending'] as bool?,
+      );
+}
+
+class OrganizationReport {
+  final ReportPeriod period;
+  final OrganizationReportView view;
+  final List<OrganizationReportRow> rows;
+
+  const OrganizationReport({
+    required this.period,
+    required this.view,
+    required this.rows,
+  });
+
+  factory OrganizationReport.fromJson(Map<String, dynamic> json) => OrganizationReport(
+        period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
+        view: OrganizationReportView.fromJson(json['view']),
+        rows: _list(json['rows'], OrganizationReportRow.fromJson),
+      );
+}
+
+// ── Parsing helpers ─────────────────────────────────────────────────────────
+
+/// `decimal` reaches Dart as either an `int` or a `double` depending on whether
+/// the value happened to be whole, so every money/percentage field has to
+/// accept both.
+double _toDouble(Object? value) => (value as num?)?.toDouble() ?? 0;
+
+double? _toNullableDouble(Object? value) => (value as num?)?.toDouble();
+
+List<T> _list<T>(Object? value, T Function(Map<String, dynamic>) fromJson) =>
+    (value as List<dynamic>? ?? const [])
+        .map((e) => fromJson(e as Map<String, dynamic>))
+        .toList();

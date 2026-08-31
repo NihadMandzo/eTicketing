@@ -60,4 +60,18 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
             .OrderByDescending(p => p.CreatedAt)
             .Take(take)
             .ToListAsync(ct);
+
+    public Task<List<OrganizationProductStats>> GetOrganizationStatsAsync(CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .GroupBy(p => p.OrganizationId)
+            .Select(g => new OrganizationProductStats(
+                g.Key,
+                g.Count(),
+                g.Count(p => p.Status == PublishStatus.Published),
+                g.Count(p => p.Status == PublishStatus.Draft),
+                // !p.Images.Any() rather than a left join with a null check: this translates to a
+                // NOT EXISTS subquery, which stays correct whether a product has zero photos or five.
+                g.Count(p => !p.Images.Any())))
+            .ToListAsync(ct);
 }

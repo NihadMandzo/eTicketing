@@ -36,6 +36,7 @@ public static class ProductEndpoints
         // tickets for dozens of products in one day) that it would not comfortably fit in a query
         // string. Long, but not unbounded — ProductService caps it, see MaxInternalByIdsCount.
         app.MapPost("/internal/products/by-ids", GetInternalByIds).WithTags("Products (internal)");
+        app.MapGet("/internal/products/organization-stats", GetOrganizationStats).WithTags("Products (internal)");
     }
 
     private static async Task<IResult> GetPublished([AsParameters] ProductQuery query, IProductService service, CancellationToken ct)
@@ -114,6 +115,12 @@ public static class ProductEndpoints
     private static async Task<IResult> GetInternal(Guid id, IProductService service, CancellationToken ct)
     {
         var result = await service.GetInternalAsync(id, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetOrganizationStats(IProductService service, CancellationToken ct)
+    {
+        var result = await service.GetOrganizationStatsAsync(ct);
         return result.ToHttpResult();
     }
 

@@ -46,4 +46,17 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// in memory afterwards (the model's predictions aren't expressible in SQL), so this cap is the
     /// only thing bounding that work.</summary>
     Task<List<Product>> GetPublishedCandidatesAsync(int take, CancellationToken ct = default);
+
+    /// <summary>One row per organization that owns at least one product, with the counts the
+    /// Organizacije report needs — backs the internal GET /internal/products/organization-stats
+    /// that eTicketing.Ticketing calls. Aggregated here rather than by loading every product and
+    /// grouping in memory: this is a platform-wide question, and the answer is a handful of rows
+    /// whatever the catalogue's size.</summary>
+    Task<List<OrganizationProductStats>> GetOrganizationStatsAsync(CancellationToken ct = default);
 }
+
+/// <summary>Projection, not an entity — catalogue counts for one organization.
+/// <paramref name="WithoutImage"/> counts products with no gallery photo at all, which is the
+/// operational gap an Admin scans that column for.</summary>
+public record OrganizationProductStats(
+    Guid OrganizationId, int Total, int Published, int Draft, int WithoutImage);

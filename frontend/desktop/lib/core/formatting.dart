@@ -34,3 +34,41 @@ String formatTime(DateTime date) =>
 /// The human-readable number printed on a physical ticket's stub, six digits
 /// wide — `#000482`. Mirrors `PrintTicketModel.StubNumber`.
 String formatStubNumber(int serial) => '#${serial.toString().padLeft(6, '0')}';
+
+/// `12,4%` — one decimal, comma separator. `null` becomes an em dash, which is
+/// how every "we cannot compute this" case in the reports renders (a DailyEntry
+/// product's occupancy, growth with no preceding period, an empty histogram's
+/// peak hour). Mirrors `ReportFormatting.Percent` on the server, so the screen
+/// and the exported PDF read identically.
+String formatPercent(double? value) {
+  if (value == null) return '—';
+  final tenths = (value.abs() * 10).round();
+  final sign = value < 0 ? '-' : '';
+  return '$sign${formatCount(tenths ~/ 10)},${tenths % 10}%';
+}
+
+/// `+18,2%` / `−4,1%` — period-over-period change. Uses the typographic minus
+/// (U+2212) rather than a hyphen, matching the design. Mirrors
+/// `ReportFormatting.SignedPercent`.
+String formatSignedPercent(double? value) {
+  if (value == null) return '—';
+  final magnitude = formatPercent(value.abs());
+  return value < 0 ? '−$magnitude' : '+$magnitude';
+}
+
+/// `19:00 – 20:00` — the busiest arrival hour, as a window rather than an
+/// instant. Mirrors `ReportFormatting.HourWindow`.
+String formatHourWindow(int? hour) {
+  if (hour == null) return '—';
+  final next = (hour + 1) % 24;
+  return '${hour.toString().padLeft(2, '0')}:00 – ${next.toString().padLeft(2, '0')}:00';
+}
+
+/// `23. juli 2026.` — the long form the report header uses, next to the short
+/// numeric [formatDate] used in tables.
+String formatLongDate(DateTime date) => '${date.day}. ${_months[date.month - 1]} ${date.year}.';
+
+const _months = [
+  'januar', 'februar', 'mart', 'april', 'maj', 'juni',
+  'juli', 'avgust', 'septembar', 'oktobar', 'novembar', 'decembar',
+];

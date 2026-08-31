@@ -38,4 +38,16 @@ public class HttpCatalogClient : ICatalogClient
 
         return await response.Content.ReadFromJsonAsync<List<CatalogProductResponse>>(cancellationToken: ct) ?? [];
     }
+
+    public async Task<IReadOnlyList<CatalogOrganizationProductStats>> GetOrganizationProductStatsAsync(
+        CancellationToken ct = default)
+    {
+        // A plain GET, unlike the two above: this one takes no arguments at all. The Organizacije
+        // report is platform-staff-only and always covers every organization, so there is no id
+        // list to send.
+        var response = await _httpClient.GetAsync("/internal/products/organization-stats", ct);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<List<CatalogOrganizationProductStats>>(cancellationToken: ct) ?? [];
+    }
 }

@@ -116,6 +116,9 @@ services:
       Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
       Services__Catalog: "http://catalog-service:8080"
       Services__Payment: "http://payment-service:8080"
+      # The Izvještaji reports are the only thing here that needs Identity: they show organization
+      # names, which no ticket row carries.
+      Services__Identity: "http://identity-service:8080"
       RabbitMq__Host: "rabbitmq"
       # Signs the QR payload minted for every ticket, and verifies it back at the gate. Ticketing is
       # the ONLY service that needs this — PdfGeneration receives finished payloads on the event.

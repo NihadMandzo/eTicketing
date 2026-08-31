@@ -2,6 +2,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.Reports;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.TicketPrint;
@@ -43,6 +44,10 @@ public sealed class TicketingTestContext : IDisposable
     public ITicketPrintBatchRepository TicketPrintBatchRepository { get; }
     public IUnitOfWork UnitOfWork { get; }
     public Mock<ICatalogClient> CatalogClient { get; } = new();
+
+    /// <summary>Only the Izvještaji reports call Identity; every other org-scoped decision reads
+    /// the claim off the token. Mocked like every other cross-service HTTP client here.</summary>
+    public Mock<IIdentityClient> IdentityClient { get; } = new();
     public Mock<ISectorCapacityLock> CapacityLock { get; } = new();
     public Mock<IPaymentClient> PaymentClient { get; } = new();
     public Mock<IEventPublisher> EventPublisher { get; } = new();
@@ -97,6 +102,17 @@ public sealed class TicketingTestContext : IDisposable
         ValidationLock
             .Setup(l => l.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("test-lock-token");
+
+        // Reports label their rows with organization names, but no report *depends* on the label
+        // being resolvable — an unknown id falls back to a placeholder. Defaulting to an empty
+        // list keeps every test that isn't about labelling free of Identity setup.
+        IdentityClient
+            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        CatalogClient
+            .Setup(c => c.GetOrganizationProductStatsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
     }
 
     public TicketResponseFactory ResponseFactory => new(QrCodec);
@@ -144,6 +160,12 @@ public sealed class TicketingTestContext : IDisposable
             TicketPrintBatchRepository, TicketRepository, CatalogClient.Object, QrCodec,
             MsOptions.Create(new TicketSupportOptions { Email = "podrska@ekarta.ba", Phone = "+387 33 555 120" }),
             UnitOfWork, PlatformClock, NullLogger<TicketPrintRenderer>.Instance);
+
+    public IReportService CreateReportService() =>
+        new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, IdentityClient.Object, PlatformClock);
+
+    public IReportPdfService CreateReportPdfService() =>
+        new ReportPdfService(CreateReportService(), PlatformClock);
 
     public IPurchaseService CreatePurchaseService() =>
         new PurchaseService(

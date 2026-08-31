@@ -5,6 +5,7 @@ using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.Reports;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.TicketPrint;
@@ -79,6 +80,17 @@ public static class TicketingServiceCollectionExtensions
                 pb.AddTimeout(TimeSpan.FromSeconds(5));
             });
 
+        // Ticketing → Identity: same shape as the Catalog client above. Only the Izvještaji
+        // reports need it — every other org-scoped decision in this service reads organizationId
+        // straight off the caller's token and never has to ask Identity anything.
+        builder.Services.AddHttpClient<IIdentityClient, HttpIdentityClient>(c =>
+                c.BaseAddress = new Uri(builder.Configuration["Services:Identity"]!))
+            .AddResilienceHandler("identity-pipeline", pb =>
+            {
+                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 3 });
+                pb.AddTimeout(TimeSpan.FromSeconds(5));
+            });
+
         builder.Services.AddScoped<ISectorService, SectorService>();
         builder.Services.AddScoped<ITicketTypeService, TicketTypeService>();
         builder.Services.AddScoped<ITicketService, TicketService>();
@@ -89,6 +101,8 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
         builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();
         builder.Services.AddScoped<ITicketPrintRenderer, TicketPrintRenderer>();
+        builder.Services.AddScoped<IReportService, ReportService>();
+        builder.Services.AddScoped<IReportPdfService, ReportPdfService>();
 
         // The queue is a singleton the worker reads and request threads write; ITicketPrintQueue is
         // what Business depends on, and the worker needs the concrete type for its ChannelReader.

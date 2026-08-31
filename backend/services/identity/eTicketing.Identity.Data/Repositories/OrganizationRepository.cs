@@ -23,4 +23,10 @@ public class OrganizationRepository : Repository<Organization, Guid>, IOrganizat
 
     public Task<Organization?> GetByIdWithUsersAsync(Guid id, CancellationToken ct = default)
         => Query().Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == id, ct);
+
+    public Task<List<Organization>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Where(o => ids.Contains(o.Id))
+            .ToListAsync(ct);
 }
