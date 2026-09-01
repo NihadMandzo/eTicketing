@@ -4,6 +4,7 @@ import '../../models/responses/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_colors.dart';
 import '../categories_screen.dart';
+import '../dashboard_screen.dart';
 import '../login_screen.dart';
 import '../organizations_screen.dart';
 import '../products_screen.dart';
@@ -131,6 +132,9 @@ class _PageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (page == 'dashboard') {
+      return DashboardScreen(user: user);
+    }
     if (page == 'categories') {
       return const CategoriesScreen();
     }
@@ -210,8 +214,6 @@ class _PageContent extends StatelessWidget {
         return 'Proizvodi';
       case 'categories':
         return 'Kategorije';
-      case 'tickets':
-        return 'Karte';
       case 'organizations':
         return 'Organizacije';
       case 'users':

@@ -45,6 +45,18 @@ class ProductProvider extends BaseProvider<ProductResponse, String> {
     return PagedResult.fromJson(response.data as Map<String, dynamic>, ProductResponse.fromJson);
   }
 
+  /// GET /api/products/all — platform-wide, all statuses. PlatformStaff-only (backend enforces
+  /// regardless of who calls this); used by the Dashboard's platform-wide product count for
+  /// SuperAdmin/Admin.
+  Future<PagedResult<ProductResponse>> getAllPlatform({ProductSearchObject? searchObject}) async {
+    final response =
+        await send(() => apiClient.get('products/all', queryParameters: searchObject?.toQueryString()));
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return PagedResult.fromJson(response.data as Map<String, dynamic>, ProductResponse.fromJson);
+  }
+
   /// POST /api/products/preview — stateless, no DB write.
   Future<ProductPreviewResponse> preview(ProductUpsertRequest request) async {
     final response = await send(() => apiClient.post('products/preview', data: request.toJson()));

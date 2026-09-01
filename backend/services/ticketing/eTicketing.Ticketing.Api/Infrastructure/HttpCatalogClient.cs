@@ -50,4 +50,17 @@ public class HttpCatalogClient : ICatalogClient
 
         return await response.Content.ReadFromJsonAsync<List<CatalogOrganizationProductStats>>(cancellationToken: ct) ?? [];
     }
+
+    public async Task<IReadOnlyList<CatalogProductResponse>> GetUpcomingProductsAsync(
+        Guid? organizationId, int count, CancellationToken ct = default)
+    {
+        var query = organizationId is null
+            ? $"/internal/products/upcoming?count={count}"
+            : $"/internal/products/upcoming?organizationId={organizationId}&count={count}";
+
+        var response = await _httpClient.GetAsync(query, ct);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<List<CatalogProductResponse>>(cancellationToken: ct) ?? [];
+    }
 }

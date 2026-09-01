@@ -47,6 +47,14 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// only thing bounding that work.</summary>
     Task<List<Product>> GetPublishedCandidatesAsync(int take, CancellationToken ct = default);
 
+    /// <summary>Published, SingleOccurrence products with a future Date, soonest first — backs the
+    /// internal GET /internal/products/upcoming that eTicketing.Ticketing's Dashboard "Nadolazeći
+    /// događaji" card calls. organizationId narrows to one organizer's own events; null means
+    /// platform-wide, for the SuperAdmin/Admin dashboards. DailyEntry/RecurringReservation products
+    /// have no single Date and are never candidates here.</summary>
+    Task<List<Product>> GetUpcomingAsync(
+        Guid? organizationId, DateTime nowUtc, int count, CancellationToken ct = default);
+
     /// <summary>One row per organization that owns at least one product, with the counts the
     /// Organizacije report needs — backs the internal GET /internal/products/organization-stats
     /// that eTicketing.Ticketing calls. Aggregated here rather than by loading every product and

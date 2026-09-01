@@ -311,6 +311,30 @@ public class ProductService : IProductService
         return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
     }
 
+    /// <summary>
+    /// Upper bound on <see cref="GetUpcomingAsync"/>'s <c>count</c>. This is the internal endpoint
+    /// itself — not just its Ticketing caller — that must refuse a negative or absurdly large
+    /// value before it reaches <see cref="IProductRepository.GetUpcomingAsync"/>'s
+    /// <c>.Take(count)</c>, which SQL Server rejects outright for a negative value. Duplicated
+    /// rather than shared with Ticketing's identical cap, same reasoning as MaxInternalByIdsCount:
+    /// relying on the caller alone having validated is fragile against a future caller or a
+    /// regression on their side.
+    /// </summary>
+    private const int MaxUpcomingCount = 50;
+
+    public async Task<Result<List<ProductInternalResponse>>> GetUpcomingAsync(
+        Guid? organizationId, int count, CancellationToken ct = default)
+    {
+        if (count <= 0 || count > MaxUpcomingCount)
+        {
+            return Result<List<ProductInternalResponse>>.Failure(Error.Validation(
+                "product.invalid_count", $"Broj proizvoda mora biti između 1 i {MaxUpcomingCount}."));
+        }
+
+        var products = await _productRepository.GetUpcomingAsync(organizationId, DateTime.UtcNow, count, ct);
+        return Result<List<ProductInternalResponse>>.Success(products.Select(ToInternalResponse).ToList());
+    }
+
     public async Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default)
     {
         var stats = await _productRepository.GetOrganizationStatsAsync(ct);

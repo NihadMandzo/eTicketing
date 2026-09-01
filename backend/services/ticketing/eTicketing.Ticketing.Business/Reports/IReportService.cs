@@ -34,4 +34,9 @@ public interface IReportService
     /// <summary>Organizacije — platform staff only. SuperAdmin gets the financial column set,
     /// Admin the operational one; see <see cref="OrganizationReportView"/>.</summary>
     Task<Result<OrganizationReportResponse>> GetOrganizationsAsync(ReportQuery query, ClaimsPrincipal user, CancellationToken ct = default);
+
+    /// <summary>Nadolazeći događaji — the Dashboard's upcoming-events card, not a report tab (no
+    /// date range). Shares the Products tab's access matrix: every staff role may call it, scoped
+    /// to the caller's own organization for Org* roles and platform-wide for SuperAdmin/Admin.</summary>
+    Task<Result<List<UpcomingEventResponse>>> GetUpcomingEventsAsync(int count, ClaimsPrincipal user, CancellationToken ct = default);
 }

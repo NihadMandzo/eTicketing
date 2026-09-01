@@ -94,6 +94,14 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// compute period-over-period growth.</summary>
     Task<List<OrganizationSalesFacts>> GetOrganizationSalesAsync(
         DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>Current sold count per product, unscoped by any date range — unlike
+    /// <see cref="GetProductSalesAsync"/> (which counts tickets *purchased* inside a reporting
+    /// window), this answers "how many of this future event's tickets are sold right now,
+    /// regardless of when they were bought", for the Dashboard's "Nadolazeći događaji" sold/capacity
+    /// bar. Products with zero sales are simply absent, not a zero row.</summary>
+    Task<List<ProductSoldCount>> GetSoldCountsByProductIdsAsync(
+        IReadOnlyList<Guid> productIds, CancellationToken ct = default);
 }
 
 /// <summary>Projection, not an entity — one row per (product, mode) with today's ticket tallies.</summary>
@@ -108,7 +116,8 @@ public record TicketBuyer(Guid UserId, string UserEmail);
 
 /// <summary>Sales for one UTC hour, split into what stands and what was cancelled.
 /// <paramref name="HourUtc"/> is truncated to the hour.</summary>
-public record HourlySalesFacts(DateTime HourUtc, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
+public record HourlySalesFacts(
+    DateTime HourUtc, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount, int OnlineSold, int PrintedSold);
 
 /// <summary>Sales for one product over the whole reporting range.</summary>
 public record ProductSalesFacts(Guid ProductId, int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount);
@@ -118,3 +127,6 @@ public record ProductRedemptionFacts(Guid ProductId, int Sold, int CheckedIn, in
 
 /// <summary>Sales for one organization over the whole reporting range.</summary>
 public record OrganizationSalesFacts(Guid OrganizationId, int Sold, decimal Revenue);
+
+/// <summary>Current sold count for one product, unscoped by purchase date.</summary>
+public record ProductSoldCount(Guid ProductId, int Sold);

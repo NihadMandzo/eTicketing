@@ -369,31 +369,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
 
-    final breakdown = ReportCard(
-      title: 'Razrada prihoda',
-      child: Column(
-        children: [
-          _BreakdownRow(
-            label: 'Bruto prodaja karata',
-            share: '100%',
-            value: formatMoney(report.grossRevenue),
-          ),
-          _BreakdownRow(
-            label: 'Otkazane karte',
-            share: formatPercent(report.cancellationRatePercent),
-            value: '−${formatMoney(report.cancelledAmount)}',
-            emphasis: ReportEmphasis.negative,
-          ),
-          _BreakdownRow(
-            label: 'Neto prihod',
-            value: formatMoney(report.netRevenue),
-            emphasis: ReportEmphasis.positive,
-            isLast: true,
-          ),
-        ],
-      ),
-    );
-
     final tiles = [
       ReportMetricCard(
         label: 'Ukupan prihod',
@@ -405,12 +380,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       ReportMetricCard(label: 'Prodanih karata', value: formatCount(report.ticketsSold)),
       ReportMetricCard(label: 'Prosječna cijena karte', value: formatMoney(report.averageTicketPrice)),
-      ReportMetricCard(
-        label: 'Otkazane karte',
-        value: formatCount(report.cancelledCount),
-        hint: 'Stopa otkaza ${formatPercent(report.cancellationRatePercent)}',
-        emphasis: ReportEmphasis.negative,
-      ),
     ];
 
     return LayoutBuilder(
@@ -427,8 +396,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
               _tileGrid(tiles, constraints.maxWidth),
               const SizedBox(height: 16),
               chart,
-              const SizedBox(height: 16),
-              breakdown,
             ],
           );
         }
@@ -436,13 +403,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [chart, const SizedBox(height: 16), breakdown],
-              ),
-            ),
+            Expanded(flex: 16, child: chart),
             const SizedBox(width: 20),
             Expanded(
               flex: 10,
@@ -492,12 +453,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 '${report.rows.length == 1 ? 'proizvod' : 'proizvoda'} · ${report.scope}',
             child: ReportDataTable(
               columns: const [
-                ReportColumn('Proizvod', flex: 26),
-                ReportColumn('Prodano', flex: 9, rightAligned: true),
-                ReportColumn('Popunjenost', flex: 13),
-                ReportColumn('Pros. cijena', flex: 12, rightAligned: true),
-                ReportColumn('Otkazano', flex: 9, rightAligned: true),
-                ReportColumn('Prihod', flex: 13, rightAligned: true),
+                ReportColumn('Proizvod', flex: 28),
+                ReportColumn('Prodano', flex: 10, rightAligned: true),
+                ReportColumn('Popunjenost', flex: 15),
+                ReportColumn('Pros. cijena', flex: 13, rightAligned: true),
+                ReportColumn('Prihod', flex: 14, rightAligned: true),
               ],
               rows: [
                 for (final row in report.rows)
@@ -512,7 +472,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ),
                     ReportCell(formatMoney(row.averagePrice)),
-                    ReportCell(formatCount(row.cancelled), color: row.cancelled > 0 ? AppColors.error : null),
                     ReportCell(formatMoney(row.revenue), color: _positive, bold: true),
                   ],
               ],
@@ -521,7 +480,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ReportCell(formatCount(report.totalSold)),
                 ReportCell('${formatPercent(report.averageOccupancyPercent)} pros.'),
                 ReportCell(formatMoney(report.averagePrice)),
-                ReportCell(formatCount(report.totalCancelled)),
                 ReportCell(formatMoney(report.totalRevenue), color: _positive),
               ],
             ),
@@ -739,57 +697,5 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _compactMoney(double amount) {
     if (amount >= 1000) return '${formatCount((amount / 1000).round())}k';
     return formatCount(amount.round());
-  }
-}
-
-class _BreakdownRow extends StatelessWidget {
-  final String label;
-  final String? share;
-  final String value;
-  final ReportEmphasis emphasis;
-  final bool isLast;
-
-  const _BreakdownRow({
-    required this.label,
-    this.share,
-    required this.value,
-    this.emphasis = ReportEmphasis.neutral,
-    this.isLast = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: isLast
-              ? BorderSide.none
-              : BorderSide(color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label, style: TextStyle(fontSize: 13, color: AppColors.textSecondary(brightness))),
-          ),
-          if (share != null) ...[
-            Text(share!, style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness))),
-            const SizedBox(width: 12),
-          ],
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: ReportMetricCard.colorFor(emphasis, brightness),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

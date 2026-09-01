@@ -54,6 +54,13 @@ public interface IProductService
     /// so the cap is enforced here rather than by a FluentValidation validator.</summary>
     Task<Result<List<ProductInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
 
+    /// <summary>Internal-only, never routed through the Gateway — published, SingleOccurrence
+    /// products with a future date, soonest first, backing eTicketing.Ticketing's Dashboard
+    /// "Nadolazeći događaji" card. organizationId narrows to one organization; null is
+    /// platform-wide.</summary>
+    Task<Result<List<ProductInternalResponse>>> GetUpcomingAsync(
+        Guid? organizationId, int count, CancellationToken ct = default);
+
     /// <summary>Per-organization catalogue counts for eTicketing.Ticketing's Organizacije report —
     /// internal only, never routed through the Gateway. Takes no arguments: that report is
     /// platform-staff-only and always covers every organization.</summary>

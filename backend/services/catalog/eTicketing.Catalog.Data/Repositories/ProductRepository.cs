@@ -61,6 +61,19 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
             .Take(take)
             .ToListAsync(ct);
 
+    public Task<List<Product>> GetUpcomingAsync(
+        Guid? organizationId, DateTime nowUtc, int count, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Where(p => p.Status == PublishStatus.Published)
+            .Where(p => p.Category!.TicketingMode == TicketingMode.SingleOccurrence)
+            .Where(p => p.Date != null && p.Date >= nowUtc)
+            .Where(p => organizationId == null || p.OrganizationId == organizationId)
+            .OrderBy(p => p.Date)
+            .Take(count)
+            .ToListAsync(ct);
+
     public Task<List<OrganizationProductStats>> GetOrganizationStatsAsync(CancellationToken ct = default)
         => Query()
             .AsNoTracking()
