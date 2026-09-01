@@ -127,7 +127,7 @@ public class ProductServiceUpcomingTests : IDisposable
         var orgAProduct = SeedProduct(_orgA, Now.AddDays(3));
         var orgBProduct = SeedProduct(_orgB, Now.AddDays(4));
 
-        var result = await _sut.GetUpcomingAsync(organizationId: null, count: 100);
+        var result = await _sut.GetUpcomingAsync(organizationId: null, count: 10);
 
         result.Value!.Select(p => p.Id).Should().Contain([orgAProduct.Id, orgBProduct.Id]);
     }
@@ -162,6 +162,30 @@ public class ProductServiceUpcomingTests : IDisposable
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Should().BeEmpty();
+    }
+
+    // PR #26 review fix: `count` reaches this internal endpoint straight from a bare query-string
+    // int on Ticketing's Gateway-reachable /reports/upcoming-events, with no request-DTO validator
+    // in between. A negative value used to fall straight into ProductRepository.GetUpcomingAsync's
+    // .Take(count), which SQL Server rejects at execution — an unhandled 500 for plain bad input.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GetUpcomingAsync_WithZeroOrNegativeCount_ReturnsValidationFailure(int count)
+    {
+        var result = await _sut.GetUpcomingAsync(organizationId: _orgA, count: count);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("product.invalid_count");
+    }
+
+    [Fact]
+    public async Task GetUpcomingAsync_WithCountAboveMax_ReturnsValidationFailure()
+    {
+        var result = await _sut.GetUpcomingAsync(organizationId: _orgA, count: 51);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("product.invalid_count");
     }
 
     public void Dispose() => _fixture.Dispose();

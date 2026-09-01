@@ -282,6 +282,12 @@ public class ReportService : IReportService
         if (access.Error is not null)
             return Result<List<UpcomingEventResponse>>.Failure(access.Error);
 
+        if (count <= 0 || count > MaxUpcomingCount)
+        {
+            return Result<List<UpcomingEventResponse>>.Failure(Error.Validation(
+                "report.invalid_count", $"Broj događaja mora biti između 1 i {MaxUpcomingCount}."));
+        }
+
         var products = await _catalog.GetUpcomingProductsAsync(access.OrganizationId, count, ct);
         if (products.Count == 0)
             return Result<List<UpcomingEventResponse>>.Success([]);
@@ -548,6 +554,17 @@ public class ReportService : IReportService
     /// more than 200 products, and the range validator accepts exactly that request.
     /// </summary>
     private const int MaxIdsPerLookup = 200;
+
+    /// <summary>
+    /// Upper bound on <see cref="GetUpcomingEventsAsync"/>'s <c>count</c>. That parameter arrives
+    /// as a bare query-string int on a Gateway-reachable endpoint, not through a validated request
+    /// DTO, so this is the only thing standing between a bad/malicious value and a negative or
+    /// unbounded <c>.Take(count)</c> two services downstream (Catalog's ProductRepository).
+    /// Duplicated in Catalog's ProductService rather than shared, same reasoning as
+    /// MaxIdsPerLookup above — the two sides only share an HTTP contract, not code — but it must be
+    /// enforced here too so a bad value never leaves this service in the first place.
+    /// </summary>
+    private const int MaxUpcomingCount = 50;
 
     /// <summary>Runs a batch lookup in chunks of <see cref="MaxIdsPerLookup"/> and concatenates the
     /// results, so a wide report resolves every name instead of failing outright.</summary>

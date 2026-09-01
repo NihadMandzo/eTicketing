@@ -127,9 +127,6 @@ public class ReportDocument : IDocument
             if (_model.Chart is { Count: > 0 })
                 column.Item().PaddingTop(Px(18)).Element(ComposeChart);
 
-            if (_model.Breakdown is { Count: > 0 })
-                column.Item().PaddingTop(Px(18)).Element(ComposeBreakdown);
-
             if (_model.Table is not null)
                 column.Item().PaddingTop(Px(18)).Element(ComposeTable);
         });
@@ -194,32 +191,6 @@ public class ReportDocument : IDocument
                     });
                 }
             });
-        });
-    }
-
-    private void ComposeBreakdown(IContainer container)
-    {
-        container.Element(Card).Column(column =>
-        {
-            if (!string.IsNullOrWhiteSpace(_model.BreakdownTitle))
-                column.Item().PaddingBottom(Px(8)).Text(_model.BreakdownTitle).Style(Title(12));
-
-            foreach (var line in _model.Breakdown!)
-            {
-                column.Item()
-                    .BorderBottom(Px(1)).BorderColor(Surface)
-                    .PaddingVertical(Px(6))
-                    .Row(row =>
-                    {
-                        row.RelativeItem().Text(line.Label).Style(Body(10, 1.2f, TextBody));
-
-                        if (!string.IsNullOrWhiteSpace(line.Share))
-                            row.ConstantItem(Px(60)).AlignRight().Text(line.Share).Style(Body(9, 1.2f, TextMuted));
-
-                        row.ConstantItem(Px(120)).AlignRight()
-                            .Text(line.Value).Style(Value(10.5f, ColorFor(line.Emphasis)));
-                    });
-            }
         });
     }
 

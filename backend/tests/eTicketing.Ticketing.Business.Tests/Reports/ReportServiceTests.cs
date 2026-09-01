@@ -827,5 +827,35 @@ public class ReportServiceTests : IDisposable
         result.Value!.Should().BeEmpty();
     }
 
+    // PR #26 review fix: `count` arrives as a bare query-string int on the Gateway-reachable
+    // GET /reports/upcoming-events, with no request-DTO validator in front of it (unlike every
+    // sibling report endpoint). A negative/huge value used to reach ICatalogClient unchecked and
+    // eventually a rejected .Take(count) two services downstream — an unhandled 500 for bad input.
+    // Verifying the catalog client is never called proves the bad value is stopped here, not just
+    // that the final Result happens to look like a failure.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GetUpcomingEventsAsync_WithZeroOrNegativeCount_ReturnsValidationFailureWithoutCallingCatalog(int count)
+    {
+        var result = await _sut.GetUpcomingEventsAsync(count, Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("report.invalid_count");
+        _fixture.CatalogClient.Verify(
+            c => c.GetUpcomingProductsAsync(It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetUpcomingEventsAsync_WithCountAboveMax_ReturnsValidationFailureWithoutCallingCatalog()
+    {
+        var result = await _sut.GetUpcomingEventsAsync(51, Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("report.invalid_count");
+        _fixture.CatalogClient.Verify(
+            c => c.GetUpcomingProductsAsync(It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     public void Dispose() => _fixture.Dispose();
 }

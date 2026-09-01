@@ -55,15 +55,4 @@ public sealed record ReportPdfModel(
     IReadOnlyList<ReportPdfTile> Tiles,
     string? ChartTitle = null,
     IReadOnlyList<ReportPdfBar>? Chart = null,
-    ReportPdfTable? Table = null,
-    // Optional label/value pairs shown as a small breakdown block under the chart — the design's
-    // "Razrada Prihoda" list.
-    IReadOnlyList<ReportPdfBreakdownRow>? Breakdown = null,
-    string? BreakdownTitle = null);
-
-/// <summary>One line of the breakdown block: a label, an optional share, and a value.</summary>
-public sealed record ReportPdfBreakdownRow(
-    string Label,
-    string Value,
-    string? Share = null,
-    ReportPdfEmphasis Emphasis = ReportPdfEmphasis.Neutral);
+    ReportPdfTable? Table = null);

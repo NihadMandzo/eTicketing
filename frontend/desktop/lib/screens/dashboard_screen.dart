@@ -48,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
 
   int? _organizationsCount;
-  int? _platformUsersCount;
+  int? _adminAccountsCount;
   int? _categoriesCount;
   int? _activeEventsCount;
   int? _draftsCount;
@@ -97,7 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_isSuperAdmin) {
       futures.add(_fetch(() async {
         final r = await AdminProvider().getAll(searchObject: probe, fromJson: AdminUserResponse.fromJson);
-        _platformUsersCount = r.totalCount;
+        _adminAccountsCount = r.totalCount;
       }));
     }
 
@@ -191,7 +191,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_isSuperAdmin) {
       tiles.add(ReportMetricCard(label: 'Organizacije', value: _fmtInt(_organizationsCount), icon: LucideIcons.building2));
-      tiles.add(ReportMetricCard(label: 'Korisnika na platformi', value: _fmtInt(_platformUsersCount), icon: LucideIcons.users));
+      tiles.add(ReportMetricCard(label: 'Administratora (platforma)', value: _fmtInt(_adminAccountsCount), icon: LucideIcons.users));
       tiles.add(_revenueTile('Ukupan prihod (30 dana)'));
       tiles.add(ReportMetricCard(
         label: 'Prodanih karata (30 dana)',
