@@ -109,7 +109,40 @@ public class ReportPdfService : IReportPdfService
                     b.Label,
                     Money(b.Revenue),
                     peak == 0 ? 0f : (float)(b.Revenue / peak)))
-            ]);
+            ],
+            // Platform-wide exports only — ByOrganization is empty for an organizer, and a null
+            // Table is how the document omits the section entirely.
+            Table: report.ByOrganization.Count == 0
+                ? null
+                : new ReportPdfTable(
+                    Title: $"Prodaja po organizacijama ({Count(report.ByOrganization.Count)})",
+                    Columns:
+                    [
+                        new ReportPdfColumn("Organizacija", 2.8f),
+                        new ReportPdfColumn("Prodano", 1f, RightAligned: true),
+                        new ReportPdfColumn("Pros. cijena", 1.3f, RightAligned: true),
+                        new ReportPdfColumn("Udio", 1f, RightAligned: true),
+                        new ReportPdfColumn("Prihod", 1.4f, RightAligned: true),
+                    ],
+                    Rows:
+                    [
+                        .. report.ByOrganization.Select(r => (IReadOnlyList<string>)new[]
+                        {
+                            r.Name,
+                            Count(r.Sold),
+                            Money(r.AveragePrice),
+                            Percent(r.SharePercent),
+                            Money(r.Revenue),
+                        })
+                    ],
+                    TotalsRow:
+                    [
+                        "Ukupno",
+                        Count(report.TicketsSold),
+                        Money(report.AverageTicketPrice),
+                        Percent(100m),
+                        Money(report.GrossRevenue),
+                    ]));
     }
 
     private ReportPdfModel BuildProducts(ProductReportResponse report) =>

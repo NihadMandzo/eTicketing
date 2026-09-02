@@ -3,6 +3,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Va
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
+import { passwordStrengthValidator } from '../../core/utils/password.validator';
 
 function passwordsMatchValidator(control: AbstractControl): ValidationErrors | null {
   const password = control.get('newPassword')?.value;
@@ -32,7 +33,7 @@ export class ResetPasswordComponent {
 
   readonly form = this.fb.nonNullable.group(
     {
-      newPassword: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(100)]],
+      newPassword: ['', [Validators.required, passwordStrengthValidator()]],
       confirmPassword: ['', [Validators.required]],
     },
     { validators: passwordsMatchValidator },

@@ -99,23 +99,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       await _loadData();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.white),
-                const SizedBox(width: 10),
-                Text('Kategorija "${category.name}" je uspješno obrisana'),
-              ],
-            ),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        handleApiSuccess('Kategorija "${category.name}" je uspješno obrisana.');
       }
     } catch (e) {
       if (mounted) handleApiError(e);

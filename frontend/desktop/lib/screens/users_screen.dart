@@ -10,6 +10,7 @@ import '../models/search_objects/staff_query_search_object.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/confirm_dialog.dart';
+import 'widgets/admin_upsert_dialog.dart';
 import 'widgets/delete_organization_admin_dialog.dart';
 import 'widgets/organization_admin_upsert_dialog.dart';
 import 'widgets/pagination_bar.dart';
@@ -52,6 +53,16 @@ class _UsersScreenState extends State<UsersScreen> {
   int get _totalPages => (_totalCount / _pageSize).ceil().clamp(1, 99999);
 
   bool get _isSuperAdmin => widget.currentUser.roleName == 'SuperAdmin';
+
+  /// Whether this account gets the extra, full-width "Promijeni Lozinku" button on its card.
+  /// SuperAdmin can set the password of any Admin/Organization*Admin account except their own
+  /// and another SuperAdmin's (see AdminService.SetPasswordAsync's role exclusions).
+  ///
+  /// Single definition on purpose: the grid sizes its cells from it (a card with the third button
+  /// is taller) and the item builder wires the callback from it. When those two drifted apart the
+  /// cell was 42px too short and every SuperAdmin card threw a RenderFlex overflow.
+  bool _canSetPassword(AdminUserResponse user) =>
+      _isSuperAdmin && user.id != widget.currentUser.id && user.roleName != 'SuperAdmin';
 
   @override
   void initState() {
@@ -164,14 +175,20 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
+  /// The two roles that reach this screen add two different kinds of account, so the button
+  /// routes to two different dialogs: a SuperAdmin creates a platform `Admin` (POST /admins),
+  /// an OrganizationSuperAdmin an `OrganizationAdmin` in their own org
+  /// (POST /organizations/{id}/users). Both roles are pinned server-side, not chosen here.
   void _openAddDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => OrganizationAdminUpsertDialog(
-        organizationId: widget.currentUser.organizationId!,
-        onSaved: _loadData,
-      ),
+      builder: (_) => _isSuperAdmin
+          ? AdminUpsertDialog(onSaved: _loadData)
+          : OrganizationAdminUpsertDialog(
+              organizationId: widget.currentUser.organizationId!,
+              onSaved: _loadData,
+            ),
     );
   }
 
@@ -217,22 +234,7 @@ class _UsersScreenState extends State<UsersScreen> {
       await _loadData();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(child: Text('Korisnik "${user.fullName}" je uspješno obrisan')),
-              ],
-            ),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        handleApiSuccess('Korisnik "${user.fullName}" je uspješno obrisan.');
       }
     } catch (e) {
       if (mounted) handleApiError(e);
@@ -296,10 +298,14 @@ class _UsersScreenState extends State<UsersScreen> {
                   ],
                 ),
               ),
-              if (!_isSuperAdmin) ...[
-                const SizedBox(width: 16),
-                _AddAdminButton(onTap: _openAddDialog),
-              ],
+              // Both roles that reach this screen can create an account; _openAddDialog picks
+              // which kind. (It used to be hidden for SuperAdmin, which left a platform Admin
+              // impossible to create anywhere in the app.)
+              const SizedBox(width: 16),
+              _AddAdminButton(
+                onTap: _openAddDialog,
+                label: _isSuperAdmin ? 'Dodaj Administratora Platforme' : 'Dodaj Administratora',
+              ),
             ],
           ),
 
@@ -407,14 +413,18 @@ class _UsersScreenState extends State<UsersScreen> {
               // card grow arbitrarily large on a wide monitor with few results,
               // which looked broken even though nothing overflowed. This way more
               // columns appear as the window widens instead of existing cards
-              // stretching. mainAxisExtent (a fixed pixel height, not an aspect
-              // ratio) is generous enough for the avatar, name, up to 3 badges,
-              // 3 contact lines and 2 action buttons, so it can never overflow.
+              // stretching.
+              //
+              // mainAxisExtent is a fixed pixel height, so it has to cover the tallest card on
+              // the page: avatar, name, up to 3 badges, 3 contact lines, and either two action
+              // buttons (280) or those plus the stacked "Promijeni Lozinku" button (322). One
+              // height for the whole grid, driven by whether any card on this page shows it —
+              // rather than 322 for everyone, which would leave a gap under every other card.
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 260,
-                mainAxisExtent: 280,
+                mainAxisExtent: _users.any(_canSetPassword) ? 322 : 280,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -422,10 +432,7 @@ class _UsersScreenState extends State<UsersScreen> {
               itemBuilder: (context, index) {
                 final user = _users[index];
                 final isSelf = user.id == widget.currentUser.id;
-                // SuperAdmin can set the password of any Admin/Organization*
-                // Admin account except their own and another SuperAdmin's
-                // (see AdminService.SetPasswordAsync's role exclusions).
-                final canSetPassword = _isSuperAdmin && !isSelf && user.roleName != 'SuperAdmin';
+                final canSetPassword = _canSetPassword(user);
                 return UserGridCard(
                   user: user,
                   // A user never edits/deletes their own account from this
@@ -451,7 +458,11 @@ class _UsersScreenState extends State<UsersScreen> {
 class _AddAdminButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _AddAdminButton({required this.onTap});
+  /// Named by the caller: the two roles on this screen create different kinds of account, and
+  /// a SuperAdmin's button says so rather than implying it adds an organization admin.
+  final String label;
+
+  const _AddAdminButton({required this.onTap, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -480,9 +491,13 @@ class _AddAdminButton extends StatelessWidget {
               children: [
                 Icon(LucideIcons.userPlus, color: onPrimaryColor, size: 18),
                 const SizedBox(width: 8),
-                Text(
-                  'Dodaj Administratora',
-                  style: TextStyle(color: onPrimaryColor, fontWeight: FontWeight.w600, fontSize: 14),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: onPrimaryColor, fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
                 ),
               ],
             ),

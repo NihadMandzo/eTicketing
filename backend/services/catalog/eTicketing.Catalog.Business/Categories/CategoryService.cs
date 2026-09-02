@@ -145,12 +145,24 @@ public class CategoryService : ICategoryService
         // and deliberately doesn't track later Name changes (see Category.IconBlobName).
         await _blobStorageService.UploadAsync(ContainerName, category.IconBlobName, icon.OpenReadStream(), "image/png", ct);
 
+        // No column changed, but the row is marked modified anyway so the audit interceptor
+        // advances UpdatedAt — the token BuildIconUrl stamps into the URL, and the only signal a
+        // client has that the icon it cached is stale. See BlobUrlVersioning.
+        _categoryRepository.Update(category);
+        await _unitOfWork.SaveChangesAsync(ct);
+
         return Result<CategoryResponse>.Success(ToResponse(category));
     }
 
     private CategoryResponse ToResponse(Category category) =>
         category.Adapt<CategoryResponse>() with { IconUrl = BuildIconUrl(category) };
 
+    // Version-stamped: an icon replace reuses the same blob key, so without this the URL never
+    // changes and every client keeps serving the old icon from cache. See BlobUrlVersioning.
     private string? BuildIconUrl(Category category) =>
-        category.IconBlobName is null ? null : _blobStorageService.GetPublicUrl(ContainerName, category.IconBlobName);
+        category.IconBlobName is null
+            ? null
+            : BlobUrlVersioning.WithVersion(
+                _blobStorageService.GetPublicUrl(ContainerName, category.IconBlobName),
+                category.UpdatedAt);
 }

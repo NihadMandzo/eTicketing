@@ -19,9 +19,9 @@ public class TicketPrintBatchRepository : Repository<TicketPrintBatch, Guid>, IT
     public Task<TicketPrintBatch?> GetHeaderAsync(Guid id, CancellationToken ct = default)
         => Query().AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
 
-    /// <summary>Caps at 50 — this backs a badge, not a report, and there is nothing today that
-    /// forces an organizer to ever resolve a Failed or ignored batch, so the set is not otherwise
-    /// bounded.</summary>
+    /// <summary>Caps at 50 — this backs a badge, not a report. An organizer can now clear any row
+    /// on demand (DismissedAt), so the set no longer grows without a way to shrink it, but the cap
+    /// stays as a backstop for someone who simply never clears anything.</summary>
     private const int MaxOutstandingPerOrganization = 50;
 
     public Task<List<TicketPrintBatch>> GetOutstandingForOrganizationAsync(Guid organizationId, CancellationToken ct = default)
@@ -31,6 +31,9 @@ public class TicketPrintBatchRepository : Repository<TicketPrintBatch, Guid>, IT
             // A collected batch is done with — the file is gone and the organizer has it. Only
             // work still worth surfacing stays in the badge.
             .Where(b => b.DownloadedAt == null)
+            // Explicitly cleared by the organizer. Same idea as DownloadedAt above: the row still
+            // exists as the record of the print run, it just no longer wants attention.
+            .Where(b => b.DismissedAt == null)
             .OrderByDescending(b => b.CreatedAt)
             .Take(MaxOutstandingPerOrganization)
             .ToListAsync(ct);

@@ -7,6 +7,7 @@ import '../theme/app_colors.dart';
 import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
+import '../utils/validators.dart';
 
 /// Mirrors `ChangePasswordRequestValidator` on the backend field-for-field.
 /// On success the backend revokes every active refresh token for this
@@ -110,7 +111,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   LabeledPasswordField(
                     label: 'Nova lozinka',
                     controller: _newPasswordCtrl,
-                    validator: (v) => (v == null || v.length < 8) ? 'Minimalno 8 karaktera' : null,
+                    validator: Validators.password,
                   ),
                   const SizedBox(height: 16),
                   LabeledPasswordField(

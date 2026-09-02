@@ -8,6 +8,7 @@ import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
 import 'verify_email_screen.dart';
+import '../utils/validators.dart';
 
 /// Self-registration — always creates a "User"/buyer account on the backend
 /// (the desktop admin console has no equivalent screen by design; admins and
@@ -161,7 +162,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     label: 'Lozinka',
                     controller: _passwordCtrl,
                     hintText: '••••••••',
-                    validator: (v) => (v == null || v.length < 8) ? 'Minimalno 8 karaktera' : null,
+                    validator: Validators.password,
                   ),
                   const SizedBox(height: 16),
                   LabeledPasswordField(

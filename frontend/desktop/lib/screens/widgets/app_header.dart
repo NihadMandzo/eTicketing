@@ -168,9 +168,13 @@ class _AppHeaderState extends State<AppHeader> {
           const SizedBox(width: 16),
 
           // ── Notification bell ────────────────────────────────────────────
-          const _BellButton(),
-
-          const SizedBox(width: 8),
+          // Organization roles only. The bell reports ticket exports, and platform staff have no
+          // organization to export for — for them it was a permanently empty badge opening a
+          // permanently empty dialog, so it is not rendered at all rather than shown inert.
+          if (ExportNotifications.roles.contains(widget.user.roleName)) ...[
+            const _BellButton(),
+            const SizedBox(width: 8),
+          ],
 
           // ── User button ──────────────────────────────────────────────────
           CompositedTransformTarget(
@@ -671,6 +675,21 @@ class _ExportRowState extends State<_ExportRow> {
     try {
       await TicketPrintProvider().retry(widget.batch.id);
       await exportNotifications.refresh();
+      handleApiSuccess('Izvoz je ponovo pokrenut.');
+    } catch (e) {
+      handleApiError(e);
+    }
+    if (mounted) setState(() => _isBusy = false);
+  }
+
+  /// Clears this row from the badge. The batch and its tickets are untouched — this only stops
+  /// the export asking for attention, and it is the only way out for a failed or expired one.
+  Future<void> _dismiss() async {
+    setState(() => _isBusy = true);
+    try {
+      await TicketPrintProvider().dismiss(widget.batch.id);
+      await exportNotifications.refresh();
+      handleApiSuccess('Obavještenje je uklonjeno.');
     } catch (e) {
       handleApiError(e);
     }
@@ -688,7 +707,13 @@ class _ExportRowState extends State<_ExportRow> {
       TicketPrintBatchStatus.rendering => '${batch.renderedCount}/${batch.ticketCount} karata · priprema PDF-a',
       TicketPrintBatchStatus.ready => '${batch.ticketCount} karata · ${batch.pageCount} stranica',
       TicketPrintBatchStatus.failed => batch.errorMessage ?? 'Izvoz nije uspio.',
+      // Says what actually happened and what still holds: the sheet is gone, the tickets are not.
+      TicketPrintBatchStatus.expired =>
+        'PDF više nije dostupan · ulaznice su i dalje važeće',
     };
+
+    final isProblem = batch.status == TicketPrintBatchStatus.failed ||
+        batch.status == TicketPrintBatchStatus.expired;
 
     return Row(
       children: [
@@ -706,7 +731,7 @@ class _ExportRowState extends State<_ExportRow> {
                 subtitle,
                 style: TextStyle(
                   fontSize: 12,
-                  color: batch.status == TicketPrintBatchStatus.failed ? AppColors.error : tertiary,
+                  color: isProblem ? AppColors.error : tertiary,
                 ),
               ),
             ],
@@ -715,32 +740,52 @@ class _ExportRowState extends State<_ExportRow> {
         const SizedBox(width: 12),
         if (_isBusy)
           const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        else if (batch.isDownloadable)
-          FilledButton.icon(
-            onPressed: _download,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.successDark,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        else ...[
+          if (batch.isDownloadable)
+            FilledButton.icon(
+              onPressed: _download,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.successDark,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.download_rounded, size: 14),
+              label: const Text('Preuzmi', style: TextStyle(fontSize: 12)),
+            )
+          else if (batch.status == TicketPrintBatchStatus.failed)
+            OutlinedButton(
+              onPressed: _retry,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Pokušaj ponovo', style: TextStyle(fontSize: 12)),
+            )
+          // Nothing to offer for an expired batch — the file is gone and re-rendering it is what
+          // a fresh export is for. Only the dismiss below applies.
+          else if (batch.status.isInFlight)
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+
+          // On every row, whatever its status. Before this existed a row left the badge only as a
+          // side effect of a completed download, so a failed or expired export could never be
+          // cleared at all.
+          const SizedBox(width: 4),
+          Tooltip(
+            message: 'Ukloni obavještenje',
+            child: IconButton(
+              onPressed: _dismiss,
+              icon: const Icon(Icons.close, size: 16),
+              color: tertiary,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
-            icon: const Icon(Icons.download_rounded, size: 14),
-            label: const Text('Preuzmi', style: TextStyle(fontSize: 12)),
-          )
-        else if (batch.status == TicketPrintBatchStatus.failed)
-          OutlinedButton(
-            onPressed: _retry,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: AppColors.error),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('Pokušaj ponovo', style: TextStyle(fontSize: 12)),
-          )
-        else
-          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+        ],
       ],
     );
   }

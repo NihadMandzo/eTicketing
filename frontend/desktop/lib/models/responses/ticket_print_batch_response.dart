@@ -4,14 +4,22 @@ enum TicketPrintBatchStatus {
   queued(0),
   rendering(1),
   ready(2),
-  failed(3);
+  failed(3),
+
+  /// Nobody collected the PDF within the retention window and the sweep deleted it. The batch
+  /// itself survives as the record of the print run, and the tickets stay valid — only the sheet
+  /// is gone, so the only thing left to do with the row is clear it.
+  expired(4);
 
   final int value;
   const TicketPrintBatchStatus(this.value);
 
+  /// Falls back to [failed], not [queued]: an unknown value means this build is older than the
+  /// backend, and showing such a row as permanently "u redu čekanja" would have it sit in the
+  /// badge forever waiting for a render that already finished. Failed at least offers an action.
   static TicketPrintBatchStatus fromValue(int value) => TicketPrintBatchStatus.values.firstWhere(
         (s) => s.value == value,
-        orElse: () => TicketPrintBatchStatus.queued,
+        orElse: () => TicketPrintBatchStatus.failed,
       );
 
   /// True while the render worker still has work to do on this batch.
@@ -22,6 +30,7 @@ enum TicketPrintBatchStatus {
         TicketPrintBatchStatus.rendering => 'Priprema PDF-a',
         TicketPrintBatchStatus.ready => 'Spremno za preuzimanje',
         TicketPrintBatchStatus.failed => 'Neuspješno',
+        TicketPrintBatchStatus.expired => 'PDF više nije dostupan',
       };
 }
 

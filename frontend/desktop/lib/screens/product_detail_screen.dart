@@ -166,6 +166,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           _product = updated;
           _isMutatingImage = false;
         });
+        handleApiSuccess('Slika je dodana.');
       }
     } catch (e) {
       if (mounted) {
@@ -194,6 +195,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           _product = updated;
           _isMutatingImage = false;
         });
+        handleApiSuccess('Slika je obrisana.');
       }
     } catch (e) {
       if (mounted) {
@@ -255,6 +257,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     try {
       await _sectorProvider.delete(sector.id);
       if (mounted) await _loadSectors();
+      handleApiSuccess('Sektor "${sector.name}" je obrisan.');
     } catch (e) {
       if (mounted) handleApiError(e);
     }

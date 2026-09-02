@@ -11,6 +11,7 @@ import { Product } from '../../core/models/catalog.models';
 import { Ticket } from '../../core/models/purchase.models';
 import { TicketDetailModalComponent } from '../../components/ticket-detail-modal/ticket-detail-modal.component';
 import { environment } from '../../../environments/environment';
+import { passwordStrengthValidator } from '../../core/utils/password.validator';
 
 type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
 
@@ -128,7 +129,7 @@ export class ProfileComponent {
   readonly passwordForm = this.fb.nonNullable.group(
     {
       currentPassword: ['', [Validators.required]],
-      newPassword: ['', [Validators.required, Validators.minLength(8)]],
+      newPassword: ['', [Validators.required, passwordStrengthValidator()]],
       confirmPassword: ['', [Validators.required]],
     },
     { validators: newPasswordsMatchValidator },

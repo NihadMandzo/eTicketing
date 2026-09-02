@@ -5,6 +5,7 @@ import '../providers/api_exception.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import 'login_screen.dart';
+import '../utils/validators.dart';
 
 /// Shown instead of MainShell whenever UserProfile.mustChangePassword is
 /// true — SuperAdmin set this account's password directly (see
@@ -152,11 +153,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
                             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                           ),
                         ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'Nova lozinka je obavezna';
-                          if (v.length < 8 || v.length > 100) return 'Lozinka mora biti između 8 i 100 karaktera';
-                          return null;
-                        },
+                        validator: Validators.password,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(

@@ -123,6 +123,16 @@ class TicketPrintProvider extends BaseProvider<TicketPrintBatchResponse, String>
     return TicketPrintBatchResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// POST /api/ticket-print-batches/{id}/dismiss — clears the batch from the
+  /// notification badge. Not a delete: the batch stays on record (serial range,
+  /// nominal value) and the tickets stay valid. This is the only way to clear a
+  /// failed or expired export, neither of which a download can ever resolve.
+  Future<void> dismiss(String id) async {
+    final response = await send(() => apiClient.post('ticket-print-batches/$id/dismiss'));
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
+
   /// Re-reads an errored bytes response as JSON, so a failed download reports
   /// the API's Bosnian message instead of a byte array. The response body came
   /// back as raw bytes because of `responseType: bytes` above, which is right

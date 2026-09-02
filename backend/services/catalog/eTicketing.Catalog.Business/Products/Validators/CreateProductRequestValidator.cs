@@ -12,7 +12,7 @@ public class CreateProductRequestValidator : AbstractValidator<UpsertProductRequ
     public CreateProductRequestValidator()
     {
         RuleFor(x => x.Name).NotEmpty().Length(2, 200);
-        RuleFor(x => x.Description).MaximumLength(2000);
+        RuleFor(x => x.Description).MaximumLength(10000);
         RuleFor(x => x.CategoryId).GreaterThan(0);
 
         // The organizer must place an exact map pin when creating/editing a product — required,

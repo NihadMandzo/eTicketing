@@ -255,6 +255,9 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved(saved);
+        handleApiSuccess(_isEditing
+            ? 'Proizvod je uspješno ažuriran.'
+            : 'Proizvod je uspješno kreiran.');
       }
     } catch (e) {
       if (mounted) {
@@ -363,13 +366,16 @@ class _ProductUpsertDialogState extends State<ProductUpsertDialog> {
                           const SizedBox(height: 6),
                           TextFormField(
                             controller: _descCtrl,
-                            maxLines: 3,
-                            decoration: _inputDecoration('Kratak opis proizvoda...'),
+                            // 6 rather than 3: the limit is 10 000 characters, which is unusable
+                            // in a three-line box.
+                            maxLines: 6,
+                            decoration: _inputDecoration('Opis proizvoda...'),
                             style: TextStyle(fontSize: 14, color: textPrimary),
                             onChanged: (_) => _resetPreview(),
+                            // Mirrors CreateProductRequestValidator's MaximumLength(10000).
                             validator: (v) {
-                              if (v != null && v.trim().length > 2000) {
-                                return 'Opis može imati maksimalno 2000 karaktera';
+                              if (v != null && v.trim().length > 10000) {
+                                return 'Opis može imati maksimalno 10000 karaktera';
                               }
                               return null;
                             },

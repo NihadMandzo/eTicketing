@@ -262,6 +262,94 @@ public class ReportServiceTests : IDisposable
         result.Value.Scope.Should().Be("Platforma");
     }
 
+    // ── Prodaja po organizacijama ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetSalesAsync_ForSuperAdmin_SplitsRevenueByOrganizationHighestFirst()
+    {
+        _fixture.IdentityClient
+            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", IsActive: true),
+                new IdentityOrganizationResponse(_orgB, "Vardar Sport", "Skopje", IsActive: true),
+            ]);
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 11, 12, 0, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorB, _productB, 25m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        var rows = result.Value!.ByOrganization;
+        rows.Should().HaveCount(2);
+
+        rows[0].OrganizationId.Should().Be(_orgA);
+        rows[0].Name.Should().Be("Sunset Events");
+        rows[0].Sold.Should().Be(2);
+        rows[0].Revenue.Should().Be(100m);
+        rows[0].AveragePrice.Should().Be(50m);
+
+        rows[1].OrganizationId.Should().Be(_orgB);
+        rows[1].Revenue.Should().Be(25m);
+
+        // The whole point of the section: it must account for the headline figure exactly.
+        rows.Sum(r => r.Revenue).Should().Be(result.Value.GrossRevenue);
+        rows.Sum(r => r.Sold).Should().Be(result.Value.TicketsSold);
+        rows.Sum(r => r.SharePercent).Should().Be(100m);
+    }
+
+    [Theory]
+    [InlineData("OrganizationSuperAdmin")]
+    [InlineData("OrganizationAdmin")]
+    public async Task GetSalesAsync_ForAnOrganizer_ReturnsNoOrganizationBreakdown(string role)
+    {
+        // Their report is already one organization's, so a breakdown would be a single row
+        // restating the totals above it — and it would name their own organization back to them.
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(Range(), Caller(role, _orgA));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.ByOrganization.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_WithNoSalesInRange_ReturnsEmptyOrganizationBreakdown()
+    {
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.ByOrganization.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_ForAnOrganizationIdentityCannotName_StillReportsItsSales()
+    {
+        // The fixture's IdentityClient answers with an empty list by default. Dropping the row
+        // would silently unbalance the breakdown against the headline total, so it is kept under
+        // a placeholder name — same fallback as the Organizacije tab.
+        SeedTicket(_sectorA, _productA, 40m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.Value!.ByOrganization.Should().ContainSingle()
+            .Which.Name.Should().Be("Nepoznata organizacija");
+        result.Value.ByOrganization.Sum(r => r.Revenue).Should().Be(result.Value.GrossRevenue);
+    }
+
+    [Fact]
+    public async Task GetSalesAsync_ExcludesOrganizationsWithSalesOnlyOutsideTheRange()
+    {
+        SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
+        SeedTicket(_sectorB, _productB, 25m, new DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc));
+
+        var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
+
+        result.Value!.ByOrganization.Should().ContainSingle()
+            .Which.OrganizationId.Should().Be(_orgA);
+    }
+
     // ── Window ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]

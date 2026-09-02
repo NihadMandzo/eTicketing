@@ -539,8 +539,31 @@ public class OrganizationServiceTests : IDisposable
         var replaced = await _sut.ReplaceLogoAsync(created.Value.Id, CreateLogoFile(CreatePngBytes(90, 90)));
 
         replaced.IsSuccess.Should().BeTrue();
-        replaced.Value!.LogoUrl.Should().Be(originalUrl); // same blob key, just overwritten
+        // Same blob key, just overwritten — compared without the ?v= cache-busting token, which
+        // is expected to differ (see the test below).
+        PathOf(replaced.Value!.LogoUrl).Should().Be(PathOf(originalUrl));
     }
+
+    [Fact]
+    public async Task ReplaceLogoAsync_ChangesTheLogoUrlsVersionToken()
+    {
+        // The regression this guards: a replace writes to the same blob key, so the URL used to
+        // come back byte-identical. Every client caches on that URL — Flutter's ImageCache keys
+        // NetworkImage on it — so a replaced logo stayed visibly unchanged until an app restart.
+        // ReplaceLogoAsync now touches the row so UpdatedAt advances, and BuildLogoUrl stamps it.
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        var uploaded = await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(40, 40)));
+        var originalUrl = uploaded.Value!.LogoUrl;
+
+        var replaced = await _sut.ReplaceLogoAsync(created.Value.Id, CreateLogoFile(CreatePngBytes(90, 90)));
+
+        replaced.IsSuccess.Should().BeTrue();
+        replaced.Value!.LogoUrl.Should().NotBe(originalUrl);
+        replaced.Value.LogoUrl.Should().Contain("?v=");
+    }
+
+    /// <summary>The URL without its ?v= cache-busting token — i.e. the blob key part.</summary>
+    private static string? PathOf(string? url) => url?.Split('?')[0];
 
     [Fact]
     public async Task ReplaceLogoAsync_ForOrganizationWithoutLogo_ReturnsNotFound()
@@ -567,7 +590,8 @@ public class OrganizationServiceTests : IDisposable
     {
         var created = await _sut.CreateAsync(ValidCreateRequest());
         var uploaded = await _sut.UploadLogoAsync(created.Value!.Id, CreateLogoFile(CreatePngBytes(50, 50)));
-        var blobName = uploaded.Value!.LogoUrl!.Split('/').Last();
+        // PathOf first: the URL carries a ?v= cache-busting token that is not part of the key.
+        var blobName = PathOf(uploaded.Value!.LogoUrl)!.Split('/').Last();
         _fixture.BlobStorage.Exists("organization-logos", blobName).Should().BeTrue();
 
         await _sut.DeleteAsync(created.Value.Id);

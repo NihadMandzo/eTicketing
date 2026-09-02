@@ -45,21 +45,7 @@ class BaseProvider<T, TId> {
   /// underscore would NOT grant access (Dart privacy is file-scoped, not class-scoped) — can route
   /// their own custom methods (preview/publish/getMine/...) through the same handling rather than
   /// calling `apiClient` directly and bypassing it.
-  Future<Response> send(Future<Response> Function() request) async {
-    try {
-      return await request();
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
-        throw ApiException(
-          statusCode: 408,
-          apiError: ApiError(message: 'Zahtjev je istekao (timeout).'),
-        );
-      }
-      rethrow;
-    }
-  }
+  Future<Response> send(Future<Response> Function() request) => sendRequest(request);
 
   Future<PagedResult<T>> getAll({
     BaseSearchObject? searchObject,
@@ -119,5 +105,26 @@ class BaseProvider<T, TId> {
     final response = await send(() => apiClient.delete('$_extension/$id', data: data));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
+  }
+}
+
+/// The timeout mapping [BaseProvider.send] applies, as a standalone function so the providers that
+/// can't extend [BaseProvider] — the ones whose routes aren't a flat resource, like
+/// OrganizationUsersProvider and ProductOrganizationIdsProvider — get identical behaviour instead
+/// of calling `apiClient` directly. Those used to leak a raw English `DioException` out of a
+/// timeout, straight into handleApiError's `error.toString()` fallback.
+Future<Response> sendRequest(Future<Response> Function() request) async {
+  try {
+    return await request();
+  } on DioException catch (e) {
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      throw ApiException(
+        statusCode: 408,
+        apiError: ApiError(message: 'Zahtjev je istekao (timeout).'),
+      );
+    }
+    rethrow;
   }
 }

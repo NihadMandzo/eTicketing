@@ -2,38 +2,49 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../main.dart';
-import '../../models/requests/staff_user_update_request.dart';
+import '../../models/requests/admin_insert_request.dart';
 import '../../models/responses/admin_user_response.dart';
+import '../../providers/api_exception.dart';
 import '../../providers/user_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/validators.dart';
 
-/// Edit-only dialog for a SuperAdmin editing any staff account (SuperAdmin,
-/// Admin, OrganizationSuperAdmin or OrganizationAdmin) from the platform
-/// Users screen — profile fields only (FirstName/LastName/Email/Username/
-/// PhoneNumber), matching PUT /api/admins/{id}'s scope. Mirrors
-/// organization_upsert_dialog.dart's chrome/field/validator conventions.
-class StaffUserUpsertDialog extends StatefulWidget {
-  final AdminUserResponse user;
+/// Creates a platform `Admin` account from the SuperAdmin-facing "Korisnici Platforme" screen
+/// (POST /api/admins). Create-only on purpose: editing an existing staff account of any role
+/// already goes through [StaffUserUpsertDialog], and setting its password through
+/// [SetStaffPasswordDialog] — this dialog exists only to close the gap where an `Admin` could be
+/// listed, edited and deleted but never created.
+///
+/// Field rules mirror `CreateAdminRequestValidator` exactly — including the password, which goes
+/// through the shared [Validators.password] mirroring the backend's shared `PasswordRules`.
+class AdminUpsertDialog extends StatefulWidget {
   final VoidCallback onSaved;
 
-  const StaffUserUpsertDialog({super.key, required this.user, required this.onSaved});
+  const AdminUpsertDialog({super.key, required this.onSaved});
 
   @override
-  State<StaffUserUpsertDialog> createState() => _StaffUserUpsertDialogState();
+  State<AdminUpsertDialog> createState() => _AdminUpsertDialogState();
 }
 
-class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
+class _AdminUpsertDialogState extends State<AdminUpsertDialog> {
   final _formKey = GlobalKey<FormState>();
   final _provider = AdminProvider();
 
-  late final _firstNameCtrl = TextEditingController(text: widget.user.firstName);
-  late final _lastNameCtrl = TextEditingController(text: widget.user.lastName);
-  late final _emailCtrl = TextEditingController(text: widget.user.email);
-  late final _usernameCtrl = TextEditingController(text: widget.user.username);
-  late final _phoneCtrl = TextEditingController(text: widget.user.phoneNumber ?? '');
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
 
   bool _isSaving = false;
+  bool _obscurePassword = true;
+
+  /// Uniqueness is a server-side rule (it needs the database), so the API's `user.already_exists`
+  /// conflict is surfaced on the two fields that can cause it rather than as a generic toast —
+  /// see .claude/rules/21-frontend-desktop.md. Cleared on the next edit of either field.
+  String? _emailConflict;
+  String? _usernameConflict;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _primary => _isDark ? AppColors.secondary : AppColors.primary;
@@ -45,32 +56,56 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
   }
 
+  void _clearConflicts() {
+    if (_emailConflict == null && _usernameConflict == null) return;
+    setState(() {
+      _emailConflict = null;
+      _usernameConflict = null;
+    });
+  }
+
   Future<void> _submit() async {
+    _clearConflicts();
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
     try {
-      await _provider.update(
-        widget.user.id,
-        StaffUserUpdateRequest(
+      await _provider.insert(
+        AdminInsertRequest(
           firstName: _firstNameCtrl.text.trim(),
           lastName: _lastNameCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
           username: _usernameCtrl.text.trim(),
+          password: _passwordCtrl.text,
           phoneNumber: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        ),
+        ).toJson(),
         fromJson: AdminUserResponse.fromJson,
       );
 
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
-        handleApiSuccess('Korisnik je uspješno ažuriran.');
+        handleApiSuccess('Administrator je uspješno dodan.');
       }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      if (e.apiError.code == 'user.already_exists') {
+        // The API cannot say which of the two collided, so both are flagged and the message
+        // names the pair — better than a toast that vanishes before it can be acted on.
+        setState(() {
+          _emailConflict = 'Email ili korisničko ime je već zauzeto';
+          _usernameConflict = 'Email ili korisničko ime je već zauzeto';
+        });
+        _formKey.currentState!.validate();
+        return;
+      }
+      handleApiError(e);
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -101,7 +136,9 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
   Widget build(BuildContext context) {
     final isDark = _isDark;
     final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final onPrimaryColor = isDark ? AppColors.darkBackground : Colors.white;
+    final placeholderColor = isDark ? AppColors.darkTextTertiary : AppColors.lightTextDisabled;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -123,8 +160,8 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Uredi Korisnika',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: onPrimaryColor),
+                          'Dodaj Administratora Platforme',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: onPrimaryColor),
                         ),
                       ),
                       InkWell(
@@ -149,6 +186,12 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            'Administrator ima uvid u sve organizacije i proizvode na platformi, '
+                            'ali ne može kreirati organizacije ni druge administratorske naloge.',
+                            style: TextStyle(fontSize: 13, color: textSecondary),
+                          ),
+                          const SizedBox(height: 20),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -186,14 +229,15 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _emailCtrl,
-                            decoration: _inputDecoration('email@example.com', prefixIcon: LucideIcons.mail),
+                            decoration: _inputDecoration('admin@example.com', prefixIcon: LucideIcons.mail),
                             style: TextStyle(fontSize: 14, color: textPrimary),
+                            onChanged: (_) => _clearConflicts(),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) return 'Email je obavezan';
                               if (v.trim().length > 255) return 'Email može imati maksimalno 255 karaktera';
                               final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
                               if (!emailRegex.hasMatch(v.trim())) return 'Neispravan format email adrese';
-                              return null;
+                              return _emailConflict;
                             },
                           ),
                           const SizedBox(height: 14),
@@ -201,13 +245,28 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                             controller: _usernameCtrl,
                             decoration: _inputDecoration('korisnicko_ime', prefixIcon: LucideIcons.atSign),
                             style: TextStyle(fontSize: 14, color: textPrimary),
+                            onChanged: (_) => _clearConflicts(),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) return 'Korisničko ime je obavezno';
                               if (v.trim().length < 3 || v.trim().length > 50) {
                                 return 'Korisničko ime mora biti između 3 i 50 karaktera';
                               }
-                              return null;
+                              return _usernameConflict;
                             },
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _passwordCtrl,
+                            obscureText: _obscurePassword,
+                            decoration: _inputDecoration('Minimalno 8 karaktera', prefixIcon: LucideIcons.lock).copyWith(
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                                    size: 18, color: placeholderColor),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              ),
+                            ),
+                            style: TextStyle(fontSize: 14, color: textPrimary),
+                            validator: Validators.password,
                           ),
                           const SizedBox(height: 14),
                           TextFormField(
@@ -235,7 +294,7 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                       OutlinedButton(
                         onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                          foregroundColor: textSecondary,
                           side: BorderSide(color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -247,7 +306,9 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: [_primary, _primaryDark]),
                           borderRadius: BorderRadius.circular(12),
-                          boxShadow: [BoxShadow(color: _primary.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3))],
+                          boxShadow: [
+                            BoxShadow(color: _primary.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3)),
+                          ],
                         ),
                         child: Material(
                           color: Colors.transparent,
@@ -257,8 +318,12 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                               child: _isSaving
-                                  ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: onPrimaryColor))
-                                  : Text('Spremi Izmjene',
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: onPrimaryColor),
+                                    )
+                                  : Text('Dodaj Administratora',
                                       style: TextStyle(color: onPrimaryColor, fontWeight: FontWeight.w600, fontSize: 14)),
                             ),
                           ),

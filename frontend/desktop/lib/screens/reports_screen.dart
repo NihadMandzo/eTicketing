@@ -382,6 +382,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ReportMetricCard(label: 'Prosječna cijena karte', value: formatMoney(report.averageTicketPrice)),
     ];
 
+    // Platform-wide reports only: the backend sends an empty list to an organizer, whose report
+    // is already scoped to one organization, and the section is dropped rather than showing a
+    // single row restating the tiles above it.
+    final byOrganization = report.byOrganization.isEmpty ? null : _salesByOrganizationCard(report);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Below ~1100px the design's 1.6fr/1fr split leaves the chart too narrow
@@ -396,29 +401,76 @@ class _ReportsScreenState extends State<ReportsScreen> {
               _tileGrid(tiles, constraints.maxWidth),
               const SizedBox(height: 16),
               chart,
+              if (byOrganization != null) ...[const SizedBox(height: 16), byOrganization],
             ],
           );
         }
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(flex: 16, child: chart),
-            const SizedBox(width: 20),
-            Expanded(
-              flex: 10,
-              child: Column(
-                children: [
-                  for (final tile in tiles) ...[
-                    SizedBox(width: double.infinity, child: tile),
-                    if (tile != tiles.last) const SizedBox(height: 16),
-                  ],
-                ],
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 16, child: chart),
+                const SizedBox(width: 20),
+                Expanded(
+                  flex: 10,
+                  child: Column(
+                    children: [
+                      for (final tile in tiles) ...[
+                        SizedBox(width: double.infinity, child: tile),
+                        if (tile != tiles.last) const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
+            // Full width below the chart+tiles row: it is a breakdown of the same revenue, and
+            // five columns do not read at the tile column's width.
+            if (byOrganization != null) ...[const SizedBox(height: 20), byOrganization],
           ],
         );
       },
+    );
+  }
+
+  /// Splits the headline revenue by owning organization. Rows sum to the "Ukupan prihod" tile —
+  /// the backend computes `sharePercent` against that same figure so the two cannot disagree.
+  Widget _salesByOrganizationCard(SalesReport report) {
+    final rows = report.byOrganization;
+
+    return ReportCard(
+      title: 'Prodaja po organizacijama',
+      subtitle: '${formatCount(rows.length)} '
+          '${rows.length == 1 ? 'organizacija' : 'organizacija'} sa prodajom u periodu',
+      child: ReportDataTable(
+        columns: const [
+          ReportColumn('Organizacija', flex: 30),
+          ReportColumn('Prodano', flex: 12, rightAligned: true),
+          ReportColumn('Pros. cijena', flex: 14, rightAligned: true),
+          ReportColumn('Udio', flex: 12, rightAligned: true),
+          ReportColumn('Prihod', flex: 16, rightAligned: true),
+        ],
+        rows: [
+          for (final row in rows)
+            [
+              ReportCell(row.name),
+              ReportCell(formatCount(row.sold)),
+              ReportCell(formatMoney(row.averagePrice)),
+              ReportCell(formatPercent(row.sharePercent)),
+              ReportCell(formatMoney(row.revenue), color: _positive, bold: true),
+            ],
+        ],
+        totalsRow: [
+          const ReportCell('Ukupno'),
+          ReportCell(formatCount(report.ticketsSold)),
+          ReportCell(formatMoney(report.averageTicketPrice)),
+          ReportCell(formatPercent(100)),
+          ReportCell(formatMoney(report.grossRevenue), color: _positive, bold: true),
+        ],
+      ),
     );
   }
 

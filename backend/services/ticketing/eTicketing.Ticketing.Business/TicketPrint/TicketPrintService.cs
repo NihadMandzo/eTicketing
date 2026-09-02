@@ -424,6 +424,31 @@ public class TicketPrintService : ITicketPrintService
         return Result<TicketPrintBatchResponse>.Success(ToResponse(batch));
     }
 
+    public async Task<Result> DismissAsync(Guid batchId, ClaimsPrincipal user, CancellationToken ct = default)
+    {
+        var batch = await _batchRepository.GetByIdAsync(batchId, ct);
+        if (batch is null)
+            return Result.Failure(Error.NotFound("print.batch_not_found", "Izvoz ulaznica nije pronađen."));
+
+        if (!CanAccess(batch, user))
+            return Result.Failure(Error.Unauthorized("print.forbidden", "Nemate pristup ovom izvozu ulaznica."));
+
+        // Allowed from any status, including Queued and Rendering: an organizer who no longer
+        // wants to watch a render should be able to stop being told about it, and the worker
+        // carries on regardless — this only hides the row from the badge.
+        //
+        // Idempotent. Dismissing twice (a double-click, a stale panel) is not an error worth
+        // reporting, and re-stamping would move a timestamp that already means what it says.
+        if (batch.DismissedAt is not null)
+            return Result.Success();
+
+        batch.DismissedAt = _clock.UtcNow;
+        _batchRepository.Update(batch);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Result.Success();
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------------------------

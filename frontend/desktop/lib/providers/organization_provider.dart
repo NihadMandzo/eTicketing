@@ -29,7 +29,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
   /// POST /api/organizations — plain JSON, metadata only. The logo (if any) is
   /// uploaded separately afterwards via [createLogo].
   Future<OrganizationResponse> insertOrganization(OrganizationInsertRequest request) async {
-    final response = await apiClient.post('organizations', data: request.toJson());
+    final response = await send(() => apiClient.post('organizations', data: request.toJson()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -42,7 +42,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
 
   /// PUT /api/organizations/:id — plain JSON, metadata only. Never touches the logo.
   Future<OrganizationResponse> updateOrganization(String id, OrganizationUpdateRequest request) async {
-    final response = await apiClient.put('organizations/$id', data: request.toJson());
+    final response = await send(() => apiClient.put('organizations/$id', data: request.toJson()));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -57,7 +57,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
           filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
     });
 
-    final response = await apiClient.post('organizations/$id/logo', data: formData);
+    final response = await send(() => apiClient.post('organizations/$id/logo', data: formData));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -71,7 +71,7 @@ class OrganizationProvider extends BaseProvider<OrganizationResponse, String> {
           filename: 'logo.${_extensionFor(logoBytes)}', contentType: _contentTypeFor(logoBytes)),
     });
 
-    final response = await apiClient.put('organizations/$id/logo', data: formData);
+    final response = await send(() => apiClient.put('organizations/$id/logo', data: formData));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 

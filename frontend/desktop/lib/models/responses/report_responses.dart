@@ -84,6 +84,37 @@ class ReportBucket {
       );
 }
 
+/// One row of the Prodaja tab's per-organization breakdown. Sent only to a platform-wide caller;
+/// an organizer receives an empty list, since their whole report is already one organization's.
+class SalesByOrganizationRow {
+  final String organizationId;
+  final String name;
+  final int sold;
+  final double revenue;
+  final double averagePrice;
+
+  /// Share of the report's gross revenue, so the column sums to 100% across the rows.
+  final double sharePercent;
+
+  const SalesByOrganizationRow({
+    required this.organizationId,
+    required this.name,
+    required this.sold,
+    required this.revenue,
+    required this.averagePrice,
+    required this.sharePercent,
+  });
+
+  factory SalesByOrganizationRow.fromJson(Map<String, dynamic> json) => SalesByOrganizationRow(
+        organizationId: json['organizationId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        sold: json['sold'] as int? ?? 0,
+        revenue: _toDouble(json['revenue']),
+        averagePrice: _toDouble(json['averagePrice']),
+        sharePercent: _toDouble(json['sharePercent']),
+      );
+}
+
 class SalesReport {
   final ReportPeriod period;
   final String scope;
@@ -107,6 +138,10 @@ class SalesReport {
 
   final List<ReportBucket> buckets;
 
+  /// Empty for an organizer — the Prodaja tab omits the breakdown section entirely rather than
+  /// rendering a one-row table that restates the headline tiles.
+  final List<SalesByOrganizationRow> byOrganization;
+
   const SalesReport({
     required this.period,
     required this.scope,
@@ -121,6 +156,7 @@ class SalesReport {
     required this.onlineSold,
     required this.printedSold,
     required this.buckets,
+    required this.byOrganization,
   });
 
   factory SalesReport.fromJson(Map<String, dynamic> json) => SalesReport(
@@ -137,6 +173,7 @@ class SalesReport {
         onlineSold: json['onlineSold'] as int? ?? 0,
         printedSold: json['printedSold'] as int? ?? 0,
         buckets: _list(json['buckets'], ReportBucket.fromJson),
+        byOrganization: _list(json['byOrganization'], SalesByOrganizationRow.fromJson),
       );
 }
 

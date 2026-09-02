@@ -218,6 +218,13 @@ public class OrganizationService : IOrganizationService
         var extension = await OrganizationLogoValidation.DetectExtensionAsync(logo, ct);
         await _blobStorageService.UploadAsync(ContainerName, organization.LogoBlobName, logo.OpenReadStream(), ContentTypeFor(extension), ct);
 
+        // No column changed — only the blob's bytes did — but the row is still marked modified so
+        // the audit interceptor advances UpdatedAt. That timestamp is what BuildLogoUrl stamps
+        // into the URL, and it is the only thing that tells a client the image is not the one it
+        // already has cached. Without this save the replace is invisible until an app restart.
+        _organizationRepository.Update(organization);
+        await _unitOfWork.SaveChangesAsync(ct);
+
         return Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
@@ -350,6 +357,12 @@ public class OrganizationService : IOrganizationService
     private OrganizationResponse ToResponse(Organization organization) =>
         organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
 
+    // Version-stamped: a logo replace reuses the same blob key, so without this the URL never
+    // changes and every client keeps serving the old image from cache. See BlobUrlVersioning.
     private string? BuildLogoUrl(Organization organization) =>
-        organization.LogoBlobName is null ? null : _blobStorageService.GetPublicUrl(ContainerName, organization.LogoBlobName);
+        organization.LogoBlobName is null
+            ? null
+            : BlobUrlVersioning.WithVersion(
+                _blobStorageService.GetPublicUrl(ContainerName, organization.LogoBlobName),
+                organization.UpdatedAt);
 }

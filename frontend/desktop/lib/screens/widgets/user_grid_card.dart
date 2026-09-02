@@ -143,6 +143,9 @@ class _UserGridCardState extends State<UserGridCard> {
                         icon: LucideIcons.building2,
                         text: u.organizationName!,
                         color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        // The one free-text badge here, and the only one that can grow without
+                        // bound — capped so it takes at most one Wrap run of its own.
+                        maxWidth: 150,
                       ),
                   ],
                 ),
@@ -262,31 +265,44 @@ class _Badge extends StatelessWidget {
   final String text;
   final Color color;
 
-  const _Badge({this.icon, required this.text, required this.color});
+  /// Caps how wide this badge may grow. Free-text badges (an organization name) pass one —
+  /// without it a long name makes the badge as wide as its text, pushing the enclosing Wrap onto
+  /// an extra run and overflowing the card's fixed height. Fixed-vocabulary badges (role, active
+  /// state) leave it null: their text is short and known, and clipping them would lose meaning.
+  final double? maxWidth;
+
+  const _Badge({this.icon, required this.text, required this.color, this.maxWidth});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.18 : 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 3),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth ?? double.infinity),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.18 : 0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 11, color: color),
+              const SizedBox(width: 3),
+            ],
+            // Flexible, not a bare Text — ellipsis only engages once the Text has a bounded
+            // width to be measured against, which maxWidth above is what supplies.
+            Flexible(
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
-          Text(
-            text,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+        ),
       ),
     );
   }
