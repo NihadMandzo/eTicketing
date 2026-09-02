@@ -198,11 +198,13 @@
 
             <label class="field">
               <span class="field-label">Nova lozinka</span>
-              <input type="password" formControlName="newPassword" class="field-input" autocomplete="new-password"
-                [class.field-input-invalid]="passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched" />
-              @if (passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched) {
-                <span class="field-error">Lozinka mora imati najmanje 8 karaktera i sadržavati veliko slovo, malo slovo, cifru i specijalni znak.</span>
-              }
+@if (passwordForm.controls.newPassword.touched) {
+  @if (passwordForm.controls.newPassword.hasError('required')) {
+    <span class="field-error">Lozinka je obavezna.</span>
+  } @else if (passwordForm.controls.newPassword.hasError('passwordStrength')) {
+    <span class="field-error">Lozinka mora imati najmanje 8 karaktera i sadržavati veliko slovo, malo slovo, cifru i specijalni znak.</span>
+  }
+}
             </label>
 
             <label class="field">
