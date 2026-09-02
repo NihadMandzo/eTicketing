@@ -32,8 +32,9 @@ class _MainShellState extends State<MainShell> {
   late UserProfile _user;
 
   /// Only an organization has exports of its own — platform staff would poll an
-  /// endpoint that always answers with an empty list.
-  static const _exportRoles = {'OrganizationAdmin', 'OrganizationSuperAdmin'};
+  /// endpoint that always answers with an empty list. See [ExportNotifications.roles],
+  /// which [AppHeader] reads too so the bell and the polling agree on who this is for.
+  bool get _hasExports => ExportNotifications.roles.contains(_user.roleName);
 
   @override
   void initState() {
@@ -42,7 +43,7 @@ class _MainShellState extends State<MainShell> {
 
     // Starts the background watch for finished ticket exports, so a batch the
     // organizer left rendering still reaches them wherever they are in the app.
-    if (_exportRoles.contains(_user.roleName)) {
+    if (_hasExports) {
       exportNotifications.start();
     }
   }

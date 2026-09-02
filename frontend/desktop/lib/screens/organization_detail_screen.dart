@@ -10,12 +10,11 @@ import '../models/search_objects/base_search_object.dart';
 import '../models/search_objects/organization_user_search_object.dart';
 import '../providers/organization_products_provider.dart';
 import '../providers/organization_provider.dart';
-import '../providers/product_provider.dart';
 import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/confirm_dialog.dart';
 import 'widgets/entity_avatar.dart';
 import 'widgets/organization_upsert_dialog.dart';
+import 'widgets/product_delete_helper.dart';
 import 'widgets/pagination_bar.dart';
 import 'widgets/paginated_screen_body.dart';
 import 'widgets/product_upsert_dialog.dart';
@@ -130,22 +129,11 @@ class _OrganizationDetailScreenState extends State<OrganizationDetailScreen>
     );
   }
 
+  /// Delegates to the shared confirm -> delete -> report sequence rather than repeating it, so
+  /// this screen and ProductsScreen cannot drift on wording or on whether they report anything.
   Future<void> _deleteProduct(ProductResponse product) async {
-    final confirmed = await ConfirmDialog.show(
-      context,
-      title: 'Obriši proizvod',
-      message: 'Da li ste sigurni da želite obrisati proizvod "${product.name}"?',
-      confirmLabel: 'Obriši',
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await ProductProvider().delete(product.id);
-      if (mounted) await _loadProducts();
-    } catch (e) {
-      if (mounted) handleApiError(e);
-    }
+    final deleted = await confirmAndDeleteProduct(context, product);
+    if (deleted && mounted) await _loadProducts();
   }
 
   /// All of the organization's users (both OrganizationSuperAdmin and

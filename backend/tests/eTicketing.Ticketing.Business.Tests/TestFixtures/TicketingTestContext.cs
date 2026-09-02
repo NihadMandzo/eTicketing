@@ -145,6 +145,11 @@ public sealed class TicketingTestContext : IDisposable
     public IProductChangeNotifier CreateProductChangeNotifier() =>
         new ProductChangeNotifier(TicketRepository, EventPublisher.Object, PlatformClock, NullLogger<ProductChangeNotifier>.Instance);
 
+    public IProductDeletionNotifier CreateProductDeletionNotifier() =>
+        new ProductDeletionNotifier(
+            TicketRepository, IdentityClient.Object, EventPublisher.Object, PlatformClock,
+            NullLogger<ProductDeletionNotifier>.Instance);
+
     /// <summary>Records what the service asked to render without doing any of it, so a print test
     /// can assert on the queue hand-off and drive the renderer itself when it wants to.</summary>
     public RecordingTicketPrintQueue PrintQueue { get; } = new();

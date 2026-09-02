@@ -281,6 +281,9 @@ public class TicketPrintRendererTests : IDisposable
                 _productId, _organizationId, PublishStatus.Published, mode,
                 name, new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc), City.Sarajevo));
 
+    /// Next unused stub number for _productId, so successive SeedBatchAsync calls don't reuse one.
+    private int _nextSerial = 1;
+
     private async Task<TicketPrintBatch> SeedBatchAsync(
         int ticketCount,
         TicketPrintBatchStatus status = TicketPrintBatchStatus.Queued,
@@ -299,6 +302,13 @@ public class TicketPrintRendererTests : IDisposable
         };
         _fixture.DbContext.Sectors.Add(sector);
 
+        // Serial numbers run per product and never restart, so a second batch continues where the
+        // first stopped (see TicketPrintBatch.SerialFrom/SerialTo). Seeding every batch from 1
+        // collided with the unique (ProductId, SerialNumber) index the moment a test seeded two —
+        // which RecoverUnfinishedAsync_LeavesFinishedBatchesAlone does.
+        var firstSerial = _nextSerial;
+        _nextSerial += ticketCount;
+
         var batchId = Guid.NewGuid();
         var batch = new TicketPrintBatch
         {
@@ -309,8 +319,8 @@ public class TicketPrintRendererTests : IDisposable
             ProductName = "Ljetni Festival",
             Status = status,
             TicketCount = ticketCount,
-            SerialFrom = ticketCount == 0 ? 0 : 1,
-            SerialTo = ticketCount,
+            SerialFrom = ticketCount == 0 ? 0 : firstSerial,
+            SerialTo = firstSerial + ticketCount - 1,
             NominalValue = 80 * ticketCount,
             ValidDate = validDate,
             CompletedAt = status is TicketPrintBatchStatus.Ready or TicketPrintBatchStatus.Failed
@@ -319,10 +329,10 @@ public class TicketPrintRendererTests : IDisposable
         };
         _fixture.DbContext.TicketPrintBatches.Add(batch);
 
-        for (var i = 1; i <= ticketCount; i++)
+        for (var i = 0; i < ticketCount; i++)
         {
             _fixture.DbContext.Tickets.Add(
-                Ticket.ForPrint(sector.Id, null, batchId, _productId, 80, i, validDate));
+                Ticket.ForPrint(sector.Id, null, batchId, _productId, 80, firstSerial + i, validDate));
         }
 
         await _fixture.DbContext.SaveChangesAsync();

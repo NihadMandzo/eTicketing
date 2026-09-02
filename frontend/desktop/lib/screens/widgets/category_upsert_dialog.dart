@@ -155,6 +155,9 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess(_isEditing
+            ? 'Kategorija je uspješno ažurirana.'
+            : 'Kategorija je uspješno kreirana.');
       }
     } catch (e) {
       if (mounted) {

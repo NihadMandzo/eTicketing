@@ -166,6 +166,67 @@ public class NotificationDispatcherTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task DispatchAsync_ForProductDeletedToABuyer_NamesTheRefundContact()
+    {
+        var evt = new ProductDeletedNotification(
+            Guid.NewGuid(), "Ljetni Festival", "ana@example.com", ProductDeletedAudience.Buyer,
+            new DateTime(2026, 10, 12, 20, 0, 0, DateTimeKind.Utc),
+            "Sarajevo Events", "kontakt@sarajevo-events.ba", "+387 33 123 456", TicketCount: 2);
+
+        await _sut.DispatchAsync(EventNames.ProductDeletedNotification, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "ana@example.com"
+                && m.Subject.Contains("Otkazano")
+                && m.HtmlBody.Contains("Ljetni Festival")
+                && m.HtmlBody.Contains("12.10.2026. 20:00")
+                && m.HtmlBody.Contains("kontakt@sarajevo-events.ba")
+                && m.HtmlBody.Contains("+387 33 123 456")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForProductDeletedToTheOrganization_ReportsHowManyBuyersWereTold()
+    {
+        var evt = new ProductDeletedNotification(
+            Guid.NewGuid(), "Ljetni Festival", "emir@sarajevo-events.ba", ProductDeletedAudience.Organizer,
+            null, "Sarajevo Events", "kontakt@sarajevo-events.ba", "+387 33 123 456", TicketCount: 7);
+
+        await _sut.DispatchAsync(EventNames.ProductDeletedNotification, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "emir@sarajevo-events.ba"
+                && m.Subject.Contains("uklonjen")
+                && m.HtmlBody.Contains("7")
+                // The organizer is told buyers were contacted automatically, so they don't send a
+                // second round of apologies to the same people.
+                && m.HtmlBody.Contains("automatski")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForProductDeletedWithNoContactOnFile_OmitsTheContactLinesEntirely()
+    {
+        // Identity was unreachable when Ticketing fanned this out. The cancellation still has to
+        // go, and an empty "Email:" line would look like a bug to the buyer.
+        var evt = new ProductDeletedNotification(
+            Guid.NewGuid(), "Ljetni Festival", "ana@example.com", ProductDeletedAudience.Buyer,
+            null, "Organizator", null, null, TicketCount: 1);
+
+        await _sut.DispatchAsync(EventNames.ProductDeletedNotification, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "ana@example.com"
+                && !m.HtmlBody.Contains("Email:")
+                && !m.HtmlBody.Contains("Telefon:")
+                && m.HtmlBody.Contains("Organizator")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static TicketPdfReady TicketPdfReadyEvent(int ticketCount)
     {
         var orderId = Guid.NewGuid();

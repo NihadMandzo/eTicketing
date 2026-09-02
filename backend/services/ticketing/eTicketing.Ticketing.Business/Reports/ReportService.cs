@@ -64,6 +64,7 @@ public class ReportService : IReportService
         var previousGross = previousDaily.Values.Sum(d => d.Revenue);
 
         var scope = await ResolveScopeLabelAsync(access.OrganizationId, ct);
+        var byOrganization = await BuildSalesByOrganizationAsync(access.OrganizationId, range, gross, ct);
 
         return new SalesReportResponse(
             Period: range.ToPeriod(),
@@ -80,7 +81,51 @@ public class ReportService : IReportService
             NetRevenue: gross - cancelledAmount,
             OnlineSold: onlineSold,
             PrintedSold: printedSold,
-            Buckets: BuildBuckets(range, daily));
+            Buckets: BuildBuckets(range, daily),
+            ByOrganization: byOrganization);
+    }
+
+    /// <summary>
+    /// Splits the Prodaja tab's headline revenue by owning organization, for a platform-wide
+    /// caller only. An organizer's report is already one organization's, so the breakdown would
+    /// be a single row repeating the totals above it — they get an empty list and the UI drops
+    /// the section.
+    ///
+    /// <para><paramref name="gross"/> is passed in rather than recomputed so the shares are a
+    /// share of the very number the tiles and the chart display. Recomputing it here from the
+    /// same repository would be one more place for the two to drift.</para>
+    /// </summary>
+    private async Task<IReadOnlyList<SalesByOrganizationRow>> BuildSalesByOrganizationAsync(
+        Guid? organizationId, ReportRange range, decimal gross, CancellationToken ct)
+    {
+        if (organizationId is not null)
+            return [];
+
+        var facts = await _tickets.GetOrganizationSalesAsync(range.FromUtc, range.ToUtcExclusive, ct);
+        if (facts.Count == 0)
+            return [];
+
+        var organizations = await ResolveOrganizationsAsync(facts.Select(f => f.OrganizationId), ct);
+
+        return
+        [
+            .. facts
+                .Select(fact =>
+                {
+                    organizations.TryGetValue(fact.OrganizationId, out var organization);
+                    return new SalesByOrganizationRow(
+                        OrganizationId: fact.OrganizationId,
+                        // Same fallback as the Organizacije tab: an organization Identity no
+                        // longer knows about still owns real sales, and dropping the row would
+                        // silently unbalance the totals.
+                        Name: organization?.Name ?? "Nepoznata organizacija",
+                        Sold: fact.Sold,
+                        Revenue: fact.Revenue,
+                        AveragePrice: Divide(fact.Revenue, fact.Sold),
+                        SharePercent: Round2(Divide(fact.Revenue, gross) * 100m));
+                })
+                .OrderByDescending(row => row.Revenue)
+        ];
     }
 
     public async Task<Result<ProductReportResponse>> GetProductsAsync(

@@ -624,6 +624,101 @@ public class TicketPrintServiceTests : IDisposable
         return ticketType;
     }
 
+    // ------------------------------------------------------------------------------------ dismiss
+
+    [Theory]
+    [InlineData(TicketPrintBatchStatus.Failed)]
+    [InlineData(TicketPrintBatchStatus.Expired)]
+    [InlineData(TicketPrintBatchStatus.Ready)]
+    [InlineData(TicketPrintBatchStatus.Queued)]
+    public async Task DismissAsync_RemovesTheBatchFromTheOutstandingBadge(TicketPrintBatchStatus status)
+    {
+        // Failed and Expired are the cases that motivated this: before DismissedAt existed a row
+        // left the badge only as a side effect of a completed download, so neither could ever be
+        // cleared by any action available to the organizer.
+        var batch = await SeedBatchAsync(status);
+        (await _sut.GetOutstandingAsync(Organizer())).Value.Should().ContainSingle();
+
+        var result = await _sut.DismissAsync(batch.Id, Organizer());
+
+        result.IsSuccess.Should().BeTrue();
+        (await _sut.GetOutstandingAsync(Organizer())).Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DismissAsync_KeepsTheBatchAndItsTicketsOnRecord()
+    {
+        // Dismissing clears a notification; it is not a delete. The serial range and nominal value
+        // are what the organizer is accountable for once paper leaves the printer.
+        var sector = await SeedSectorAsync("VIP", capacity: 200, price: 80);
+        var batch = await SeedBatchAsync(TicketPrintBatchStatus.Ready);
+        _fixture.DbContext.Tickets.Add(Ticket.ForPrint(sector.Id, null, batch.Id, _productId, 80m, serialNumber: 1, null));
+        await _fixture.DbContext.SaveChangesAsync();
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        await _sut.DismissAsync(batch.Id, Organizer());
+
+        var stored = await _fixture.DbContext.TicketPrintBatches.AsNoTracking()
+            .SingleAsync(b => b.Id == batch.Id);
+        stored.DismissedAt.Should().NotBeNull();
+        stored.SerialFrom.Should().Be(1);
+        stored.SerialTo.Should().Be(3);
+        stored.NominalValue.Should().Be(240);
+        _fixture.DbContext.Tickets.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DismissAsync_ForAnotherOrganizationsBatch_ReturnsForbidden()
+    {
+        var batch = await SeedBatchAsync(TicketPrintBatchStatus.Ready);
+
+        var result = await _sut.DismissAsync(batch.Id, Organizer(organizationId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("print.forbidden");
+
+        var stored = await _fixture.DbContext.TicketPrintBatches.AsNoTracking()
+            .SingleAsync(b => b.Id == batch.Id);
+        stored.DismissedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_ForUnknownBatch_ReturnsNotFound()
+    {
+        var result = await _sut.DismissAsync(Guid.NewGuid(), Organizer());
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("print.batch_not_found");
+    }
+
+    [Fact]
+    public async Task DismissAsync_CalledTwice_IsIdempotentAndKeepsTheFirstTimestamp()
+    {
+        var batch = await SeedBatchAsync(TicketPrintBatchStatus.Failed);
+        await _sut.DismissAsync(batch.Id, Organizer());
+        var first = (await _fixture.DbContext.TicketPrintBatches.AsNoTracking()
+            .SingleAsync(b => b.Id == batch.Id)).DismissedAt;
+
+        var result = await _sut.DismissAsync(batch.Id, Organizer());
+
+        result.IsSuccess.Should().BeTrue();
+        (await _fixture.DbContext.TicketPrintBatches.AsNoTracking()
+            .SingleAsync(b => b.Id == batch.Id)).DismissedAt.Should().Be(first);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_ForAnExpiredBatch_ReportsItIsNotReadyRatherThanOfferingTheFile()
+    {
+        // The sweep moves a stale Ready batch to Expired, so the badge stops offering "Preuzmi"
+        // on a file that is already gone.
+        var batch = await SeedBatchAsync(TicketPrintBatchStatus.Expired);
+
+        var result = await _sut.DownloadAsync(batch.Id, Organizer());
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("print.not_ready");
+    }
+
     private async Task<TicketPrintBatch> SeedBatchAsync(TicketPrintBatchStatus status, string? error = null)
     {
         var batch = new TicketPrintBatch

@@ -67,6 +67,25 @@ public sealed record ReportPeriod(DateOnly From, DateOnly To, int Days, ReportBu
 public sealed record ReportBucket(string Label, decimal Revenue, int Sold);
 
 /// <summary>
+/// One row of the Prodaja tab's per-organization breakdown. Populated only for a platform-wide
+/// caller — an organizer's report is already scoped to a single organization, so breaking it down
+/// by organization would be one row restating the headline totals.
+///
+/// <para>Lists the organizations that <i>sold something in the range</i>, not every organization
+/// on the platform: this is a breakdown of the revenue reported above it, so its rows must sum to
+/// that revenue. The Organizacije tab is the one that answers "how is every organization doing",
+/// and it drives its row set from Catalog's product stats for exactly that reason.</para>
+/// </summary>
+public sealed record SalesByOrganizationRow(
+    Guid OrganizationId,
+    string Name,
+    int Sold,
+    decimal Revenue,
+    decimal AveragePrice,
+    // Share of GrossRevenue, so the column sums to 100% across the rows.
+    decimal SharePercent);
+
+/// <summary>
 /// The Prodaja tab. Cancelled tickets are reported alongside the gross figure rather than
 /// subtracted from it: <paramref name="GrossRevenue"/> is what was sold, and
 /// <paramref name="NetRevenue"/> is what is left after cancellations, so both numbers are visible
@@ -89,7 +108,10 @@ public sealed record SalesReportResponse(
     // TicketsSold is (Confirmed/Ready/Used only). OnlineSold + PrintedSold == TicketsSold.
     int OnlineSold,
     int PrintedSold,
-    IReadOnlyList<ReportBucket> Buckets);
+    IReadOnlyList<ReportBucket> Buckets,
+    // Empty for an organizer (see SalesByOrganizationRow). The UI omits the section rather than
+    // rendering an empty table.
+    IReadOnlyList<SalesByOrganizationRow> ByOrganization);
 
 /// <summary>One row of the Dashboard's "Nadolazeći događaji" card — a published SingleOccurrence
 /// product with a future date. <paramref name="Meta"/> is the small second line: "{organization} ·

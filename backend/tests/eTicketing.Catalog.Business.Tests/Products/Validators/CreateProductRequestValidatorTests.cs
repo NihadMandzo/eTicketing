@@ -106,6 +106,30 @@ public class CreateProductRequestValidatorTests
         result.IsValid.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(10000)]
+    public async Task Validate_WithDescriptionUpToMaxLength_Passes(int length)
+    {
+        var request = ValidRequest() with { Description = new string('a', length) };
+
+        var result = await _validator.ValidateAsync(request);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WithDescriptionOverMaxLength_Fails()
+    {
+        var request = ValidRequest() with { Description = new string('a', 10001) };
+
+        var result = await _validator.ValidateAsync(request);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(UpsertProductRequest.Description));
+    }
+
     [Fact]
     public async Task Validate_WithInvalidCityEnumValue_Fails()
     {

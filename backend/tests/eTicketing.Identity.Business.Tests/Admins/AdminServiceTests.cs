@@ -166,6 +166,67 @@ public class AdminServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateAsync_AlwaysCreatesTheAdminRole_NotTheRequestersOrADefault()
+    {
+        // RoleType has no 0 member (SuperAdmin is 1), and CreateAdminRequest carries no Role
+        // field — the role comes solely from AdminMappingConfig's `Map(dest => dest.Role,
+        // src => RoleType.Admin)`. Asserted against the entity rather than the response so a
+        // broken mapping can't be hidden by a response-side default.
+        var created = await _sut.CreateAsync(new CreateAdminRequest
+        {
+            FirstName = "Role",
+            LastName = "Pinned",
+            Email = "role.pinned@example.com",
+            Username = "rolepinned",
+            Password = "SuperSecret123"
+        });
+
+        created.IsSuccess.Should().BeTrue();
+
+        var stored = await _fixture.UserRepository.GetByIdAsync(created.Value!.Id);
+        stored!.Role.Should().Be(RoleType.Admin);
+        stored.OrganizationId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithDuplicateEmail_ReturnsConflict()
+    {
+        await SeedUserAsync(RoleType.Admin, "taken@example.com");
+
+        var result = await _sut.CreateAsync(new CreateAdminRequest
+        {
+            FirstName = "Dup",
+            LastName = "Email",
+            Email = "taken@example.com",
+            Username = "uniqueusername",
+            Password = "SuperSecret123"
+        });
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error!.Code.Should().Be("user.already_exists");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithDuplicateUsername_ReturnsConflict()
+    {
+        // SeedUserAsync derives the username from the local part of the email, so this collides
+        // on Username while leaving Email free.
+        await SeedUserAsync(RoleType.Admin, "existinguser@example.com");
+
+        var result = await _sut.CreateAsync(new CreateAdminRequest
+        {
+            FirstName = "Dup",
+            LastName = "Username",
+            Email = "different.address@example.com",
+            Username = "existinguser",
+            Password = "SuperSecret123"
+        });
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error!.Code.Should().Be("user.already_exists");
+    }
+
+    [Fact]
     public async Task UpdateAsync_WithValidRequest_UpdatesProfileFields()
     {
         var admin = await SeedUserAsync(RoleType.Admin, "update.me@example.com");

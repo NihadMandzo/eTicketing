@@ -31,6 +31,9 @@ public static class OrganizationEndpoints
         // Catalog's /internal/products/* routes: no Gateway route points here, so it is reachable
         // only from inside the compose network (see .claude/rules/01-domain.md).
         app.MapPost("/internal/organizations/by-ids", GetInternalByIds).WithTags("Organizations (internal)");
+        // GET by id, not POST: one organization, and the id fits a route segment comfortably —
+        // the by-ids route above is a POST only because its id list is unbounded.
+        app.MapGet("/internal/organizations/{id:guid}/contact", GetInternalContact).WithTags("Organizations (internal)");
 
         group.MapGet("/{id:guid}/users", GetUsers).RequireAuthorization("Organizer").WithValidation<OrganizationUserQuery>();
         group.MapPost("/{id:guid}/users", AddUser).RequireAuthorization("Organizer").WithValidation<AddOrganizationUserRequest>();
@@ -53,6 +56,12 @@ public static class OrganizationEndpoints
     private static async Task<IResult> GetInternalByIds(List<Guid> ids, IOrganizationService service, CancellationToken ct)
     {
         var result = await service.GetInternalByIdsAsync(ids, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetInternalContact(Guid id, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.GetInternalContactAsync(id, ct);
         return result.ToHttpResult();
     }
 

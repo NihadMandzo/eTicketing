@@ -11,8 +11,8 @@ public class ResetPasswordRequestValidatorTests
     private static ResetPasswordRequest ValidRequest() => new()
     {
         Token = "some-raw-token",
-        NewPassword = "BrandNewPassword123",
-        ConfirmPassword = "BrandNewPassword123"
+        NewPassword = "BrandNewPassword123!",
+        ConfirmPassword = "BrandNewPassword123!"
     };
 
     [Fact]
@@ -38,7 +38,7 @@ public class ResetPasswordRequestValidatorTests
     [Fact]
     public void ConfirmPassword_NotMatching_Fails()
     {
-        _validator.TestValidate(ValidRequest() with { ConfirmPassword = "SomethingElse123" })
+        _validator.TestValidate(ValidRequest() with { ConfirmPassword = "SomethingElse123!" })
             .ShouldHaveValidationErrorFor(x => x.ConfirmPassword);
     }
 }

@@ -39,6 +39,62 @@ public class OrganizationInternalLookupTests : IDisposable
         return created.Value!.Id;
     }
 
+    // ── GET /internal/organizations/{id}/contact ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetInternalContactAsync_ReturnsTheOrganizationsOwnContactDetails()
+    {
+        // Who eTicketing.Ticketing points a buyer at for a refund when their event is deleted:
+        // the organizer took the payment, so the organizer issues the refund.
+        var id = await SeedOrganizationAsync("Sunset Events", "Kralja Petra 1, Mostar");
+
+        var result = await _sut.GetInternalContactAsync(id);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Name.Should().Be("Sunset Events");
+        result.Value.Email.Should().Be("info@sunsetevents.example.com");
+        result.Value.PhoneNumber.Should().Be("+387 61 000 000");
+    }
+
+    [Fact]
+    public async Task GetInternalContactAsync_ReturnsTheOrganizationSuperAdminsAddress()
+    {
+        // The account that hears "platform staff removed your product". CreateAsync always makes
+        // the organization's first user its OrganizationSuperAdmin.
+        var id = await SeedOrganizationAsync("Sunset Events", "Kralja Petra 1, Mostar");
+
+        var result = await _sut.GetInternalContactAsync(id);
+
+        result.Value!.SuperAdminEmail.Should().Be("admin@sunsetevents.example.com");
+    }
+
+    [Fact]
+    public async Task GetInternalContactAsync_ForAnUnknownId_ReturnsNotFound()
+    {
+        // The caller treats this as "send the cancellation without a contact block", not as a
+        // failure — an organization deleted between the product delete and this lookup must not
+        // stop buyers being told their event is off.
+        var result = await _sut.GetInternalContactAsync(Guid.NewGuid());
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("organization.not_found");
+    }
+
+    [Fact]
+    public async Task GetInternalContactAsync_DoesNotLeakContactDetailsIntoTheReportsLookup()
+    {
+        // The two internal shapes are deliberately separate: OrganizationInternalResponse labels
+        // report rows and has no business carrying an email address. Pinned so a future "just add
+        // one field" doesn't quietly widen it.
+        var id = await SeedOrganizationAsync("Sunset Events", "Kralja Petra 1, Mostar");
+
+        var reportRow = (await _sut.GetInternalByIdsAsync([id])).Value!.Single();
+
+        typeof(OrganizationInternalResponse).GetProperty("Email").Should().BeNull();
+        typeof(OrganizationInternalResponse).GetProperty("PhoneNumber").Should().BeNull();
+        reportRow.Name.Should().Be("Sunset Events");
+    }
+
     [Fact]
     public async Task GetInternalByIdsAsync_ReturnsNameAndAddressForEachKnownId()
     {

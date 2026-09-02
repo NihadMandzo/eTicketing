@@ -1,6 +1,7 @@
 import '../core/api_client.dart';
 import '../models/api_error.dart';
 import 'api_exception.dart';
+import 'base_provider.dart';
 
 /// GET /api/products/organization-ids?categoryIds=1,2,3 — resolves the
 /// organization ids that have products in the given categories (any status),
@@ -9,10 +10,10 @@ import 'api_exception.dart';
 /// rather than extending BaseProvider.
 class ProductOrganizationIdsProvider {
   Future<List<String>> getOrganizationIds({required List<int> categoryIds}) async {
-    final response = await apiClient.get(
-      'products/organization-ids',
-      queryParameters: {'categoryIds': categoryIds.join(',')},
-    );
+    final response = await sendRequest(() => apiClient.get(
+          'products/organization-ids',
+          queryParameters: {'categoryIds': categoryIds.join(',')},
+        ));
 
     if (response.statusCode == null || response.statusCode! < 200 || response.statusCode! >= 300) {
       ApiError apiError;

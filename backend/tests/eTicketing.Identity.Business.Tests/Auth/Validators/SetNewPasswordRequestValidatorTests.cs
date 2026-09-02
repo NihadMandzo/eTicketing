@@ -10,8 +10,8 @@ public class SetNewPasswordRequestValidatorTests
 
     private static SetNewPasswordRequest ValidRequest() => new()
     {
-        NewPassword = "BrandNewPassword123",
-        ConfirmPassword = "BrandNewPassword123"
+        NewPassword = "BrandNewPassword123!",
+        ConfirmPassword = "BrandNewPassword123!"
     };
 
     [Fact]
@@ -30,7 +30,7 @@ public class SetNewPasswordRequestValidatorTests
     [Fact]
     public void ConfirmPassword_NotMatching_Fails()
     {
-        _validator.TestValidate(ValidRequest() with { ConfirmPassword = "SomethingElse123" })
+        _validator.TestValidate(ValidRequest() with { ConfirmPassword = "SomethingElse123!" })
             .ShouldHaveValidationErrorFor(x => x.ConfirmPassword);
     }
 }

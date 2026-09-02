@@ -35,14 +35,14 @@ public class ProductUpdateNotificationTests : IDisposable
     {
         var id = await CreatePublishedAsync();
 
-        await _sut.UpdateAsync(id, Request() with { Date = new DateTime(2026, 9, 2, 20, 0, 0, DateTimeKind.Utc) }, Caller());
+        await _sut.UpdateAsync(id, Request() with { Date = MovedDate }, Caller());
 
         VerifyPublished(e =>
             e.ProductId == id
             && e.Changes.Count == 1
             && e.Changes[0].Field == "Datum i vrijeme"
-            && e.Changes[0].OldValue == "01.09.2026. 20:00"
-            && e.Changes[0].NewValue == "02.09.2026. 20:00");
+            && e.Changes[0].OldValue == Formatted(BaseDate)
+            && e.Changes[0].NewValue == Formatted(MovedDate));
     }
 
     [Fact]
@@ -169,11 +169,29 @@ public class ProductUpdateNotificationTests : IDisposable
         return created.Value.Id;
     }
 
+    /// <summary>
+    /// Relative to now, not a literal date. ProductService.ValidateAsync rejects
+    /// <c>Date &lt;= DateTime.UtcNow</c> against the real clock (it takes no injectable clock), so a
+    /// hardcoded date is a time bomb: this suite used <c>2026-09-01 20:00Z</c> and every test in it
+    /// began failing with a NullReferenceException the moment that timestamp passed, because
+    /// CreateAsync started returning a failure and <c>created.Value</c> was null.
+    /// </summary>
+    private static readonly DateTime BaseDate =
+        new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, 20, 0, 0, DateTimeKind.Utc)
+            .AddDays(30);
+
+    /// <summary>Where UpdateAsync_...WithAChangedDate moves it to — a day later, still future.</summary>
+    private static readonly DateTime MovedDate = BaseDate.AddDays(1);
+
+    /// <summary>Mirrors ProductChangeDetector.FormatDate, so the assertion still pins the exact
+    /// display format rather than just agreeing with whatever the detector produced.</summary>
+    private static string Formatted(DateTime date) => date.ToString("dd.MM.yyyy. HH:mm");
+
     private UpsertProductRequest Request() => new()
     {
         Name = "Ljetni Festival",
         Description = "Opis festivala",
-        Date = new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc),
+        Date = BaseDate,
         CategoryId = _music.Id,
         Latitude = 43.8563,
         Longitude = 18.4131,

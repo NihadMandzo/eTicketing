@@ -191,6 +191,9 @@ class _SectorUpsertDialogState extends State<SectorUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess(_isEditing
+            ? 'Sektor je uspješno ažuriran.'
+            : 'Sektor je uspješno kreiran.');
       }
     } catch (e) {
       if (mounted) {

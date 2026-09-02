@@ -27,4 +27,19 @@ public class HttpIdentityClient : IIdentityClient
 
         return await response.Content.ReadFromJsonAsync<List<IdentityOrganizationResponse>>(cancellationToken: ct) ?? [];
     }
+
+    public async Task<IdentityOrganizationContactResponse?> GetOrganizationContactAsync(
+        Guid organizationId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetAsync($"/internal/organizations/{organizationId}/contact", ct);
+
+        // 404 is an answer, not a failure: an organization deleted between the product delete and
+        // this lookup means there is no contact to print, which the caller handles. Anything else
+        // is a real fault and should surface.
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<IdentityOrganizationContactResponse>(cancellationToken: ct);
+    }
 }

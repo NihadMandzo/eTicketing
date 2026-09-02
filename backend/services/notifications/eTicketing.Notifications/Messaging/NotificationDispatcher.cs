@@ -46,6 +46,7 @@ public sealed class NotificationDispatcher
         EventNames.AdminPasswordChanged => HandleAdminPasswordChangedAsync(body, ct),
         EventNames.TicketPdfReady => HandleTicketPdfReadyAsync(body, ct),
         EventNames.ProductChanged => HandleProductChangedAsync(body, ct),
+        EventNames.ProductDeletedNotification => HandleProductDeletedAsync(body, ct),
         _ => throw new PoisonMessageException($"Nepoznat routing key: {routingKey}")
     };
 
@@ -175,6 +176,29 @@ public sealed class NotificationDispatcher
         var message = new EmailMessageBuilder()
             .WithTo(evt.RecipientEmail)
             .WithTemplate(EmailTemplate.ProductChanged, data)
+            .Build();
+
+        await _emailSender.SendAsync(message, ct);
+    }
+
+    private async Task HandleProductDeletedAsync(ReadOnlyMemory<byte> body, CancellationToken ct)
+    {
+        var evt = Deserialize<ProductDeletedNotification>(body, EventNames.ProductDeletedNotification);
+        _logger.LogInformation(
+            "Šaljem obavještenje o brisanju proizvoda {ProductId} ({Audience}).", evt.ProductId, evt.Audience);
+
+        var data = new ProductDeletedData(
+            evt.ProductName,
+            evt.Audience,
+            evt.ProductDate,
+            evt.OrganizerName,
+            evt.OrganizerEmail,
+            evt.OrganizerPhone,
+            evt.TicketCount);
+
+        var message = new EmailMessageBuilder()
+            .WithTo(evt.RecipientEmail)
+            .WithTemplate(EmailTemplate.ProductDeleted, data)
             .Build();
 
         await _emailSender.SendAsync(message, ct);

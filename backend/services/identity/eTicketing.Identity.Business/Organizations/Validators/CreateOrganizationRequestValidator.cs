@@ -1,3 +1,4 @@
+using eTicketing.Identity.Business.Shared.Validators;
 using FluentValidation;
 
 namespace eTicketing.Identity.Business.Organizations.Validators;
@@ -20,7 +21,7 @@ public class CreateOrganizationRequestValidator : AbstractValidator<CreateOrgani
         RuleFor(x => x.AdminLastName).NotEmpty().Length(2, 100);
         RuleFor(x => x.AdminEmail).NotEmpty().EmailAddress().MaximumLength(255);
         RuleFor(x => x.AdminUsername).NotEmpty().Length(3, 50);
-        RuleFor(x => x.AdminPassword).NotEmpty().MinimumLength(8).MaximumLength(100);
+        RuleFor(x => x.AdminPassword).Password();
     }
 
     private static bool BeAValidUrl(string? url) =>

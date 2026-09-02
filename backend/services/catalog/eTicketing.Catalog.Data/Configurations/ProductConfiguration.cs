@@ -10,7 +10,10 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
     public void Configure(EntityTypeBuilder<Product> builder)
     {
         builder.Property(p => p.Name).HasMaxLength(200).IsRequired();
-        builder.Property(p => p.Description).HasMaxLength(2000);
+        // Above SQL Server's 4000-character nvarchar ceiling, so this maps to nvarchar(max) rather
+        // than nvarchar(10000) — the length still binds as a validation rule, it just isn't a
+        // column width any more. Kept in step with CreateProductRequestValidator.
+        builder.Property(p => p.Description).HasMaxLength(10000);
         builder.Property(p => p.OrganizationId).IsRequired();
 
         // Restrict, not Cascade: deleting a category that still has products referencing it

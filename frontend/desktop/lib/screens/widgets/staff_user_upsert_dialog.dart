@@ -69,6 +69,7 @@ class _StaffUserUpsertDialogState extends State<StaffUserUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess('Korisnik je uspješno ažuriran.');
       }
     } catch (e) {
       if (mounted) {

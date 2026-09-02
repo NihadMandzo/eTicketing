@@ -18,6 +18,13 @@ import '../providers/ticket_print_provider.dart';
 /// interval steps down to [_activeInterval] only while something is actually
 /// rendering, so an idle session costs one small request every half minute.
 class ExportNotifications {
+  /// The only roles this feature exists for. Platform staff (SuperAdmin/Admin) have no
+  /// organization of their own, so the endpoint always answers with an empty list — which is why
+  /// the shell does not poll for them and the header does not render the bell at all. Kept here,
+  /// rather than duplicated in main_shell.dart and app_header.dart, so the two can never disagree
+  /// about who this is for.
+  static const roles = {'OrganizationAdmin', 'OrganizationSuperAdmin'};
+
   static const _activeInterval = Duration(seconds: 5);
   static const _idleInterval = Duration(seconds: 30);
 

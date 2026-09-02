@@ -25,6 +25,7 @@ Future<bool> confirmAndDeleteProduct(BuildContext context, ProductResponse produ
 
   try {
     await ProductProvider().delete(product.id);
+    handleApiSuccess('Proizvod "${product.name}" je obrisan.');
     return true;
   } catch (e) {
     if (context.mounted) handleApiError(e);

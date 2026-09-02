@@ -5,12 +5,12 @@ import '../../models/requests/set_password_request.dart';
 import '../../providers/user_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../main.dart';
+import '../../utils/validators.dart';
 
 /// SuperAdmin directly sets a staff/organization account's password (no
 /// current password needed — see AdminService.SetPasswordAsync on the
-/// backend). Only length is validated here, matching SetPasswordRequestValidator
-/// exactly — deliberately not the stricter uppercase/digit/special-char regex
-/// used at org-creation time, since that backend validator doesn't enforce it.
+/// backend). Strength is checked by the shared [Validators.password], which mirrors the
+/// backend's shared `PasswordRules` — the same rule every password field in the app now uses.
 class SetStaffPasswordDialog extends StatefulWidget {
   final String userId;
   final String userFullName;
@@ -158,11 +158,7 @@ class _SetStaffPasswordDialogState extends State<SetStaffPasswordDialog> {
                               ),
                             ),
                             style: TextStyle(fontSize: 14, color: textPrimary),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return 'Nova lozinka je obavezna';
-                              if (v.length < 8 || v.length > 100) return 'Lozinka mora biti između 8 i 100 karaktera';
-                              return null;
-                            },
+                            validator: Validators.password,
                           ),
                           const SizedBox(height: 14),
                           Text('Potvrdite Lozinku *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),

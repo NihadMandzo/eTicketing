@@ -25,4 +25,14 @@ public static class EventNames
     /// <summary>eTicketing.Ticketing → eTicketing.Notifications. One event per distinct buyer
     /// email, already resolved — Notifications never has to ask anyone who the buyers are.</summary>
     public const string ProductChanged = "product-change.notification";
+
+    /// <summary>eTicketing.Catalog → eTicketing.Ticketing. Same hop as <see cref="ProductUpdated"/>
+    /// and for the same reason — Catalog deletes the product but has no idea who bought a ticket
+    /// for it.</summary>
+    public const string ProductDeleted = "product.deleted";
+
+    /// <summary>eTicketing.Ticketing → eTicketing.Notifications. One event per recipient
+    /// (each affected buyer, plus the organization itself when platform staff did the deleting),
+    /// address already resolved.</summary>
+    public const string ProductDeletedNotification = "product-deleted.notification";
 }

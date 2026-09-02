@@ -15,6 +15,7 @@ import '../../utility/image_validation.dart';
 import '../../utility/snackbar_service.dart';
 import '../../widgets/confirm_dialog.dart';
 import 'image_crop_dialog.dart';
+import '../../utils/validators.dart';
 
 class OrganizationUpsertDialog extends StatefulWidget {
   final OrganizationResponse? organization;
@@ -211,6 +212,9 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess(_isEditing
+            ? 'Organizacija je uspješno ažurirana.'
+            : 'Organizacija je uspješno kreirana.');
       }
     } catch (e) {
       if (mounted) {
@@ -734,20 +738,7 @@ class _OrganizationUpsertDialogState extends State<OrganizationUpsertDialog> {
                       ),
                     ),
                     style: TextStyle(fontSize: 14, color: textPrimary),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Lozinka administratora je obavezna';
-                      }
-                      if (v.length < 8 || v.length > 100) {
-                        return 'Lozinka mora biti između 8 i 100 karaktera';
-                      }
-                      final passwordRegex = RegExp(
-                          r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
-                      if (!passwordRegex.hasMatch(v)) {
-                        return 'Mora sadržavati veliko, malo slovo, broj i specijalni karakter';
-                      }
-                      return null;
-                    },
+                    validator: Validators.password,
                   ),
                 ],
               ),

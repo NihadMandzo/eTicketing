@@ -86,6 +86,31 @@ public class OrganizationService : IOrganizationService
             .ToList());
     }
 
+    public async Task<Result<OrganizationContactResponse>> GetInternalContactAsync(Guid id, CancellationToken ct = default)
+    {
+        // WithUsers, so the OrganizationSuperAdmin comes back in the same round trip rather than a
+        // second query — the caller needs both halves or neither.
+        var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
+        if (organization is null)
+        {
+            return Result<OrganizationContactResponse>.Failure(
+                Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
+        }
+
+        // Exactly one per organization is enforced on creation, but this reads defensively: an
+        // organization whose super admin was deleted answers null rather than throwing, and the
+        // caller falls back to the organization's own address.
+        var superAdmin = organization.Users
+            .FirstOrDefault(u => u.Role == RoleType.OrganizationSuperAdmin);
+
+        return Result<OrganizationContactResponse>.Success(new OrganizationContactResponse(
+            organization.Id,
+            organization.Name,
+            organization.Email,
+            organization.PhoneNumber,
+            superAdmin?.Email));
+    }
+
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
     {
         if (await _userRepository.ExistsByEmailOrUsernameAsync(request.AdminEmail, request.AdminUsername, ct))
@@ -217,6 +242,13 @@ public class OrganizationService : IOrganizationService
         // governs how it's served/rendered, not the key's extension.
         var extension = await OrganizationLogoValidation.DetectExtensionAsync(logo, ct);
         await _blobStorageService.UploadAsync(ContainerName, organization.LogoBlobName, logo.OpenReadStream(), ContentTypeFor(extension), ct);
+
+        // No column changed — only the blob's bytes did — but the row is still marked modified so
+        // the audit interceptor advances UpdatedAt. That timestamp is what BuildLogoUrl stamps
+        // into the URL, and it is the only thing that tells a client the image is not the one it
+        // already has cached. Without this save the replace is invisible until an app restart.
+        _organizationRepository.Update(organization);
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<OrganizationResponse>.Success(ToResponse(organization));
     }
@@ -350,6 +382,12 @@ public class OrganizationService : IOrganizationService
     private OrganizationResponse ToResponse(Organization organization) =>
         organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
 
+    // Version-stamped: a logo replace reuses the same blob key, so without this the URL never
+    // changes and every client keeps serving the old image from cache. See BlobUrlVersioning.
     private string? BuildLogoUrl(Organization organization) =>
-        organization.LogoBlobName is null ? null : _blobStorageService.GetPublicUrl(ContainerName, organization.LogoBlobName);
+        organization.LogoBlobName is null
+            ? null
+            : BlobUrlVersioning.WithVersion(
+                _blobStorageService.GetPublicUrl(ContainerName, organization.LogoBlobName),
+                organization.UpdatedAt);
 }

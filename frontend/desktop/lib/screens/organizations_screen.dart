@@ -65,6 +65,19 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     _loadData();
   }
 
+  bool get _hasActiveFilters =>
+      _selectedCategoryIds.isNotEmpty || _searchController.text.trim().isNotEmpty;
+
+  void _clearFilters() {
+    _debounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _selectedCategoryIds = [];
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
   Future<void> _loadData() async {
     final requestToken = ++_requestToken;
     setState(() => _isLoading = true);
@@ -167,26 +180,7 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
       await _loadData();
 
       if (mounted) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final onColor = isDark ? AppColors.darkBackground : Colors.white;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: onColor),
-                const SizedBox(width: 10),
-                Text('Organizacija "${org.name}" je uspješno obrisana',
-                    style: TextStyle(color: onColor)),
-              ],
-            ),
-            backgroundColor: isDark ? AppColors.secondary : AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        handleApiSuccess('Organizacija "${org.name}" je uspješno obrisana.');
       }
     } catch (e) {
       if (mounted) handleApiError(e);
@@ -335,9 +329,15 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              CategoryMultiSelectFilter(
-                selectedCategoryIds: _selectedCategoryIds,
-                onChanged: _onCategoryFilterChanged,
+              // Tooltipped because the filter is indirect and the button alone doesn't say so:
+              // organizations have no category of their own, so this matches on the categories
+              // of the products they own (Catalog resolves the id list, see _loadData).
+              Tooltip(
+                message: 'Prikazuje organizacije koje imaju proizvode u odabranim kategorijama',
+                child: CategoryMultiSelectFilter(
+                  selectedCategoryIds: _selectedCategoryIds,
+                  onChanged: _onCategoryFilterChanged,
+                ),
               ),
             ],
           ),
@@ -374,10 +374,33 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
                         size: 48,
                         color: isDark ? AppColors.darkBorderInput : AppColors.lightBorderInput),
                     const SizedBox(height: 12),
+                    // A bare "Nema organizacija" is indistinguishable from a broken filter, which
+                    // is exactly how this read: the category filter matches organizations that
+                    // own a product in the selected categories, so one that owns none simply
+                    // vanishes, with nothing on screen explaining why.
                     Text(
-                      'Nema organizacija',
+                      _hasActiveFilters ? 'Nema rezultata za odabrane filtere' : 'Nema organizacija',
                       style: TextStyle(color: textTertiary, fontSize: 16),
                     ),
+                    if (_selectedCategoryIds.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Text(
+                          'Nijedna organizacija nema proizvode u odabranim kategorijama.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: textTertiary, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                    if (_hasActiveFilters) ...[
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: _clearFilters,
+                        icon: const Icon(LucideIcons.x, size: 15),
+                        label: const Text('Očisti filtere'),
+                      ),
+                    ],
                   ],
                 ),
               ),

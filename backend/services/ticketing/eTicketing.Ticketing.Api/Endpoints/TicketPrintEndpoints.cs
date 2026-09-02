@@ -22,6 +22,10 @@ public static class TicketPrintEndpoints
         group.MapGet("/{id:guid}", Get);
         group.MapGet("/{id:guid}/file", Download);
         group.MapPost("/{id:guid}/retry", Retry);
+        // POST, not DELETE: this clears the batch from the organizer's badge, it does not delete
+        // the batch (whose serial range and nominal value stay on record) and it never touches
+        // the tickets. A DELETE would advertise the wrong thing.
+        group.MapPost("/{id:guid}/dismiss", Dismiss);
     }
 
     private static async Task<IResult> GetOptions(
@@ -88,6 +92,12 @@ public static class TicketPrintEndpoints
     private static async Task<IResult> Retry(Guid id, ITicketPrintService service, HttpContext http, CancellationToken ct)
     {
         var result = await service.RetryAsync(id, http.User, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> Dismiss(Guid id, ITicketPrintService service, HttpContext http, CancellationToken ct)
+    {
+        var result = await service.DismissAsync(id, http.User, ct);
         return result.ToHttpResult();
     }
 }

@@ -9,7 +9,8 @@ public enum TicketPrintBatchStatus
     Queued,     // Tickets minted and capacity claimed; waiting for the render worker
     Rendering,  // TicketPrintRenderWorker has picked it up
     Ready,      // The file row holds the finished PDF, waiting to be downloaded once
-    Failed      // Rendering blew up; ErrorMessage says why, and the batch can be retried
+    Failed,     // Rendering blew up; ErrorMessage says why, and the batch can be retried
+    Expired     // Nobody collected the PDF and the retention sweep deleted it; see below
 }
 
 /// <summary>
@@ -66,6 +67,24 @@ public class TicketPrintBatch : BaseEntity
     public string? ErrorMessage { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? DownloadedAt { get; set; }
+
+    /// <summary>
+    /// When the organizer cleared this batch from their notification badge.
+    /// <see cref="ITicketPrintBatchRepository.GetOutstandingForOrganizationAsync"/> hides stamped
+    /// rows, exactly as it already hides collected ones via <see cref="DownloadedAt"/>.
+    ///
+    /// <para><b>Not a soft delete</b> (which this codebase has nowhere, deliberately) — the batch
+    /// row is the durable record of a print run: which serial numbers went to paper, and what
+    /// face value the organizer is accountable for. Hard-deleting it to clear a notification
+    /// would destroy that. This is the same shape as <see cref="DownloadedAt"/>: a timestamp
+    /// saying the badge is done with the row, not that the row is gone.</para>
+    ///
+    /// <para>It exists because before it there was no way to clear a notification at all. A row
+    /// left the badge only as a side effect of a completed download, so a Failed batch nobody
+    /// could render, or a Ready one whose file the sweep had already deleted, sat there
+    /// permanently with no action that would remove it.</para>
+    /// </summary>
+    public DateTime? DismissedAt { get; set; }
 }
 
 /// <summary>

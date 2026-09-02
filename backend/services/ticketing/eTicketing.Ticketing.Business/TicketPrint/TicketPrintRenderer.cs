@@ -215,6 +215,18 @@ public class TicketPrintRenderer : ITicketPrintRenderer
             if (file is null) continue;
 
             _batchRepository.RemoveFile(file);
+
+            // Move the batch off Ready as well. Deleting only the file used to leave the row
+            // claiming to be downloadable forever: the badge kept offering "Preuzmi", and every
+            // click 404'd with print.file_gone. Expired says plainly that the PDF is gone while
+            // keeping the print run's record (serials, nominal value) intact.
+            var batch = await _batchRepository.GetByIdAsync(id, ct);
+            if (batch is not null)
+            {
+                batch.Status = TicketPrintBatchStatus.Expired;
+                _batchRepository.Update(batch);
+            }
+
             swept++;
         }
 

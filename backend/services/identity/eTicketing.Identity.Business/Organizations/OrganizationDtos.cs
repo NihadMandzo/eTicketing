@@ -79,6 +79,26 @@ public sealed record UpdateOrganizationUserRequest : IStaffProfileRequest
 /// another service has any business holding.</summary>
 public record OrganizationInternalResponse(Guid Id, string Name, string Address, bool IsActive);
 
+/// <summary>
+/// Contact details for one organization, for the single caller that legitimately needs them:
+/// eTicketing.Ticketing telling a buyer whose event was deleted who to ask for a refund.
+///
+/// <para>Deliberately a separate record from <see cref="OrganizationInternalResponse"/> rather
+/// than extra fields on it. That one is documented as never carrying contact details, and the
+/// Izvještaji reports it serves have no business holding them — widening it would hand every
+/// report row an email address it never asked for. A second, narrower endpoint keeps the reason
+/// each field crosses the service boundary visible.</para>
+/// </summary>
+/// <param name="SuperAdminEmail">The organization's OrganizationSuperAdmin, if it still has one —
+/// who platform staff's "we removed your product" notice goes to. Null for an organization whose
+/// super admin was deleted; the caller then falls back to <paramref name="Email"/>.</param>
+public record OrganizationContactResponse(
+    Guid Id,
+    string Name,
+    string Email,
+    string PhoneNumber,
+    string? SuperAdminEmail);
+
 public record OrganizationResponse(
     Guid Id,
     string Name,

@@ -3,6 +3,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Va
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
+import { passwordStrengthValidator } from '../../core/utils/password.validator';
 
 function passwordsMatchValidator(control: AbstractControl): ValidationErrors | null {
   const password = control.get('password')?.value;
@@ -33,7 +34,7 @@ export class RegisterComponent {
       email: ['', [Validators.required, Validators.email]],
       username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
       phoneNumber: [''],
-      password: ['', [Validators.required, Validators.minLength(8)]],
+      password: ['', [Validators.required, passwordStrengthValidator()]],
       confirmPassword: ['', [Validators.required]],
     },
     { validators: passwordsMatchValidator },

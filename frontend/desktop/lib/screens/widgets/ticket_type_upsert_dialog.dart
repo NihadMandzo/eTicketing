@@ -63,6 +63,9 @@ class _TicketTypeUpsertDialogState extends State<TicketTypeUpsertDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess(_isEditing
+            ? 'Tip ulaznice je uspješno ažuriran.'
+            : 'Tip ulaznice je uspješno kreiran.');
       }
     } catch (e) {
       if (mounted) {

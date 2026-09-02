@@ -38,4 +38,10 @@ public interface ITicketPrintService
     /// <summary>Re-queues a failed render. The tickets already exist and their capacity is already
     /// claimed, so this never touches either — it only asks for the paper again.</summary>
     Task<Result<TicketPrintBatchResponse>> RetryAsync(Guid batchId, ClaimsPrincipal user, CancellationToken ct = default);
+
+    /// <summary>Clears a batch from the organizer's notification badge. Stamps
+    /// <c>TicketPrintBatch.DismissedAt</c> — it does not delete the batch, whose serial range and
+    /// nominal value stay on record, and it never touches the tickets, which remain valid and
+    /// sellable. The one way to clear a Failed or Expired row, which nothing else can remove.</summary>
+    Task<Result> DismissAsync(Guid batchId, ClaimsPrincipal user, CancellationToken ct = default);
 }

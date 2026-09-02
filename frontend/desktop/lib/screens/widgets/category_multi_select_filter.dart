@@ -100,7 +100,13 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
   /// from every call site, not just didUpdateWidget's.
   void _scheduleOverlayRebuild() {
     if (_overlay == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _overlay?.markNeedsBuild());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Re-check on arrival, not just at schedule time: the menu can be closed (or this widget
+      // disposed) between the two, and marking an entry that has already been removed from the
+      // Overlay throws.
+      if (!mounted) return;
+      _overlay?.markNeedsBuild();
+    });
   }
 
   void _toggleCategory(int id) {
@@ -150,6 +156,9 @@ class _CategoryMultiSelectFilterState extends State<CategoryMultiSelectFilter> {
   void dispose() {
     _refreshSubscription?.cancel();
     _overlay?.remove();
+    // Cleared, not just removed — a post-frame callback scheduled before disposal would otherwise
+    // still hold a live reference and call markNeedsBuild() on a detached entry.
+    _overlay = null;
     super.dispose();
   }
 
@@ -247,16 +256,25 @@ class _CategoryDropdownCard extends StatelessWidget {
     required this.selectedCategoryIds,
     required this.onToggle,
   });
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final surface = isDark ? AppColors.darkSurface : Colors.white;
+
+    // The surface colour lives on the Material below, NOT on this decoration. CheckboxListTile
+    // paints its background and ink splashes onto the nearest Material ancestor, so a coloured
+    // DecoratedBox sitting between the two hides them — which Flutter asserts on in debug
+    // ("ListTile background color or ink splashes may be invisible"). That assertion threw during
+    // the overlay's build and took the whole subtree down with it: the "RenderBox was not laid
+    // out", "Null check operator used on a null value" and "Cannot hit test a render box with no
+    // size" cascade all followed from it, and the dropdown never became usable — which is why the
+    // category filter looked broken even though its query pipeline was correct. This decoration
+    // now carries only the border and shadow; Material paints the background.
     return Container(
       width: 260,
       constraints: const BoxConstraints(maxHeight: 320),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor),
         boxShadow: [
@@ -267,48 +285,58 @@ class _CategoryDropdownCard extends StatelessWidget {
           ),
         ],
       ),
-      child: isLoading
-          ? const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Material(
+          color: surface,
+          child: _content(isDark),
+        ),
+      ),
+    );
+  }
+
+  Widget _content(bool isDark) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(
+          child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+
+    if (categories.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(
+          'Nema kategorija',
+          style: TextStyle(
+            color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      children: [
+        for (final category in categories)
+          CheckboxListTile(
+            value: selectedCategoryIds.contains(category.id),
+            onChanged: (_) => onToggle(category.id),
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            activeColor: isDark ? AppColors.secondary : AppColors.primary,
+            title: Text(
+              category.name,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
               ),
-            )
-          : categories.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'Nema kategorija',
-                    style: TextStyle(
-                      color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
-                    ),
-                  ),
-                )
-              : ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  children: categories.map((category) {
-                    final isSelected = selectedCategoryIds.contains(category.id);
-                    return CheckboxListTile(
-                      value: isSelected,
-                      onChanged: (_) => onToggle(category.id),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      dense: true,
-                      activeColor: isDark ? AppColors.secondary : AppColors.primary,
-                      title: Text(
-                        category.name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+            ),
+          ),
+      ],
     );
   }
 }

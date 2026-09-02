@@ -96,6 +96,9 @@ class _OrganizationAdminUpsertDialogState extends State<OrganizationAdminUpsertD
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSaved();
+        handleApiSuccess(_isEditing
+            ? 'Administrator je uspješno ažuriran.'
+            : 'Administrator je uspješno dodan.');
       }
     } catch (e) {
       if (mounted) {
@@ -253,18 +256,7 @@ class _OrganizationAdminUpsertDialogState extends State<OrganizationAdminUpsertD
                                 ),
                               ),
                               style: TextStyle(fontSize: 14, color: textPrimary),
-                              validator: (v) {
-                                if (v == null || v.isEmpty) return 'Lozinka je obavezna';
-                                if (v.length < 8 || v.length > 100) {
-                                  return 'Lozinka mora biti između 8 i 100 karaktera';
-                                }
-                                final passwordRegex = RegExp(
-                                    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
-                                if (!passwordRegex.hasMatch(v)) {
-                                  return 'Mora sadržavati veliko, malo slovo, broj i specijalni karakter';
-                                }
-                                return null;
-                              },
+                              validator: Validators.password,
                             ),
                           ],
                           const SizedBox(height: 14),

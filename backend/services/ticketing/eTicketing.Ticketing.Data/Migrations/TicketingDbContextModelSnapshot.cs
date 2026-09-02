@@ -219,6 +219,9 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("DownloadedAt")
                         .HasColumnType("datetime2");
 

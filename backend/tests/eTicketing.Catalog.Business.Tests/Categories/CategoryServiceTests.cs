@@ -150,8 +150,8 @@ public class CategoryServiceTests : IDisposable
     {
         var created = await _sut.CreateAsync(ValidCreateRequest());
         var uploaded = await _sut.UploadIconAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(50, 50)));
-        var iconUrl = uploaded.Value!.IconUrl!;
-        var blobName = iconUrl.Split('/').Last();
+        // PathOf first: the URL carries a ?v= cache-busting token that is not part of the key.
+        var blobName = PathOf(uploaded.Value!.IconUrl)!.Split('/').Last();
         _fixture.BlobStorage.Exists("category-icons", blobName).Should().BeTrue();
 
         await _sut.DeleteAsync(created.Value.Id);
@@ -219,8 +219,30 @@ public class CategoryServiceTests : IDisposable
         var replaced = await _sut.ReplaceIconAsync(created.Value.Id, CreateFormFile(CreatePngBytes(60, 60)));
 
         replaced.IsSuccess.Should().BeTrue();
-        replaced.Value!.IconUrl.Should().Be(originalUrl); // same blob key, just overwritten
+        // Same blob key, just overwritten — compared without the ?v= cache-busting token, which
+        // is expected to differ (see the test below).
+        PathOf(replaced.Value!.IconUrl).Should().Be(PathOf(originalUrl));
     }
+
+    [Fact]
+    public async Task ReplaceIconAsync_ChangesTheIconUrlsVersionToken()
+    {
+        // The regression this guards: a replace writes to the same blob key, so the URL used to
+        // come back byte-identical and every client kept serving the icon it had already cached.
+        // ReplaceIconAsync now touches the row so UpdatedAt advances, and BuildIconUrl stamps it.
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+        var uploaded = await _sut.UploadIconAsync(created.Value!.Id, CreateFormFile(CreatePngBytes(40, 40)));
+        var originalUrl = uploaded.Value!.IconUrl;
+
+        var replaced = await _sut.ReplaceIconAsync(created.Value.Id, CreateFormFile(CreatePngBytes(60, 60)));
+
+        replaced.IsSuccess.Should().BeTrue();
+        replaced.Value!.IconUrl.Should().NotBe(originalUrl);
+        replaced.Value.IconUrl.Should().Contain("?v=");
+    }
+
+    /// <summary>The URL without its ?v= cache-busting token — i.e. the blob key part.</summary>
+    private static string? PathOf(string? url) => url?.Split('?')[0];
 
     [Fact]
     public async Task ReplaceIconAsync_ForCategoryWithoutIcon_ReturnsNotFound()

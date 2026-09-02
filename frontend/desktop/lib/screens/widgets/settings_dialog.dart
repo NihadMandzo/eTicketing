@@ -15,6 +15,7 @@ import '../../providers/organization_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/image_validation.dart';
 import 'image_crop_dialog.dart';
+import '../../utils/validators.dart';
 
 // ── Allowed roles that can see the Org tab ────────────────────────────────────
 const _kOrgRoles = {'OrganizationSuperAdmin', 'OrganizationAdmin'};
@@ -193,6 +194,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
       }
       if (_currentPwd.text.isEmpty) {
         _showError('Unesite trenutnu lozinku.');
+        return;
+      }
+      // These fields are plain _Field widgets with no Form around them, so the shared rule is
+      // applied here rather than as a TextFormField validator. Same rule the backend's
+      // ChangePasswordRequestValidator enforces, so the user learns the requirement before the
+      // round trip rather than from a 400.
+      final passwordError = Validators.password(_newPwd.text);
+      if (passwordError != null) {
+        _showError('$passwordError.');
         return;
       }
       await _authProvider.changePassword(ChangePasswordRequest(

@@ -31,7 +31,7 @@ class AdminProvider extends BaseProvider<AdminUserResponse, String> {
   /// OrganizationAdmin account's password — doesn't fit BaseProvider.update(),
   /// which PUTs the full profile shape to a different route.
   Future<void> setPassword(String id, dynamic request) async {
-    final response = await apiClient.post('admins/$id/set-password', data: request);
+    final response = await send(() => apiClient.post('admins/$id/set-password', data: request));
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }
 }
@@ -62,10 +62,10 @@ class OrganizationUsersProvider {
   }) async {
     final queryParams = searchObject?.toQueryString() ?? {};
 
-    final response = await apiClient.get(
-      '$_extension/$organizationId/users',
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-    );
+    final response = await sendRequest(() => apiClient.get(
+          '$_extension/$organizationId/users',
+          queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        ));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -77,7 +77,7 @@ class OrganizationUsersProvider {
     dynamic request, {
     required AdminUserResponse Function(Map<String, dynamic>) fromJson,
   }) async {
-    final response = await apiClient.post('$_extension/$organizationId/users', data: request);
+    final response = await sendRequest(() => apiClient.post('$_extension/$organizationId/users', data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -90,7 +90,8 @@ class OrganizationUsersProvider {
     dynamic request, {
     required AdminUserResponse Function(Map<String, dynamic>) fromJson,
   }) async {
-    final response = await apiClient.put('$_extension/$organizationId/users/$userId', data: request);
+    final response =
+        await sendRequest(() => apiClient.put('$_extension/$organizationId/users/$userId', data: request));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
 
@@ -98,7 +99,7 @@ class OrganizationUsersProvider {
   }
 
   Future<void> delete(String organizationId, String userId) async {
-    final response = await apiClient.delete('$_extension/$organizationId/users/$userId');
+    final response = await sendRequest(() => apiClient.delete('$_extension/$organizationId/users/$userId'));
 
     if (!_isSuccess(response.statusCode)) _handleError(response);
   }

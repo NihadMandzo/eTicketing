@@ -99,6 +99,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
+        builder.Services.AddScoped<IProductDeletionNotifier, ProductDeletionNotifier>();
         builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();
         builder.Services.AddScoped<ITicketPrintRenderer, TicketPrintRenderer>();
         builder.Services.AddScoped<IReportService, ReportService>();

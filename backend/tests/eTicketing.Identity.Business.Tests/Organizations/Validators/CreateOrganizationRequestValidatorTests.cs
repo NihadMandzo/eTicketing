@@ -20,7 +20,7 @@ public class CreateOrganizationRequestValidatorTests
         AdminLastName = "Doe",
         AdminEmail = "jane.doe@acme.example",
         AdminUsername = "janedoe",
-        AdminPassword = "SuperSecret123"
+        AdminPassword = "SuperSecret123!"
     };
 
     [Fact]

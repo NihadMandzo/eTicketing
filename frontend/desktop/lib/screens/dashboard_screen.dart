@@ -256,6 +256,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// One column of full-width cards, with a gap *between* cards only. The trailing gap the
+  /// previous spread emitted after the last card added 20px of dead space to the bottom of every
+  /// column and to the page as a whole.
+  static Widget _cardColumn(List<Widget> cards) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(height: 20),
+            cards[i],
+          ],
+        ],
+      );
+
   // ── Sales trend ──────────────────────────────────────────────────────────
 
   Widget _trendCard(Brightness brightness) {
@@ -433,13 +446,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDark = brightness == Brightness.dark;
     final tiles = _kpiTiles();
 
-    final primary = <Widget>[
-      _upcomingEventsCard(brightness),
-      if (_isPlatformStaff) _orgOverviewCard(brightness),
-      _topSellingCard(brightness),
+    // Built once, then arranged differently per breakpoint below.
+    final upcoming = _upcomingEventsCard(brightness);
+    final topSelling = _topSellingCard(brightness);
+    final orgOverview = _isPlatformStaff ? _orgOverviewCard(brightness) : null;
+    final salesChannels = _hasSalesAccess ? _salesChannelsCard(brightness) : null;
+
+    // Narrow layout: one column, in reading order.
+    final stacked = <Widget>[upcoming, ?orgOverview, topSelling, ?salesChannels];
+
+    // Wide layout: two balanced columns. Cards are assigned by hand to keep the two columns
+    // ending at roughly the same height — the tall events card alone on the left, the shorter
+    // cards paired on the right — instead of the old 3-vs-1 split that left the bottom-right
+    // corner empty. Every role now populates both columns, so a platform Admin gets a right
+    // rail too (it previously had none, which forced them into the single-column branch).
+    //
+    // Balanced by construction rather than measured: ReportDataTable builds inside a
+    // LayoutBuilder, which does not support intrinsic sizing, so IntrinsicHeight cannot be used
+    // to equalise the two columns exactly.
+    final left = <Widget>[
+      upcoming,
+      if (_isPlatformStaff && salesChannels != null) salesChannels,
     ];
-    final secondary = <Widget>[
-      if (_hasSalesAccess) _salesChannelsCard(brightness),
+    final right = <Widget>[
+      ?orgOverview,
+      topSelling,
+      if (!_isPlatformStaff && salesChannels != null) salesChannels,
     ];
 
     return SingleChildScrollView(
@@ -468,40 +500,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 1100 && secondary.isNotEmpty;
-
-              if (!isWide) {
-                final all = [...primary, ...secondary];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final widget in all) ...[widget, const SizedBox(height: 20)],
-                  ],
-                );
+              if (constraints.maxWidth < 1100 || right.isEmpty) {
+                return _cardColumn(stacked);
               }
 
+              // Equal flex, not 16/10: two columns carrying comparable content should be the
+              // same width, or the narrower one's cards grow taller and reopen the gap.
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    flex: 16,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final widget in primary) ...[widget, const SizedBox(height: 20)],
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _cardColumn(left)),
                   const SizedBox(width: 20),
-                  Expanded(
-                    flex: 10,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final widget in secondary) ...[widget, const SizedBox(height: 20)],
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _cardColumn(right)),
                 ],
               );
             },

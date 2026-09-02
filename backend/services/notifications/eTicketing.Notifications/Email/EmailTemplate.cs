@@ -8,5 +8,6 @@ public enum EmailTemplate
     PasswordReset,
     AdminPasswordChanged,
     TicketsReady,
-    ProductChanged
+    ProductChanged,
+    ProductDeleted
 }
