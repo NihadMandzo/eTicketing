@@ -193,7 +193,7 @@ public static class TicketingServiceCollectionExtensions
         // Timeout only — no retry, deliberately, unlike every other client in this service.
         //
         // The failure this call actually has is slowness, not flakiness: a local 3B model on CPU
-        // takes tens of seconds for four sentences. Retrying that asks the same question of the same
+        // takes over a minute for the 8-10 sentence summary. Retrying that asks the same question of the same
         // machine and waits the same time again, so a single retry turned a 20s ceiling into a 45s
         // one on a report the user is watching load. Measured, not theorised. A genuinely transient
         // network blip costs the summary and nothing else, which is the trade this whole seam exists

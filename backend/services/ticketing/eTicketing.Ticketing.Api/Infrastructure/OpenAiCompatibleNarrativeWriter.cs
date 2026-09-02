@@ -98,9 +98,9 @@ public sealed class OpenAiCompatibleNarrativeWriter : INarrativeWriter
                 return null;
             }
 
-            // Truncated on a word boundary rather than mid-syllable — the summary sits in a
-            // fixed-height card, and a model that ignored "najviše 4 rečenice" should still read as
-            // a sentence that trails off rather than as corrupted text.
+            // Truncated on a word boundary rather than mid-syllable — a model that ignored the
+            // "8 do 10 rečenica" instruction should still read as a sentence that trails off
+            // rather than as corrupted text.
             return Truncate(text, _options.MaxCharacters);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

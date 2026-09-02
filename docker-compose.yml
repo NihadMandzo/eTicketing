@@ -156,15 +156,17 @@ services:
       Insights__Narrative__BaseUrl: "${INSIGHTS_NARRATIVE_BASE_URL:-http://ollama:11434/v1}"
       Insights__Narrative__Model: "${INSIGHTS_NARRATIVE_MODEL:-llama3.2:3b}"
       Insights__Narrative__ApiKey: "${INSIGHTS_NARRATIVE_API_KEY:-}"
-      # Tune this to the model behind it. A local 3B model on CPU needs 45-60s for four
-      # sentences of Bosnian; a hosted 70B one answers in two or three. Exceeding it costs the
+      # Tune this to the model behind it. A local 3B model on CPU needs well over a minute for an
+      # 8-10 sentence summary; a hosted model answers in a few seconds. Exceeding it costs the
       # summary and nothing else — the report still returns 200 with everything else intact.
       Insights__Narrative__TimeoutSeconds: "${INSIGHTS_NARRATIVE_TIMEOUT_SECONDS:-20}"
-      # Token budget for the completion. 800 because a reasoning model (Groq's gpt-oss-*, the
-      # qwen3 family) spends this on hidden reasoning BEFORE writing anything — measured at ~296
-      # tokens here — and too small a budget returns an empty answer with HTTP 200 and no error.
-      # Drop it to ~200 only for a local CPU model, where generation time is linear in tokens.
-      Insights__Narrative__MaxTokens: "${INSIGHTS_NARRATIVE_MAX_TOKENS:-800}"
+      # Token budget for the completion. 1400 because the summary itself now runs 8-10 sentences
+      # (350-450 tokens of Bosnian) AND a reasoning model (Groq's gpt-oss-*, the qwen3 family)
+      # spends this same budget on hidden reasoning BEFORE writing anything — measured at ~296
+      # tokens here, on top of the answer. Too small a budget returns an empty completion with
+      # HTTP 200 and no error. Drop it to ~350-400 only for a local CPU model, where generation
+      # time is linear in tokens and a small local model does no hidden reasoning.
+      Insights__Narrative__MaxTokens: "${INSIGHTS_NARRATIVE_MAX_TOKENS:-1400}"
     depends_on:
       sqlserver: { condition: service_healthy }
       redis: { condition: service_healthy }

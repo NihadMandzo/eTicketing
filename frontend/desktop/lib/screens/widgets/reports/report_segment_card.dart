@@ -10,6 +10,12 @@ import '../../../theme/app_colors.dart';
 /// *revenue* are the whole point of segmenting, and the gap between them is the
 /// finding. Drawn as a pair so that gap is visible without reading either
 /// number.
+///
+/// Below them, a 2×2 grid of four stats fills in the rest of the RFM picture
+/// the bars can't show on their own: how many buyers are in the segment, what
+/// they spend, how often they buy, and how recently they last did. Every one
+/// is a real field on `AudienceSegment` — nothing here is invented to fill a
+/// grid, it is what the server already computed and previously left unused.
 class ReportSegmentCard extends StatelessWidget {
   final AudienceSegment segment;
 
@@ -76,6 +82,9 @@ class ReportSegmentCard extends StatelessWidget {
             brightness: brightness,
           ),
           const SizedBox(height: 12),
+          // Two rows of two — a 2×2 grid rather than a single row, so the card
+          // states all four figures at once instead of only the two that used
+          // to fit beside each other.
           Row(
             children: [
               Expanded(
@@ -89,6 +98,25 @@ class ReportSegmentCard extends StatelessWidget {
                 child: _Stat(
                   label: 'Zadnja kupovina',
                   value: '${formatCount(segment.averageRecencyDays)} d',
+                  brightness: brightness,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _Stat(
+                  label: 'Broj kupaca',
+                  value: formatCount(segment.buyers),
+                  brightness: brightness,
+                ),
+              ),
+              Expanded(
+                child: _Stat(
+                  label: 'Prosječno karata',
+                  value: _formatOneDecimal(segment.averageTickets),
                   brightness: brightness,
                 ),
               ),
@@ -155,6 +183,16 @@ class _ShareBar extends StatelessWidget {
       ],
     );
   }
+}
+
+/// `4,5` — one decimal, comma separator, no unit. The same rounding
+/// `formatPercent` uses, minus the `%`: there is no shared formatter for a
+/// bare decimal in `core/formatting.dart`, and adding a one-off percent-less
+/// variant there for a single caller wasn't worth widening that file's surface.
+String _formatOneDecimal(double value) {
+  final tenths = (value.abs() * 10).round();
+  final sign = value < 0 ? '-' : '';
+  return '$sign${formatCount(tenths ~/ 10)},${tenths % 10}';
 }
 
 class _Stat extends StatelessWidget {

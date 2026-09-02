@@ -14,7 +14,7 @@ public sealed record NarrativeContext(
     IReadOnlyList<BusinessInsight> Insights);
 
 /// <summary>
-/// Writes the short Bosnian executive summary above the insight cards.
+/// Writes the Bosnian executive summary above the insight cards.
 ///
 /// <para><b>Returning null is a normal outcome, not an error.</b> No provider configured, the model
 /// server down, a timeout, a malformed response — all of them answer null and the tab renders
@@ -53,9 +53,13 @@ public static class NarrativePromptBuilder
 {
     public const string SystemPrompt =
         "Ti si poslovni analitičar platforme za prodaju karata. Pišeš isključivo na bosanskom jeziku. " +
-        "Na osnovu isključivo dostavljenih brojeva napiši sažetak od najviše 4 rečenice za organizatora. " +
-        "Ne izmišljaj nijedan podatak, ne navodi brojeve kojih nema u ulazu i ne dodaj preporuke koje se " +
-        "ne mogu potkrijepiti dostavljenim podacima. Piši sažeto, bez uvoda, bez nabrajanja i bez naslova.";
+        "Na osnovu isključivo dostavljenih brojeva napiši detaljan sažetak od 8 do 10 rečenica za " +
+        "organizatora. Osvrni se na svaki blok podataka koji je zaista dostavljen u ulazu — prodaju u " +
+        "periodu, prognozu (ako postoji), neuobičajene dane (ako postoje) i segmente kupaca (ako " +
+        "postoje) — umjesto da se zadržiš samo na prvih nekoliko brojeva. Ne izmišljaj nijedan podatak, " +
+        "ne navodi brojeve kojih nema u ulazu i ne dodaj preporuke koje se ne mogu potkrijepiti " +
+        "dostavljenim podacima. Piši u jednom do dva pasusa tečnog teksta, bez uvoda, bez nabrajanja i " +
+        "bez naslova.";
 
     public static string BuildUserPrompt(NarrativeContext context)
     {

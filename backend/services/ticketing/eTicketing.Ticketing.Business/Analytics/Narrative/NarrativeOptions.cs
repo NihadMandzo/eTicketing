@@ -51,26 +51,31 @@ public sealed class NarrativeOptions
     /// short enough that a hung endpoint does not hold a report request open.</summary>
     public int TimeoutSeconds { get; set; } = 20;
 
-    /// <summary>Hard cap on what is accepted back. A model that ignores the "four sentences"
-    /// instruction and writes an essay gets truncated rather than pushed onto the screen — the
-    /// summary sits in a fixed-height card.</summary>
-    public int MaxCharacters { get; set; } = 900;
+    /// <summary>Hard cap on what is accepted back. A model that ignores the length instruction and
+    /// writes an essay gets truncated rather than pushed onto the screen unbounded. Sized for the
+    /// 8-10 sentence summary <see cref="NarrativePromptBuilder.SystemPrompt"/> asks for — roughly
+    /// 1200-1600 characters of Bosnian — with headroom above that for a model that runs slightly
+    /// long rather than one that pads to the ceiling.</summary>
+    public int MaxCharacters { get; set; } = 1800;
 
     /// <summary>
-    /// Token budget for the completion. Four sentences of Bosnian are 120-180 tokens, so 800 looks
-    /// wildly generous — and it is not, because of reasoning models.
+    /// Token budget for the completion. An 8-10 sentence Bosnian summary is itself 350-450 tokens,
+    /// so 1400 looks wildly generous — and it is not, because of reasoning models.
     ///
     /// A reasoning model (Groq's <c>openai/gpt-oss-*</c>, the qwen3 family) spends this budget on
     /// hidden reasoning tokens *before* emitting a single visible character: measured at ~296
-    /// reasoning tokens for this prompt. A 220-token budget therefore returns an empty completion,
-    /// which is a maddening failure to diagnose — HTTP 200, no error, no text.
+    /// reasoning tokens for this prompt, on top of the visible answer. A budget sized only for the
+    /// visible text returns an empty completion, which is a maddening failure to diagnose — HTTP
+    /// 200, no error, no text, distinguishable from a model that is genuinely declining to answer
+    /// only by <c>finish_reason</c> (see <c>OpenAiCompatibleNarrativeWriter</c>).
     ///
     /// So the default suits the recommended hosted path, and this is configurable for the one case
     /// that cares about the cap: a local CPU model, where generation is linear in tokens produced
-    /// (~3,8 tokens/s measured) and 800 would mean minutes. Set it to ~200 there — a small local
-    /// model does no reasoning, so it does not need the headroom.
+    /// (~3,8 tokens/s measured) and 1400 tokens would mean minutes. Set it to ~350-400 there — a
+    /// small local model does no reasoning, so it does not need that headroom, only enough for the
+    /// answer itself.
     /// </summary>
-    public int MaxTokens { get; set; } = 800;
+    public int MaxTokens { get; set; } = 1400;
 
     public bool IsEnabled =>
         string.Equals(Provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase);

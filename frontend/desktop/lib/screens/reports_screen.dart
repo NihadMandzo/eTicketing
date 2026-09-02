@@ -69,8 +69,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
   AnalyticsInsights? _insights;
 
   /// Forecast horizon for the AI Uvidi tab. The three the API accepts — see
-  /// `InsightsQueryValidator`, which refuses anything else.
+  /// `InsightsQueryValidator`, which refuses anything else. Selected from the
+  /// filter bar above the tab strip (see `_horizonSelector`, wired into
+  /// `_rangeBarTrailing`) — not from a control inside the forecast chart
+  /// itself, so changing it reads as adjusting the report's period rather than
+  /// opening an option buried in one card.
   int _horizon = 14;
+
+  /// True while a horizon change is being applied.
+  ///
+  /// Deliberately separate from `_isLoading`: that flag blanks the whole tab
+  /// behind a spinner, which is the "full refresh" a horizon change must not
+  /// cause — findings, anomalies and segments don't depend on the horizon and
+  /// have no reason to disappear while only the forecast re-fetches. See
+  /// `_changeHorizon`.
+  bool _isRefreshingInsights = false;
 
   /// The tabs each role may see — the client half of the matrix in
   /// `ReportService.Authorize`.
@@ -186,6 +199,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  /// Re-fetches AI Uvidi for a new horizon without the tab's full loading
+  /// spinner — the "full refresh" the horizon control must not cause. The
+  /// selected chip shows its own small spinner instead (see
+  /// `_horizonSelector`), while everything else already on screen — tiles,
+  /// findings, anomalies, segments — stays exactly as it is, since none of it
+  /// depends on the horizon.
+  ///
+  /// Shares `_loadGeneration` with `_load()` rather than a horizon-local
+  /// counter: a date change or tab switch mid-flight has to supersede this
+  /// fetch exactly the way it supersedes any other one, and one guard is what
+  /// makes that automatic.
+  Future<void> _changeHorizon(int horizon) async {
+    if (_horizon == horizon || _isRefreshingInsights) return;
+
+    final requestId = ++_loadGeneration;
+    setState(() {
+      _horizon = horizon;
+      _isRefreshingInsights = true;
+    });
+
+    try {
+      final result = await _provider.getInsights(_from, _to, horizon: horizon);
+      if (!mounted || requestId != _loadGeneration) return;
+      setState(() {
+        _insights = result;
+        _isRefreshingInsights = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _loadGeneration) return;
+      setState(() => _isRefreshingInsights = false);
+      handleApiError(e);
+    }
+  }
+
   void _selectTab(int index) {
     if (_tabs[index] == _tab) return;
     setState(() => _tab = _tabs[index]);
@@ -272,7 +319,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             // Sits with the period controls rather than up in the page header:
             // what gets exported is whatever range is selected right here, so
             // the button belongs next to the thing that decides it.
-            trailing: _canExport ? _exportButton() : null,
+            trailing: _rangeBarTrailing(),
           ),
           if (_rangeInvalid) ...[
             const SizedBox(height: 10),
@@ -324,6 +371,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
         : const Icon(LucideIcons.fileDown, size: 16),
     label: Text(_isExporting ? 'Izvoz...' : 'Izvezi PDF'),
   );
+
+  /// Everything pinned to the range bar's right edge: the horizon selector on
+  /// the AI Uvidi tab (only there — the other tabs have no forecast to pick a
+  /// horizon for) alongside the export button every exporting role gets on
+  /// every tab. A `Wrap` rather than a `Row` so the two reflow onto their own
+  /// line instead of overflowing at a narrow window width.
+  Widget? _rangeBarTrailing() {
+    final children = <Widget>[
+      if (_tab == ReportTab.insights) _horizonSelector(),
+      if (_canExport) _exportButton(),
+    ];
+    if (children.isEmpty) return null;
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
 
   /// The design's per-role subtitle: what this role's copy of the screen is for.
   String get _subtitle => switch (widget.user.roleName) {
@@ -784,9 +851,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             _narrativeCard(report.narrative!),
           ],
           const SizedBox(height: 16),
-          _insightsCard(report),
-          const SizedBox(height: 16),
-          _forecastCard(report),
+          _insightsAndForecastRow(report, constraints.maxWidth),
           if (report.anomalies.items.isNotEmpty) ...[
             const SizedBox(height: 16),
             _anomaliesCard(report),
@@ -846,17 +911,56 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  /// Poslovni uvidi and the forecast chart share one row on a wide window: the
+  /// chart is deliberately the narrower of the two — its bars scroll
+  /// horizontally once they need more width than they are given
+  /// (`ReportBarChart` already does this) — so the findings card gets the room
+  /// it needs to lay its own cards two-across instead of stacking one long
+  /// single-file column.
+  Widget _insightsAndForecastRow(AnalyticsInsights report, double width) {
+    final insights = _insightsCard(report);
+    final forecast = _forecastCard(report);
+
+    // Same breakpoint the rest of this screen uses for a two-column split
+    // (see the Prodaja tab). Below it, a squeezed findings column and a
+    // horizontally-scrolling chart would both be fighting for the same narrow
+    // space, so they stack instead.
+    if (width < 1100) {
+      return Column(children: [insights, const SizedBox(height: 16), forecast]);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 3, child: insights),
+        const SizedBox(width: 16),
+        Expanded(flex: 2, child: forecast),
+      ],
+    );
+  }
+
   Widget _insightsCard(AnalyticsInsights report) => ReportCard(
     title: 'Poslovni uvidi',
     subtitle: '${formatCount(report.insights.length)} '
         '${report.insights.length == 1 ? 'nalaz' : 'nalaza'} · ${report.scope}',
-    child: Column(
-      children: [
-        for (final insight in report.insights) ...[
-          ReportInsightCard(insight: insight),
-          if (insight != report.insights.last) const SizedBox(height: 10),
-        ],
-      ],
+    // Wrapped into columns rather than one long stack: this card sits beside
+    // the forecast chart and is already narrower than the tab itself, so the
+    // cards read in multiple lines instead of a single tall column.
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 10.0;
+        final columns = constraints.maxWidth >= 480 ? 2 : 1;
+        final cardWidth = columns == 1 ? constraints.maxWidth : (constraints.maxWidth - gap) / 2;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final insight in report.insights)
+              SizedBox(width: cardWidth, child: ReportInsightCard(insight: insight)),
+          ],
+        );
+      },
     ),
   );
 
@@ -872,7 +976,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       title: 'Prognoza prihoda',
       subtitle: forecast.source.caveat ??
           'Model vremenske serije (SSA) · projekcija za ${forecast.horizon} dana',
-      trailing: _horizonSelector(),
       child: forecast.points.isEmpty
           ? _emptyBlock('Nema dovoljno historijskih podataka za prognozu u ovom periodu.')
           : Column(
@@ -963,17 +1066,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// 7 / 14 / 30, the only horizons the API accepts. Re-triggers the load, and
-  /// goes through the same `_loadGeneration` guard as every other filter, so a
-  /// fast double-change cannot paint the older answer.
+  /// 7 / 14 / 30, the only horizons the API accepts. Lives in the filter bar
+  /// above the tab strip (see `_rangeBarTrailing`), not inside the Prognoza
+  /// prihoda card — picking a horizon reads as adjusting the report's period,
+  /// the same gesture as a date preset, rather than a control buried in one
+  /// chart. Goes through `_changeHorizon`, which re-fetches quietly instead of
+  /// the tab's full loading spinner; the selected chip shows its own small
+  /// spinner while that is in flight.
   Widget _horizonSelector() {
     final brightness = Theme.of(context).brightness;
 
     return Wrap(
       spacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final horizon in const [7, 14, 30])
           ChoiceChip(
+            avatar: (_isRefreshingInsights && _horizon == horizon)
+                ? const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : null,
             label: Text('$horizon d'),
             selected: _horizon == horizon,
             labelStyle: TextStyle(
@@ -983,13 +1098,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             selectedColor: AppColors.primary,
             showCheckmark: false,
-            onSelected: _isLoading
-                ? null
-                : (_) {
-                    if (_horizon == horizon) return;
-                    setState(() => _horizon = horizon);
-                    _load();
-                  },
+            onSelected: (_isLoading || _isRefreshingInsights) ? null : (_) => _changeHorizon(horizon),
           ),
       ],
     );

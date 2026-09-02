@@ -122,6 +122,19 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
     });
 
+    /// The 2×2 stats grid — four real fields off `AudienceSegment`, not two.
+    testWidgets('renders all four stats in its grid', (tester) async {
+      await tester.pumpWidget(host(ReportSegmentCard(segment: segment())));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Prosječna potrošnja'), findsOneWidget);
+      expect(find.text('Zadnja kupovina'), findsOneWidget);
+      expect(find.text('Broj kupaca'), findsOneWidget);
+      expect(find.text('Prosječno karata'), findsOneWidget);
+      // averageTickets: 4.5 in the fixture segment().
+      expect(find.text('4,5'), findsOneWidget);
+    });
+
     /// A share is a percentage of a whole and cannot exceed it, but a rounding
     /// artefact must not throw off the progress track's layout.
     testWidgets('clamps an out-of-range share instead of throwing', (tester) async {
