@@ -20,21 +20,37 @@ class ReportInsightCard extends StatelessWidget {
     final isDark = brightness == Brightness.dark;
     final accent = _accent(brightness);
 
+    // The severity accent is a real child, not a thick BorderSide.
+    //
+    // A non-uniform Border (a 3px coloured left edge, thin neutral elsewhere) combined with a
+    // borderRadius is not something Flutter can paint — "A borderRadius can only be given on
+    // borders with uniform colors" — and it fails at paint time, so the card came out as blank
+    // space on screen while `flutter analyze` stayed clean. Drawn as a clipped strip instead: the
+    // border stays uniform, and Clip.antiAlias gives the strip the card's own rounded corners.
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
-        border: Border(
-          left: BorderSide(color: accent, width: 3),
-          top: BorderSide(color: AppColors.border(brightness)),
-          right: BorderSide(color: AppColors.border(brightness)),
-          bottom: BorderSide(color: AppColors.border(brightness)),
-        ),
-        borderRadius: const BorderRadius.horizontal(
-          left: Radius.circular(4),
-          right: Radius.circular(14),
+        border: Border.all(color: AppColors.border(brightness)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      // IntrinsicHeight so the accent strip runs the full height of whichever is taller, the icon
+      // or the wrapped body text. A Row cannot stretch a child to a height it has not measured yet.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 3, color: accent),
+            Expanded(child: _content(brightness, isDark, accent)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _content(Brightness brightness, bool isDark, Color accent) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

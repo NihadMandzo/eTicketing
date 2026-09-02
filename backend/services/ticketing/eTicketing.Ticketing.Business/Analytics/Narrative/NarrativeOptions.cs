@@ -56,6 +56,22 @@ public sealed class NarrativeOptions
     /// summary sits in a fixed-height card.</summary>
     public int MaxCharacters { get; set; } = 900;
 
+    /// <summary>
+    /// Token budget for the completion. Four sentences of Bosnian are 120-180 tokens, so 800 looks
+    /// wildly generous — and it is not, because of reasoning models.
+    ///
+    /// A reasoning model (Groq's <c>openai/gpt-oss-*</c>, the qwen3 family) spends this budget on
+    /// hidden reasoning tokens *before* emitting a single visible character: measured at ~296
+    /// reasoning tokens for this prompt. A 220-token budget therefore returns an empty completion,
+    /// which is a maddening failure to diagnose — HTTP 200, no error, no text.
+    ///
+    /// So the default suits the recommended hosted path, and this is configurable for the one case
+    /// that cares about the cap: a local CPU model, where generation is linear in tokens produced
+    /// (~3,8 tokens/s measured) and 800 would mean minutes. Set it to ~200 there — a small local
+    /// model does no reasoning, so it does not need the headroom.
+    /// </summary>
+    public int MaxTokens { get; set; } = 800;
+
     public bool IsEnabled =>
         string.Equals(Provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase);
 }

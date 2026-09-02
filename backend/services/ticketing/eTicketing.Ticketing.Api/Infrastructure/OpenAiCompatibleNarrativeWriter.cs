@@ -33,9 +33,6 @@ public sealed class OpenAiCompatibleNarrativeWriter : INarrativeWriter
     /// input list back verbatim.</summary>
     private const double Temperature = 0.2;
 
-    /// <summary>Four sentences of Bosnian fit comfortably; anything past this is a model that
-    /// ignored the instruction, and the response is truncated at MaxCharacters anyway.</summary>
-    private const int MaxTokens = 400;
 
     private readonly HttpClient _http;
     private readonly NarrativeOptions _options;
@@ -62,7 +59,7 @@ public sealed class OpenAiCompatibleNarrativeWriter : INarrativeWriter
                     new ChatMessage("user", NarrativePromptBuilder.BuildUserPrompt(context))
                 ],
                 Temperature,
-                MaxTokens,
+                Math.Max(64, _options.MaxTokens),
                 // Ollama streams by default; the others do not. Stated explicitly so one shape of
                 // response has to be parsed rather than two.
                 Stream: false);
@@ -76,11 +73,28 @@ public sealed class OpenAiCompatibleNarrativeWriter : INarrativeWriter
             }
 
             var completion = await response.Content.ReadFromJsonAsync<ChatResponse>(cancellationToken: ct);
-            var text = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+            var choice = completion?.Choices?.FirstOrDefault();
+            var text = choice?.Message?.Content?.Trim();
 
             if (string.IsNullOrWhiteSpace(text))
             {
-                _logger.LogWarning("AI sažetak nije generisan: model je vratio prazan odgovor.");
+                // Worth separating, because the two have different fixes and the symptom is
+                // identical: HTTP 200, no error, no text. "length" means the completion hit the
+                // token budget — on a reasoning model that budget went entirely on hidden reasoning
+                // tokens, so the answer never started. Anything else is the model genuinely
+                // declining to answer.
+                if (string.Equals(choice?.FinishReason, "length", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "AI sažetak nije generisan: odgovor je potrošio cijeli budžet od {MaxTokens} tokena bez teksta. "
+                        + "Modeli koji \"razmišljaju\" (gpt-oss, qwen3) troše ga prije odgovora — povećajte Insights:Narrative:MaxTokens.",
+                        _options.MaxTokens);
+                }
+                else
+                {
+                    _logger.LogWarning("AI sažetak nije generisan: model je vratio prazan odgovor.");
+                }
+
                 return null;
             }
 
@@ -136,7 +150,8 @@ public sealed class OpenAiCompatibleNarrativeWriter : INarrativeWriter
         [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices);
 
     private sealed record ChatChoice(
-        [property: JsonPropertyName("message")] ChatResponseMessage? Message);
+        [property: JsonPropertyName("message")] ChatResponseMessage? Message,
+        [property: JsonPropertyName("finish_reason")] string? FinishReason);
 
     private sealed record ChatResponseMessage(
         [property: JsonPropertyName("content")] string? Content);

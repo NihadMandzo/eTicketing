@@ -190,10 +190,17 @@ public static class TicketingServiceCollectionExtensions
             return builder;
         }
 
-        // Same resilience shape as the Catalog/Identity clients, with two deliberate differences:
-        // one retry rather than three (a model that just took twenty seconds to fail is not going to
-        // succeed on the third ask while a report request waits), and the timeout comes from
-        // configuration because a local 3B model on CPU and a hosted 70B one are seconds apart.
+        // Timeout only — no retry, deliberately, unlike every other client in this service.
+        //
+        // The failure this call actually has is slowness, not flakiness: a local 3B model on CPU
+        // takes tens of seconds for four sentences. Retrying that asks the same question of the same
+        // machine and waits the same time again, so a single retry turned a 20s ceiling into a 45s
+        // one on a report the user is watching load. Measured, not theorised. A genuinely transient
+        // network blip costs the summary and nothing else, which is the trade this whole seam exists
+        // to make.
+        //
+        // The timeout comes from configuration because a local 3B model and a hosted 70B one are an
+        // order of magnitude apart.
         builder.Services.AddHttpClient<INarrativeWriter, OpenAiCompatibleNarrativeWriter>(c =>
             {
                 // Trailing slash matters: the relative "chat/completions" would otherwise replace
@@ -206,10 +213,7 @@ public static class TicketingServiceCollectionExtensions
                     c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", narrative.ApiKey);
             })
             .AddResilienceHandler("narrative-pipeline", pb =>
-            {
-                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 1 });
-                pb.AddTimeout(TimeSpan.FromSeconds(Math.Clamp(narrative.TimeoutSeconds, 5, 60)));
-            });
+                pb.AddTimeout(TimeSpan.FromSeconds(Math.Clamp(narrative.TimeoutSeconds, 5, 60))));
 
         return builder;
     }
