@@ -30,7 +30,8 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
     private const string DeadLetterQueueName = "ticketing.inbound.deadletter";
     private const string RedeliveredHeader = "x-ticketing-redelivered";
 
-    private static readonly string[] RoutingKeys = [EventNames.TicketPdfReady, EventNames.ProductUpdated];
+    private static readonly string[] RoutingKeys =
+        [EventNames.TicketPdfReady, EventNames.ProductUpdated, EventNames.ProductDeleted];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
@@ -138,6 +139,11 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
             case EventNames.ProductUpdated:
                 var productUpdated = Deserialize<ProductUpdated>(body, routingKey);
                 await scope.ServiceProvider.GetRequiredService<IProductChangeNotifier>().NotifyBuyersAsync(productUpdated, ct);
+                break;
+
+            case EventNames.ProductDeleted:
+                var productDeleted = Deserialize<ProductDeleted>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(productDeleted, ct);
                 break;
 
             default:

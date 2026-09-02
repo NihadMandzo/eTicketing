@@ -23,6 +23,7 @@ public static class RabbitMqTopology
         // confirmation email carries the ticket PDFs, so it can only be sent once they exist.
         EventNames.TicketPdfReady,
         EventNames.ProductChanged,
+        EventNames.ProductDeletedNotification,
     ];
 
     public static async Task DeclareAsync(IChannel channel, CancellationToken ct = default)

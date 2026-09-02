@@ -163,8 +163,27 @@ public class ProductService : IProductService
 
         var blobNames = product.Images.Select(i => i.BlobName).ToList();
 
+        // Captured before Remove: after the delete these live only on a detached entity, and the
+        // notification below needs them to say what was cancelled and to whom.
+        var deleted = new ProductDeleted(
+            ProductId: product.Id,
+            ProductName: product.Name,
+            OrganizationId: product.OrganizationId,
+            ProductDate: product.Date,
+            DeletedAt: DateTime.UtcNow,
+            // Platform staff deleting someone else's product is the case the organization has to
+            // hear about. An organizer deleting their own is told nothing — they just did it.
+            DeletedByPlatformStaff: user.IsPlatformStaff() && user.GetOrganizationId() != product.OrganizationId);
+
         _productRepository.Remove(product);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // After the commit, never before — the same rule UpdateAsync follows. Nobody may be told
+        // their event is cancelled on the strength of a delete that then failed to commit.
+        // eTicketing.Ticketing consumes this and fans it out: Catalog has no idea who bought a
+        // ticket. Published for drafts too, which have no buyers but whose owning organization
+        // still needs telling when platform staff removed one.
+        await _eventPublisher.PublishAsync(EventNames.ProductDeleted, deleted, ct);
 
         // DB delete first (cascades ProductImage rows too, see ProductImageConfiguration): if
         // SaveChangesAsync above throws, every blob is left untouched rather than orphaned while

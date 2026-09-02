@@ -86,6 +86,31 @@ public class OrganizationService : IOrganizationService
             .ToList());
     }
 
+    public async Task<Result<OrganizationContactResponse>> GetInternalContactAsync(Guid id, CancellationToken ct = default)
+    {
+        // WithUsers, so the OrganizationSuperAdmin comes back in the same round trip rather than a
+        // second query — the caller needs both halves or neither.
+        var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
+        if (organization is null)
+        {
+            return Result<OrganizationContactResponse>.Failure(
+                Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
+        }
+
+        // Exactly one per organization is enforced on creation, but this reads defensively: an
+        // organization whose super admin was deleted answers null rather than throwing, and the
+        // caller falls back to the organization's own address.
+        var superAdmin = organization.Users
+            .FirstOrDefault(u => u.Role == RoleType.OrganizationSuperAdmin);
+
+        return Result<OrganizationContactResponse>.Success(new OrganizationContactResponse(
+            organization.Id,
+            organization.Name,
+            organization.Email,
+            organization.PhoneNumber,
+            superAdmin?.Email));
+    }
+
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
     {
         if (await _userRepository.ExistsByEmailOrUsernameAsync(request.AdminEmail, request.AdminUsername, ct))

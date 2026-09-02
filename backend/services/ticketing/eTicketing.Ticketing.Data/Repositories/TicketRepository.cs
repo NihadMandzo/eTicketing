@@ -77,6 +77,22 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Distinct()
             .ToListAsync(ct);
 
+    public Task<List<TicketBuyerTickets>> GetLiveBuyerTicketCountsForProductAsync(
+        Guid productId, DateOnly today, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Where(t => t.ProductId == productId)
+            .Where(t => LiveStatuses.Contains(t.Status))
+            // Identical window to GetLiveBuyersForProductAsync: a day pass for last Tuesday or a
+            // parking period that already closed is not something to send a refund notice about.
+            .Where(t => t.ValidDate == null || t.ValidDate >= today)
+            .Where(t => t.ValidTo == null || t.ValidTo >= today)
+            // Printed tickets carry no buyer — nobody to write to.
+            .Where(t => t.UserId != null && t.UserEmail != null)
+            .GroupBy(t => new { UserId = t.UserId!.Value, UserEmail = t.UserEmail! })
+            .Select(g => new TicketBuyerTickets(g.Key.UserId, g.Key.UserEmail, g.Count()))
+            .ToListAsync(ct);
+
     public async Task<int> GetMaxSerialNumberAsync(Guid productId, CancellationToken ct = default)
         => await Query()
             .AsNoTracking()

@@ -47,6 +47,7 @@ public sealed class EmailMessageBuilder
             EmailTemplate.AdminPasswordChanged => AdminPasswordChangedTemplate.Render((AdminPasswordChangedData)data),
             EmailTemplate.TicketsReady => TicketsReadyTemplate.Render((TicketsReadyData)data),
             EmailTemplate.ProductChanged => ProductChangedTemplate.Render((ProductChangedData)data),
+            EmailTemplate.ProductDeleted => ProductDeletedTemplate.Render((ProductDeletedData)data),
             _ => throw new ArgumentOutOfRangeException(nameof(template), template, "Nepoznat email template.")
         };
 

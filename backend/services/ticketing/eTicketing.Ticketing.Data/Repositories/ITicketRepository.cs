@@ -37,6 +37,13 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// construction: they have no UserId and no address to write to.</summary>
     Task<List<TicketBuyer>> GetLiveBuyersForProductAsync(Guid productId, DateOnly today, CancellationToken ct = default);
 
+    /// <summary>Same live-ticket filter as <see cref="GetLiveBuyersForProductAsync"/>, plus how
+    /// many tickets each buyer holds — a cancellation notice says "your 3 tickets", a change
+    /// notice does not care. Kept separate rather than widening the other method, whose callers
+    /// and tests have no use for the count.</summary>
+    Task<List<TicketBuyerTickets>> GetLiveBuyerTicketCountsForProductAsync(
+        Guid productId, DateOnly today, CancellationToken ct = default);
+
     /// <summary>Highest stub number printed so far for this product, or 0 if none. Serial numbers
     /// run per product and never restart, so each new batch continues where the last one stopped
     /// and no two printed tickets for the same product ever show the same number.</summary>
@@ -108,6 +115,9 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
 public record TicketValidationCounts(Guid ProductId, TicketingMode TicketingMode, int TotalToday, int ValidatedToday);
 
 public record TicketBuyer(Guid UserId, string UserEmail);
+
+/// <summary>A buyer plus the number of still-valid tickets they hold for one product.</summary>
+public record TicketBuyerTickets(Guid UserId, string UserEmail, int TicketCount);
 
 // ── Reporting projections ────────────────────────────────────────────────────────────────────
 // Cancelled tickets are counted separately everywhere rather than folded into Sold/Revenue: a
