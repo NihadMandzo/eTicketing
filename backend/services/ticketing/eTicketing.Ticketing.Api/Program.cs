@@ -1,4 +1,4 @@
-using eTicketing.Contracts.Hosting;
+﻿using eTicketing.Contracts.Hosting;
 using eTicketing.Shared.Auth;
 using eTicketing.Ticketing.Api.Endpoints;
 using eTicketing.Ticketing.Api.Infrastructure;
@@ -37,6 +37,7 @@ app.MapPurchaseEndpoints();
 app.MapTicketEndpoints();
 app.MapTicketPrintEndpoints();
 app.MapReportEndpoints();
+app.MapAnalyticsEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

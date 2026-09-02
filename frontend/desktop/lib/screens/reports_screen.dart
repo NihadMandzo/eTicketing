@@ -13,8 +13,10 @@ import '../providers/report_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/reports/report_bar_chart.dart';
 import 'widgets/reports/report_data_table.dart';
+import 'widgets/reports/report_insight_card.dart';
 import 'widgets/reports/report_metric_card.dart';
 import 'widgets/reports/report_range_bar.dart';
+import 'widgets/reports/report_segment_card.dart';
 
 /// Izvještaji — the back-office reporting screen from docs/Design/Reports.dc.html.
 ///
@@ -64,14 +66,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
   ProductReport? _products;
   RedemptionReport? _redemption;
   OrganizationReport? _organizations;
+  AnalyticsInsights? _insights;
+
+  /// Forecast horizon for the AI Uvidi tab. The three the API accepts — see
+  /// `InsightsQueryValidator`, which refuses anything else.
+  int _horizon = 14;
 
   /// The tabs each role may see — the client half of the matrix in
   /// `ReportService.Authorize`.
+  ///
+  /// AI Uvidi sits with Prodaja: it forecasts and segments money, so Admin —
+  /// whose remit is operational — does not get it, exactly as for Prodaja.
   static const _tabsByRole = <String, List<ReportTab>>{
-    'SuperAdmin': [ReportTab.sales, ReportTab.products, ReportTab.redemption, ReportTab.organizations],
+    'SuperAdmin': [
+      ReportTab.sales,
+      ReportTab.products,
+      ReportTab.redemption,
+      ReportTab.organizations,
+      ReportTab.insights,
+    ],
     'Admin': [ReportTab.products, ReportTab.organizations],
-    'OrganizationSuperAdmin': [ReportTab.sales, ReportTab.products, ReportTab.redemption],
-    'OrganizationAdmin': [ReportTab.sales, ReportTab.products],
+    'OrganizationSuperAdmin': [
+      ReportTab.sales,
+      ReportTab.products,
+      ReportTab.redemption,
+      ReportTab.insights,
+    ],
+    'OrganizationAdmin': [ReportTab.sales, ReportTab.products, ReportTab.insights],
   };
 
   /// Every staff role but OrganizationAdmin may carry a report out of the app.
@@ -138,6 +159,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           break;
         case ReportTab.organizations:
           _organizations = await _provider.getOrganizations(_from, _to);
+          break;
+        case ReportTab.insights:
+          _insights = await _provider.getInsights(_from, _to, horizon: _horizon);
           break;
       }
 
@@ -342,6 +366,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ReportTab.products => _productsTab(),
       ReportTab.redemption => _redemptionTab(),
       ReportTab.organizations => _organizationsTab(),
+      ReportTab.insights => _insightsTab(),
     };
   }
 
@@ -705,6 +730,345 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  // ── AI Uvidi ──────────────────────────────────────────────────────────────
+
+  /// The AI tab: an optional generated summary, the ranked findings, the
+  /// forecast chart, the anomaly table and the audience segments.
+  ///
+  /// Every block prints the strategy that produced it. A forecast fitted from
+  /// four weeks of history and one extrapolated from a fortnight's average are
+  /// not the same claim, and a screen that presents them identically is lying
+  /// by omission — see `AnalyticsSource.caveat`.
+  Widget _insightsTab() {
+    final report = _insights;
+    if (report == null) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _tileGrid([
+            ReportMetricCard(
+              label: 'Projekcija prihoda',
+              value: formatMoney(report.forecast.projectedRevenue),
+              hint: report.forecast.changePercent == null
+                  ? 'Narednih ${report.forecast.horizon} dana'
+                  : '${formatSignedPercent(report.forecast.changePercent)} '
+                        'u odnosu na prethodnih ${report.forecast.horizon} dana',
+              // Only a projected fall is coloured. A rise stays neutral: it is a
+              // projection, and painting it green reads as money already earned.
+              emphasis: (report.forecast.changePercent ?? 0) < 0
+                  ? ReportEmphasis.negative
+                  : ReportEmphasis.neutral,
+            ),
+            ReportMetricCard(
+              label: 'Projekcija karata',
+              value: formatCount(report.forecast.projectedSold),
+              hint: 'Narednih ${report.forecast.horizon} dana',
+            ),
+            ReportMetricCard(
+              label: 'Neuobičajenih dana',
+              value: formatCount(report.anomalies.items.length),
+              hint: report.anomalies.source == AnalyticsSource.insufficient
+                  ? 'Nema dovoljno podataka'
+                  : 'U odabranom periodu',
+            ),
+            ReportMetricCard(
+              label: 'Kupaca u analizi',
+              value: formatCount(report.segments.totalBuyers),
+              hint: report.segments.windowLabel,
+            ),
+          ], constraints.maxWidth),
+          if (report.narrative != null) ...[
+            const SizedBox(height: 16),
+            _narrativeCard(report.narrative!),
+          ],
+          const SizedBox(height: 16),
+          _insightsCard(report),
+          const SizedBox(height: 16),
+          _forecastCard(report),
+          if (report.anomalies.items.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _anomaliesCard(report),
+          ],
+          const SizedBox(height: 16),
+          _segmentsCard(report, constraints.maxWidth),
+        ],
+      ),
+    );
+  }
+
+  /// The generated executive summary. Labelled as machine-written rather than
+  /// slipped in as the platform's own words — a reader deciding how much to
+  /// trust a sentence needs to know what wrote it. Absent entirely when no
+  /// model is configured or the call failed.
+  Widget _narrativeCard(String narrative) {
+    final brightness = Theme.of(context).brightness;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _isDark
+            ? AppColors.secondary.withValues(alpha: 0.10)
+            : AppColors.secondary.withValues(alpha: 0.07),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.sparkles, size: 16, color: AppColors.secondary),
+              const SizedBox(width: 8),
+              Text(
+                'AI SAŽETAK',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: AppColors.secondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            narrative,
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.55,
+              color: AppColors.textSecondary(brightness),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _insightsCard(AnalyticsInsights report) => ReportCard(
+    title: 'Poslovni uvidi',
+    subtitle: '${formatCount(report.insights.length)} '
+        '${report.insights.length == 1 ? 'nalaz' : 'nalaza'} · ${report.scope}',
+    child: Column(
+      children: [
+        for (final insight in report.insights) ...[
+          ReportInsightCard(insight: insight),
+          if (insight != report.insights.last) const SizedBox(height: 10),
+        ],
+      ],
+    ),
+  );
+
+  /// Actuals and projection drawn as one series. Both halves are scaled against
+  /// the same peak, or the join would show a step that is an artefact of the
+  /// drawing rather than of the data.
+  Widget _forecastCard(AnalyticsInsights report) {
+    final forecast = report.forecast;
+    final bars = [...forecast.actual, ...forecast.points];
+    final peak = bars.isEmpty ? 0.0 : bars.map((p) => p.revenue).reduce((a, b) => a > b ? a : b);
+
+    return ReportCard(
+      title: 'Prognoza prihoda',
+      subtitle: forecast.source.caveat ??
+          'Model vremenske serije (SSA) · projekcija za ${forecast.horizon} dana',
+      trailing: _horizonSelector(),
+      child: forecast.points.isEmpty
+          ? _emptyBlock('Nema dovoljno historijskih podataka za prognozu u ovom periodu.')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ReportBarChart(
+                  bars: [
+                    for (final point in forecast.actual)
+                      ReportBarData(
+                        label: point.label,
+                        value: _compactMoney(point.revenue),
+                        ratio: peak == 0 ? 0 : point.revenue / peak,
+                      ),
+                    for (final point in forecast.points)
+                      ReportBarData(
+                        label: point.label,
+                        value: _compactMoney(point.revenue),
+                        ratio: peak == 0 ? 0 : point.revenue / peak,
+                        isProjected: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _forecastLegend(forecast),
+              ],
+            ),
+    );
+  }
+
+  /// Explains the hollow bars, and states the confidence band in words — the
+  /// chart cannot draw the interval at this bar width, and a projection shown
+  /// without its uncertainty reads as a promise.
+  Widget _forecastLegend(ForecastBlock forecast) {
+    final brightness = Theme.of(context).brightness;
+    final lower = forecast.points.fold<double>(0, (sum, p) => sum + p.lowerBound);
+    final upper = forecast.points.fold<double>(0, (sum, p) => sum + p.upperBound);
+
+    return Wrap(
+      spacing: 18,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 10,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [AppColors.secondary, AppColors.primary],
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Ostvareno',
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 10,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.secondary.withValues(alpha: 0.75), width: 1.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Projekcija',
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+            ),
+          ],
+        ),
+        Text(
+          'Interval pouzdanosti 95%: ${formatMoney(lower)} – ${formatMoney(upper)}',
+          style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+        ),
+      ],
+    );
+  }
+
+  /// 7 / 14 / 30, the only horizons the API accepts. Re-triggers the load, and
+  /// goes through the same `_loadGeneration` guard as every other filter, so a
+  /// fast double-change cannot paint the older answer.
+  Widget _horizonSelector() {
+    final brightness = Theme.of(context).brightness;
+
+    return Wrap(
+      spacing: 6,
+      children: [
+        for (final horizon in const [7, 14, 30])
+          ChoiceChip(
+            label: Text('$horizon d'),
+            selected: _horizon == horizon,
+            labelStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _horizon == horizon ? Colors.white : AppColors.textSecondary(brightness),
+            ),
+            selectedColor: AppColors.primary,
+            showCheckmark: false,
+            onSelected: _isLoading
+                ? null
+                : (_) {
+                    if (_horizon == horizon) return;
+                    setState(() => _horizon = horizon);
+                    _load();
+                  },
+          ),
+      ],
+    );
+  }
+
+  Widget _anomaliesCard(AnalyticsInsights report) => ReportCard(
+    title: 'Neuobičajeni dani',
+    subtitle: report.anomalies.source.caveat ??
+        'Dani koji odstupaju od trenda i sedmičnog ritma prodaje',
+    child: ReportDataTable(
+      columns: const [
+        ReportColumn('Datum', flex: 16),
+        ReportColumn('Vrsta', flex: 12),
+        ReportColumn('Prihod', flex: 18, rightAligned: true),
+        ReportColumn('Očekivano', flex: 18, rightAligned: true),
+        ReportColumn('Odstupanje', flex: 16, rightAligned: true),
+      ],
+      rows: [
+        for (final anomaly in report.anomalies.items)
+          [
+            ReportCell(anomaly.label),
+            ReportCell.custom(
+              ReportBadge(
+                label: anomaly.direction.label,
+                color: anomaly.direction == AnomalyDirection.spike ? _positive : AppColors.warningDark,
+              ),
+            ),
+            ReportCell(formatMoney(anomaly.revenue), bold: true),
+            ReportCell(formatMoney(anomaly.expectedRevenue)),
+            ReportCell(
+              formatSignedPercent(anomaly.deviationPercent),
+              color: anomaly.direction == AnomalyDirection.spike ? _positive : AppColors.warningDark,
+              bold: true,
+            ),
+          ],
+      ],
+    ),
+  );
+
+  Widget _segmentsCard(AnalyticsInsights report, double width) {
+    final segments = report.segments.items;
+
+    return ReportCard(
+      title: 'Segmenti kupaca',
+      subtitle: report.segments.source.caveat ??
+          'K-Means grupisanje po ponašanju kupaca · ${report.segments.windowLabel}',
+      child: segments.isEmpty
+          ? _emptyBlock('Nema dovoljno kupaca za segmentaciju u ovom periodu.')
+          : Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                for (var i = 0; i < segments.length; i++)
+                  SizedBox(
+                    // Two across on a wide window, one when narrow — the card
+                    // carries two labelled bars and two stats and is unreadable
+                    // below about 320px.
+                    width: width >= 1100 ? (width - 16 - 48) / 2 : width - 48,
+                    child: ReportSegmentCard(segment: segments[i], isLeading: i == 0),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _emptyBlock(String message) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 28),
+    child: Center(
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 13,
+          color: AppColors.textTertiary(Theme.of(context).brightness),
+        ),
+      ),
+    ),
+  );
+
   // ── Shared bits ───────────────────────────────────────────────────────────
 
   /// The tile strip. Four across on a wide window, two on a medium one, one
@@ -737,6 +1101,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     ReportTab.products => 'proizvodi',
     ReportTab.redemption => 'iskoristenost',
     ReportTab.organizations => 'organizacije',
+    ReportTab.insights => 'uvidi',
   };
 
   static String _isoDate(DateTime date) =>

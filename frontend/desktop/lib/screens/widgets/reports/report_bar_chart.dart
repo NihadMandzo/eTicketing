@@ -12,7 +12,18 @@ class ReportBarData {
   /// knows whether the series is money or a count.
   final double ratio;
 
-  const ReportBarData({required this.label, required this.value, required this.ratio});
+  /// Drawn hollow instead of filled — the AI Uvidi chart continues a series of
+  /// actual days with projected ones, and the two must not read as equally
+  /// certain. Extending this widget rather than writing a second chart keeps
+  /// one set of scrolling, baseline and label rules for both.
+  final bool isProjected;
+
+  const ReportBarData({
+    required this.label,
+    required this.value,
+    required this.ratio,
+    this.isProjected = false,
+  });
 }
 
 /// The sales / arrivals column chart.
@@ -74,7 +85,9 @@ class ReportBarChart extends StatelessWidget {
                 Expanded(
                   child: _Bar(
                     data: bar,
-                    isPeak: highlightPeak && peak > 0 && bar.ratio >= peak,
+                    // A projected bar is never the "peak" worth highlighting:
+                    // the highlight means "this actually happened here".
+                    isPeak: highlightPeak && !bar.isProjected && peak > 0 && bar.ratio >= peak,
                     muted: highlightPeak,
                   ),
                 ),
@@ -101,7 +114,7 @@ class _Bar extends StatelessWidget {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final ratio = data.ratio.clamp(0.0, 1.0);
-    final solid = !muted || isPeak;
+    final solid = (!muted || isPeak) && !data.isProjected;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -145,7 +158,14 @@ class _Bar extends StatelessWidget {
                               colors: [AppColors.secondary, AppColors.primary],
                             )
                           : null,
-                      color: solid ? null : AppColors.primary.withValues(alpha: 0.28),
+                      color: solid
+                          ? null
+                          : AppColors.primary.withValues(alpha: data.isProjected ? 0.12 : 0.28),
+                      // Outlined rather than filled, so a projection reads as a
+                      // sketch of a bar next to the solid ones it continues.
+                      border: data.isProjected
+                          ? Border.all(color: AppColors.secondary.withValues(alpha: 0.75), width: 1.4)
+                          : null,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                     ),
                   ),
@@ -158,7 +178,11 @@ class _Bar extends StatelessWidget {
             data.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: AppColors.textTertiary(brightness)),
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textTertiary(brightness),
+              fontStyle: data.isProjected ? FontStyle.italic : FontStyle.normal,
+            ),
           ),
         ],
       ),

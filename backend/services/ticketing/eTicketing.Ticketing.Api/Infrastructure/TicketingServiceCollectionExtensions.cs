@@ -1,7 +1,14 @@
+﻿using System.Net.Http.Headers;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
 using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
+using eTicketing.Ticketing.Business.Analytics;
+using eTicketing.Ticketing.Business.Analytics.Anomalies;
+using eTicketing.Ticketing.Business.Analytics.Forecasting;
+using eTicketing.Ticketing.Business.Analytics.Insights;
+using eTicketing.Ticketing.Business.Analytics.Narrative;
+using eTicketing.Ticketing.Business.Analytics.Segmentation;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
@@ -139,6 +146,69 @@ public static class TicketingServiceCollectionExtensions
                     BreakDuration = TimeSpan.FromSeconds(15),
                 });
                 pb.AddTimeout(TimeSpan.FromSeconds(5));
+            });
+
+        builder.AddAnalyticsInfrastructure();
+
+        return builder;
+    }
+
+    /// <summary>
+    /// The AI Uvidi tab (GET /reports/insights).
+    ///
+    /// Note what is <i>not</i> here: no hosted service, no blob container, no snapshot table. Unlike
+    /// Catalog's recommender, whose matrix factorization is expensive enough to need a nightly job
+    /// and a persisted model, SSA and K-Means are fitted per request on the very range the caller
+    /// selected — a stored model would have been fitted on somebody else's window. The three
+    /// components are singletons because they hold nothing but a logger.
+    /// </summary>
+    private static WebApplicationBuilder AddAnalyticsInfrastructure(this WebApplicationBuilder builder)
+    {
+        builder.Services.AddOptions<InsightsOptions>()
+            .Bind(builder.Configuration.GetSection(InsightsOptions.SectionName));
+
+        // AnalyticsService caches a computed response for a few minutes: the tab costs three report
+        // queries plus two cross-service lookups, and none of that changes while the user is
+        // flipping between horizons on the same range.
+        builder.Services.AddMemoryCache();
+
+        builder.Services.AddSingleton<ISalesForecaster, SsaSalesForecaster>();
+        builder.Services.AddSingleton<IAnomalyDetector, SsaAnomalyDetector>();
+        builder.Services.AddSingleton<IAudienceSegmenter, KMeansAudienceSegmenter>();
+        builder.Services.AddSingleton<IInsightGenerator, InsightGenerator>();
+        builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+
+        var narrative = builder.Configuration
+            .GetSection(InsightsOptions.SectionName)
+            .Get<InsightsOptions>()?.Narrative ?? new NarrativeOptions();
+
+        if (!narrative.IsEnabled)
+        {
+            // The default, and what every test and offline demo runs with: the tab returns its
+            // deterministic insights and no summary. Nothing else about the feature changes.
+            builder.Services.AddSingleton<INarrativeWriter, NullNarrativeWriter>();
+            return builder;
+        }
+
+        // Same resilience shape as the Catalog/Identity clients, with two deliberate differences:
+        // one retry rather than three (a model that just took twenty seconds to fail is not going to
+        // succeed on the third ask while a report request waits), and the timeout comes from
+        // configuration because a local 3B model on CPU and a hosted 70B one are seconds apart.
+        builder.Services.AddHttpClient<INarrativeWriter, OpenAiCompatibleNarrativeWriter>(c =>
+            {
+                // Trailing slash matters: the relative "chat/completions" would otherwise replace
+                // the "/v1" segment rather than extend it.
+                c.BaseAddress = new Uri(narrative.BaseUrl.TrimEnd('/') + "/");
+
+                // Ollama authenticates nothing; Groq and OpenRouter need a bearer token. Sent only
+                // when one is actually configured, so a stray empty header never reaches Ollama.
+                if (!string.IsNullOrWhiteSpace(narrative.ApiKey))
+                    c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", narrative.ApiKey);
+            })
+            .AddResilienceHandler("narrative-pipeline", pb =>
+            {
+                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 1 });
+                pb.AddTimeout(TimeSpan.FromSeconds(Math.Clamp(narrative.TimeoutSeconds, 5, 60)));
             });
 
         return builder;

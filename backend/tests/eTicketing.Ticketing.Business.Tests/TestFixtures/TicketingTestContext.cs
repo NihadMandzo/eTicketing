@@ -1,4 +1,10 @@
-using eTicketing.Contracts.Persistence;
+﻿using eTicketing.Contracts.Persistence;
+using eTicketing.Ticketing.Business.Analytics;
+using eTicketing.Ticketing.Business.Analytics.Anomalies;
+using eTicketing.Ticketing.Business.Analytics.Forecasting;
+using eTicketing.Ticketing.Business.Analytics.Insights;
+using eTicketing.Ticketing.Business.Analytics.Narrative;
+using eTicketing.Ticketing.Business.Analytics.Segmentation;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
@@ -12,6 +18,7 @@ using eTicketing.Ticketing.Data;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -169,8 +176,28 @@ public sealed class TicketingTestContext : IDisposable
     public IReportService CreateReportService() =>
         new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, IdentityClient.Object, PlatformClock);
 
+    /// <summary>The AI Uvidi service with the real ML.NET components — SSA and K-Means are
+    /// milliseconds on test-sized data, and stubbing them would leave the source ladder (Model /
+    /// Heuristic / Insufficient) untested where it matters most, in the service that reports it.
+    /// Only the narrative writer is swappable, since the whole point of that seam is that a test
+    /// runs with no model server anywhere near it.</summary>
+    public IAnalyticsService CreateAnalyticsService(INarrativeWriter? narrative = null) =>
+        new AnalyticsService(
+            CreateReportService(),
+            TicketRepository,
+            new SsaSalesForecaster(NullLogger<SsaSalesForecaster>.Instance),
+            new SsaAnomalyDetector(NullLogger<SsaAnomalyDetector>.Instance),
+            new KMeansAudienceSegmenter(NullLogger<KMeansAudienceSegmenter>.Instance),
+            new InsightGenerator(),
+            narrative ?? new NullNarrativeWriter(),
+            PlatformClock,
+            // A fresh cache per service, so one test's response can never be served to another.
+            new MemoryCache(new MemoryCacheOptions()),
+            MsOptions.Create(new InsightsOptions()),
+            NullLogger<AnalyticsService>.Instance);
+
     public IReportPdfService CreateReportPdfService() =>
-        new ReportPdfService(CreateReportService(), PlatformClock);
+        new ReportPdfService(CreateReportService(), CreateAnalyticsService(), PlatformClock);
 
     public IPurchaseService CreatePurchaseService() =>
         new PurchaseService(

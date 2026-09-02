@@ -1,10 +1,11 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Repositories;
+using static eTicketing.Ticketing.Business.Reports.ReportMath;
 
 namespace eTicketing.Ticketing.Business.Reports;
 
@@ -36,19 +37,19 @@ public class ReportService : IReportService
     public async Task<Result<SalesReportResponse>> GetSalesAsync(
         ReportQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var access = Authorize(user, ReportTab.Sales);
+        var access = ReportAuthorization.Authorize(user, ReportTab.Sales);
         if (access.Error is not null)
             return Result<SalesReportResponse>.Failure(access.Error);
 
         var range = ReportRange.Create(query, _clock);
-        var daily = ToLocalDays(
-            await _tickets.GetHourlySalesAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct));
+        var daily = ReportSeries.ToLocalDays(
+            await _tickets.GetHourlySalesAsync(access.OrganizationId, range.FromUtc, range.ToUtcExclusive, ct), _clock);
 
         // The comparison period is the same length immediately before this one, so "12,4% više"
         // always means "than the equivalent stretch of time", not "than last calendar month".
         var previous = range.Preceding();
-        var previousDaily = ToLocalDays(
-            await _tickets.GetHourlySalesAsync(access.OrganizationId, previous.FromUtc, previous.ToUtcExclusive, ct));
+        var previousDaily = ReportSeries.ToLocalDays(
+            await _tickets.GetHourlySalesAsync(access.OrganizationId, previous.FromUtc, previous.ToUtcExclusive, ct), _clock);
 
         // Every total below is summed over the SAME local-day list the chart is built from, so the
         // headline figures and the bars can never disagree. They could before: the rows were keyed
@@ -81,7 +82,7 @@ public class ReportService : IReportService
             NetRevenue: gross - cancelledAmount,
             OnlineSold: onlineSold,
             PrintedSold: printedSold,
-            Buckets: BuildBuckets(range, daily),
+            Buckets: ReportSeries.BuildBuckets(range, daily),
             ByOrganization: byOrganization);
     }
 
@@ -131,7 +132,7 @@ public class ReportService : IReportService
     public async Task<Result<ProductReportResponse>> GetProductsAsync(
         ReportQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var access = Authorize(user, ReportTab.Products);
+        var access = ReportAuthorization.Authorize(user, ReportTab.Products);
         if (access.Error is not null)
             return Result<ProductReportResponse>.Failure(access.Error);
 
@@ -198,7 +199,7 @@ public class ReportService : IReportService
     public async Task<Result<RedemptionReportResponse>> GetRedemptionAsync(
         ReportQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var access = Authorize(user, ReportTab.Redemption);
+        var access = ReportAuthorization.Authorize(user, ReportTab.Redemption);
         if (access.Error is not null)
             return Result<RedemptionReportResponse>.Failure(access.Error);
 
@@ -251,7 +252,7 @@ public class ReportService : IReportService
     public async Task<Result<OrganizationReportResponse>> GetOrganizationsAsync(
         ReportQuery query, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var access = Authorize(user, ReportTab.Organizations);
+        var access = ReportAuthorization.Authorize(user, ReportTab.Organizations);
         if (access.Error is not null)
             return Result<OrganizationReportResponse>.Failure(access.Error);
 
@@ -323,7 +324,7 @@ public class ReportService : IReportService
         // see it (unlike Sales/Redemption, which Admin/OrganizationAdmin are denied), scoped to the
         // caller's own organization for Org* roles and platform-wide for SuperAdmin/Admin — exactly
         // the shape "which events are coming up" needs for the Dashboard.
-        var access = Authorize(user, ReportTab.Products);
+        var access = ReportAuthorization.Authorize(user, ReportTab.Products);
         if (access.Error is not null)
             return Result<List<UpcomingEventResponse>>.Failure(access.Error);
 
@@ -372,189 +373,6 @@ public class ReportService : IReportService
 
         return Result<List<UpcomingEventResponse>>.Success(result);
     }
-
-    // ── Authorization ────────────────────────────────────────────────────────────────────────
-
-    /// <summary>The outcome of the role/tab matrix check: either an <see cref="Error"/> to return,
-    /// or the organization the caller's data must be scoped to (null = whole platform).</summary>
-    private readonly record struct ReportAccess(Error? Error, Guid? OrganizationId)
-    {
-        public static ReportAccess Denied(Error error) => new(error, null);
-        public static ReportAccess Platform() => new(null, null);
-        public static ReportAccess Organization(Guid id) => new(null, id);
-    }
-
-    /// <summary>
-    /// The single place the report matrix lives. Written as an explicit switch over role × tab
-    /// rather than as a set of authorization policies because the split is not "can you reach this
-    /// endpoint" but "which of the four reports does your job involve" — Admin and SuperAdmin
-    /// share every ASP.NET policy in this codebase yet see different tabs here.
-    /// </summary>
-    private static ReportAccess Authorize(ClaimsPrincipal user, ReportTab tab)
-    {
-        var forbidden = Error.Unauthorized("report.forbidden", "Nemate pristup ovom izvještaju.");
-
-        switch (user.GetRole())
-        {
-            case "SuperAdmin":
-                return ReportAccess.Platform();
-
-            case "Admin":
-                // Platform-wide reach, operational remit: no revenue reports, no gate statistics.
-                return tab is ReportTab.Products or ReportTab.Organizations
-                    ? ReportAccess.Platform()
-                    : ReportAccess.Denied(forbidden);
-
-            case "OrganizationSuperAdmin":
-            case "OrganizationAdmin":
-            {
-                if (tab == ReportTab.Organizations)
-                    return ReportAccess.Denied(forbidden);
-
-                // OrganizationAdmin is the narrowest role: sales and products for their own
-                // organization only, no gate statistics and no export (see IReportPdfService).
-                if (tab == ReportTab.Redemption && user.IsInRole("OrganizationAdmin"))
-                    return ReportAccess.Denied(forbidden);
-
-                var organizationId = user.GetOrganizationId();
-                if (organizationId is null)
-                {
-                    // An Org* token with no organizationId claim is a malformed session, not a
-                    // permission question — refuse rather than silently widening to the platform.
-                    return ReportAccess.Denied(Error.Unauthorized(
-                        "report.no_organization", "Vaš nalog nije povezan ni sa jednom organizacijom."));
-                }
-
-                return ReportAccess.Organization(organizationId.Value);
-            }
-
-            default:
-                return ReportAccess.Denied(forbidden);
-        }
-    }
-
-    // ── Range + bucketing ────────────────────────────────────────────────────────────────────
-
-    /// <summary>A validated report range, resolved once into every form the pipeline needs: the
-    /// local dates for labels, the half-open UTC window for SQL, and the bucket unit the chart is
-    /// drawn in.</summary>
-    private readonly record struct ReportRange(
-        DateOnly From, DateOnly To, DateTime FromUtc, DateTime ToUtcExclusive, PlatformClock Clock)
-    {
-        public int Days => To.DayNumber - From.DayNumber + 1;
-
-        public static ReportRange Create(ReportQuery query, PlatformClock clock) => new(
-            query.From,
-            query.To,
-            clock.ToUtcStartOfDay(query.From),
-            // Exclusive upper bound at the start of the day *after* To, so the whole of the last
-            // day is included without any 23:59:59.999 rounding games.
-            clock.ToUtcStartOfDay(query.To.AddDays(1)),
-            clock);
-
-        /// <summary>The equal-length range immediately before this one — the growth comparison
-        /// baseline.</summary>
-        public ReportRange Preceding() => Create(
-            new ReportQuery { From = From.AddDays(-Days), To = From.AddDays(-1) }, Clock);
-
-        /// <summary>Daily bars up to a fortnight, weekly up to a quarter, monthly beyond. Chosen
-        /// here rather than by the client so the PDF and all three frontends can never disagree
-        /// about what a bar means.</summary>
-        public ReportBucketUnit Unit => Days switch
-        {
-            <= 14 => ReportBucketUnit.Day,
-            <= 92 => ReportBucketUnit.Week,
-            _ => ReportBucketUnit.Month
-        };
-
-        public ReportPeriod ToPeriod() => new(From, To, Days, Unit);
-    }
-
-    /// <summary>Bosnian short month names, matching the desktop app's own formatting and the
-    /// labels in docs/Design/Reports.dc.html.</summary>
-    private static readonly string[] MonthNames =
-        ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"];
-
-    /// <summary>
-    /// Sales for one local calendar day. The Data layer cannot produce this — it has no time zone
-    /// (see PlatformClock.ToLocal) — so it hands back UTC hours and ToLocalDays folds them here.
-    /// </summary>
-    private readonly record struct LocalDaySales(
-        int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount, int OnlineSold, int PrintedSold);
-
-    /// <summary>
-    /// Folds UTC-hour rows into local calendar days.
-    ///
-    /// An hour is the finest grain that survives the conversion unambiguously: DST transitions
-    /// land on hour boundaries, so every row belongs to exactly one local date. Because
-    /// ReportRange.Create builds the SQL window as exactly [local From 00:00, local To+1 00:00),
-    /// every key produced here is guaranteed to fall inside [range.From, range.To] — which is what
-    /// lets BuildBuckets visit all of them.
-    /// </summary>
-    private Dictionary<DateOnly, LocalDaySales> ToLocalDays(List<HourlySalesFacts> hourly)
-    {
-        var byDay = new Dictionary<DateOnly, LocalDaySales>();
-
-        foreach (var row in hourly)
-        {
-            var day = _clock.LocalDateOf(row.HourUtc);
-            byDay.TryGetValue(day, out var running);
-            byDay[day] = new LocalDaySales(
-                running.Sold + row.Sold,
-                running.Revenue + row.Revenue,
-                running.Cancelled + row.Cancelled,
-                running.CancelledAmount + row.CancelledAmount,
-                running.OnlineSold + row.OnlineSold,
-                running.PrintedSold + row.PrintedSold);
-        }
-
-        return byDay;
-    }
-
-    /// <summary>
-    /// Folds the per-day rows into the chart's bars. Buckets are generated from the range itself
-    /// rather than from the rows, so a week nobody bought anything in is drawn as a zero-height bar
-    /// instead of vanishing and silently compressing the timeline.
-    /// </summary>
-    private static List<ReportBucket> BuildBuckets(ReportRange range, Dictionary<DateOnly, LocalDaySales> byDay)
-    {
-        var buckets = new List<ReportBucket>();
-
-        // Week and month buckets are anchored at the start of the range and walk forward, so the
-        // first bar is always the range's own start date rather than a partial period carved
-        // backwards from today.
-        var cursor = range.From;
-        while (cursor <= range.To)
-        {
-            var end = range.Unit switch
-            {
-                ReportBucketUnit.Day => cursor,
-                ReportBucketUnit.Week => cursor.AddDays(6),
-                _ => new DateOnly(cursor.Year, cursor.Month, 1).AddMonths(1).AddDays(-1)
-            };
-            if (end > range.To) end = range.To;
-
-            decimal revenue = 0;
-            var sold = 0;
-            for (var day = cursor; day <= end; day = day.AddDays(1))
-            {
-                if (!byDay.TryGetValue(day, out var facts)) continue;
-                revenue += facts.Revenue;
-                sold += facts.Sold;
-            }
-
-            buckets.Add(new ReportBucket(Label(cursor, range.Unit), revenue, sold));
-            cursor = end.AddDays(1);
-        }
-
-        return buckets;
-    }
-
-    private static string Label(DateOnly start, ReportBucketUnit unit) => unit switch
-    {
-        ReportBucketUnit.Month => char.ToUpperInvariant(MonthNames[start.Month - 1][0]) + MonthNames[start.Month - 1][1..],
-        _ => $"{start.Day}. {MonthNames[start.Month - 1]}"
-    };
 
     // ── Cross-service lookups ────────────────────────────────────────────────────────────────
 
@@ -632,16 +450,6 @@ public class ReportService : IReportService
     }
 
     // ── Arithmetic helpers ───────────────────────────────────────────────────────────────────
-
-    /// <summary>Division that answers 0 instead of throwing on an empty period. Every ratio in
-    /// these reports has a legitimately-zero denominator (a range with no sales, a product with no
-    /// check-ins), so guarding at each call site would be noise.</summary>
-    private static decimal Divide(decimal numerator, decimal denominator)
-        => denominator == 0 ? 0m : numerator / denominator;
-
-    /// <summary>Percentages and averages are rounded once, here, so the clients can render what
-    /// they are given rather than each rounding a long decimal their own way.</summary>
-    private static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     /// <summary>Occupancy needs a fixed total to divide by. DailyEntry capacity is a per-day
     /// allowance repeated across a month, so there is no such total — those products report no

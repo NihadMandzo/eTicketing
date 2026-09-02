@@ -14,7 +14,8 @@ enum ReportTab {
   sales('Sales', 'Prodaja'),
   products('Products', 'Učinak Proizvoda'),
   redemption('Redemption', 'Iskorištenost Karata'),
-  organizations('Organizations', 'Organizacije');
+  organizations('Organizations', 'Organizacije'),
+  insights('Insights', 'AI Uvidi');
 
   const ReportTab(this.wireName, this.label);
 
@@ -59,6 +60,23 @@ class ReportProvider extends BaseProvider<SalesReport, String> {
   /// GET /api/reports/organizations
   Future<OrganizationReport> getOrganizations(DateTime from, DateTime to) async =>
       OrganizationReport.fromJson(await _get('reports/organizations', from, to));
+
+  /// GET /api/reports/insights - the AI Uvidi tab, in one call.
+  ///
+  /// One request rather than one per block: the screen loads exactly one tab at
+  /// a time, and the three blocks share the same range and the same three
+  /// underlying report queries server-side.
+  Future<AnalyticsInsights> getInsights(DateTime from, DateTime to, {int horizon = 14}) async {
+    final response = await send(() => apiClient.get('reports/insights', queryParameters: {
+          'from': _asDateOnly(from),
+          'to': _asDateOnly(to),
+          'horizon': horizon.toString(),
+        }));
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return AnalyticsInsights.fromJson(response.data as Map<String, dynamic>);
+  }
 
   /// GET /api/reports/upcoming-events — the Dashboard's "Nadolazeći događaji" card. Not a
   /// from/to report tab: no date range, just the next [count] published SingleOccurrence events.

@@ -34,6 +34,12 @@
          PaymentChargeStatus stays in lockstep with the real PaymentStatus it's deserialized
          against (see that test for why). -->
     <ProjectReference Include="..\..\services\payment\eTicketing.Payment.Data\eTicketing.Payment.Data.csproj" />
+    <!-- Test-only reference, same reasoning as the Payment.Data one above. The AI Uvidi tab
+         promises that a dead or slow LLM can never fail a report, and the code that has to keep
+         that promise is OpenAiCompatibleNarrativeWriter — which lives in .Api because HTTP wiring
+         is a hosting concern. The other HTTP clients there are mocked rather than tested; this one
+         is not, because "returns null instead of throwing" is the guarantee itself. -->
+    <ProjectReference Include="..\..\services\ticketing\eTicketing.Ticketing.Api\eTicketing.Ticketing.Api.csproj" />
   </ItemGroup>
 
 </Project>

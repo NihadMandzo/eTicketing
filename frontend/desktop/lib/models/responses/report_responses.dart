@@ -4,46 +4,36 @@
 /// are always consumed together by a single screen — splitting them would mean
 /// four imports for every widget that renders a tab.
 ///
-/// Enums are parsed from the string names ASP.NET serializes, not from
-/// ordinals: these are new contracts with no wire-format history to preserve,
-/// unlike `TicketStatus` (see `frontend/mobile`'s enum tables), and a name
-/// survives someone reordering the C# enum.
+/// Enums are parsed by **ordinal**. The backend registers no
+/// `JsonStringEnumConverter` anywhere, so `System.Text.Json` serializes every
+/// enum as its integer value — which is why the C# side documents these as
+/// "append only, never reorder". Parsing by name here silently fell through to
+/// the `orElse` fallback on every response.
 library;
 
 /// How the sales chart is bucketed. The server picks this from the range
 /// length and tells the client, so the chart title can say which it is.
 enum ReportBucketUnit {
-  day('Day', 'po danu'),
-  week('Week', 'po sedmici'),
-  month('Month', 'po mjesecu');
+  day('po danu'),
+  week('po sedmici'),
+  month('po mjesecu');
 
-  const ReportBucketUnit(this.wireName, this.title);
-
-  final String wireName;
+  const ReportBucketUnit(this.title);
 
   /// The tail of the chart heading — "Prihod po sedmici".
   final String title;
 
-  static ReportBucketUnit fromJson(Object? value) => values.firstWhere(
-        (u) => u.wireName == value,
-        orElse: () => ReportBucketUnit.day,
-      );
+  static ReportBucketUnit fromJson(Object? value) => _byOrdinal(values, value, ReportBucketUnit.day);
 }
 
 /// Which column set the Organizacije table renders. SuperAdmin gets the
 /// financial view, Admin the operational one.
 enum OrganizationReportView {
-  financial('Financial'),
-  operational('Operational');
+  financial,
+  operational;
 
-  const OrganizationReportView(this.wireName);
-
-  final String wireName;
-
-  static OrganizationReportView fromJson(Object? value) => values.firstWhere(
-        (v) => v.wireName == value,
-        orElse: () => OrganizationReportView.operational,
-      );
+  static OrganizationReportView fromJson(Object? value) =>
+      _byOrdinal(values, value, OrganizationReportView.operational);
 }
 
 /// The range a report actually covers, echoed back by the server.
@@ -442,9 +432,302 @@ class UpcomingEventResponse {
 /// accept both.
 double _toDouble(Object? value) => (value as num?)?.toDouble() ?? 0;
 
+/// Reads an enum sent as its integer ordinal, falling back when the server is
+/// newer than this client and has appended a value we do not know yet.
+T _byOrdinal<T extends Enum>(List<T> values, Object? value, T fallback) {
+  final index = value is int ? value : int.tryParse('$value');
+  return index != null && index >= 0 && index < values.length ? values[index] : fallback;
+}
+
 double? _toNullableDouble(Object? value) => (value as num?)?.toDouble();
 
 List<T> _list<T>(Object? value, T Function(Map<String, dynamic>) fromJson) =>
     (value as List<dynamic>? ?? const [])
         .map((e) => fromJson(e as Map<String, dynamic>))
         .toList();
+
+// ── AI Uvidi (GET /api/reports/insights) ───────────────────────────────────
+
+/// Which strategy produced a block of the AI Uvidi tab.
+///
+/// Every block carries its own — on a young organization the forecast can
+/// legitimately be [heuristic] while segmentation is [insufficient], and the UI
+/// titles each block from this rather than presenting all three with the same
+/// authority.
+enum AnalyticsSource {
+  model,
+  heuristic,
+  insufficient;
+
+  static AnalyticsSource fromJson(Object? value) =>
+      _byOrdinal(values, value, AnalyticsSource.insufficient);
+
+  /// The caveat printed under a block's heading. Null for [model], which needs
+  /// none.
+  String? get caveat => switch (this) {
+        AnalyticsSource.model => null,
+        AnalyticsSource.heuristic =>
+          'Procjena na osnovu prosjeka — nema dovoljno historije za model.',
+        AnalyticsSource.insufficient =>
+          'Nema dovoljno podataka za pouzdanu analizu u ovom periodu.',
+      };
+}
+
+enum AnomalyDirection {
+  spike('Skok'),
+  drop('Pad');
+
+  const AnomalyDirection(this.label);
+
+  final String label;
+
+  static AnomalyDirection fromJson(Object? value) =>
+      _byOrdinal(values, value, AnomalyDirection.spike);
+}
+
+/// Drives an insight card's colour and its position in the list.
+enum InsightSeverity {
+  positive,
+  neutral,
+  warning,
+  critical;
+
+  static InsightSeverity fromJson(Object? value) =>
+      _byOrdinal(values, value, InsightSeverity.neutral);
+}
+
+enum InsightCategory {
+  forecast,
+  anomaly,
+  sales,
+  audience,
+  redemption,
+  catalog;
+
+  static InsightCategory fromJson(Object? value) =>
+      _byOrdinal(values, value, InsightCategory.sales);
+}
+
+/// One day of the forecast chart. Actual days arrive with their bounds equal to
+/// the value, so one widget draws both halves of the series.
+class ForecastPoint {
+  final DateTime date;
+  final String label;
+  final double revenue;
+  final double lowerBound;
+  final double upperBound;
+  final int sold;
+
+  const ForecastPoint({
+    required this.date,
+    required this.label,
+    required this.revenue,
+    required this.lowerBound,
+    required this.upperBound,
+    required this.sold,
+  });
+
+  factory ForecastPoint.fromJson(Map<String, dynamic> json) => ForecastPoint(
+        date: DateTime.parse(json['date'] as String),
+        label: json['label'] as String? ?? '',
+        revenue: _toDouble(json['revenue']),
+        lowerBound: _toDouble(json['lowerBound']),
+        upperBound: _toDouble(json['upperBound']),
+        sold: json['sold'] as int? ?? 0,
+      );
+}
+
+class ForecastBlock {
+  final AnalyticsSource source;
+  final int horizon;
+  final double projectedRevenue;
+  final int projectedSold;
+
+  /// Against the equally long tail of actuals. Null when that tail sold
+  /// nothing — the UI drops the line rather than printing an infinity.
+  final double? changePercent;
+
+  /// The actual days the projection continues, so the chart draws one unbroken
+  /// series.
+  final List<ForecastPoint> actual;
+  final List<ForecastPoint> points;
+
+  const ForecastBlock({
+    required this.source,
+    required this.horizon,
+    required this.projectedRevenue,
+    required this.projectedSold,
+    required this.changePercent,
+    required this.actual,
+    required this.points,
+  });
+
+  factory ForecastBlock.fromJson(Map<String, dynamic> json) => ForecastBlock(
+        source: AnalyticsSource.fromJson(json['source']),
+        horizon: json['horizon'] as int? ?? 0,
+        projectedRevenue: _toDouble(json['projectedRevenue']),
+        projectedSold: json['projectedSold'] as int? ?? 0,
+        changePercent: (json['changePercent'] as num?)?.toDouble(),
+        actual: _list(json['actual'], ForecastPoint.fromJson),
+        points: _list(json['points'], ForecastPoint.fromJson),
+      );
+}
+
+class SalesAnomaly {
+  final DateTime date;
+  final String label;
+  final AnomalyDirection direction;
+  final double revenue;
+  final double expectedRevenue;
+  final double deviationPercent;
+  final double confidence;
+
+  const SalesAnomaly({
+    required this.date,
+    required this.label,
+    required this.direction,
+    required this.revenue,
+    required this.expectedRevenue,
+    required this.deviationPercent,
+    required this.confidence,
+  });
+
+  factory SalesAnomaly.fromJson(Map<String, dynamic> json) => SalesAnomaly(
+        date: DateTime.parse(json['date'] as String),
+        label: json['label'] as String? ?? '',
+        direction: AnomalyDirection.fromJson(json['direction']),
+        revenue: _toDouble(json['revenue']),
+        expectedRevenue: _toDouble(json['expectedRevenue']),
+        deviationPercent: _toDouble(json['deviationPercent']),
+        confidence: _toDouble(json['confidence']),
+      );
+}
+
+class AnomalyBlock {
+  final AnalyticsSource source;
+  final List<SalesAnomaly> items;
+
+  const AnomalyBlock({required this.source, required this.items});
+
+  factory AnomalyBlock.fromJson(Map<String, dynamic> json) => AnomalyBlock(
+        source: AnalyticsSource.fromJson(json['source']),
+        items: _list(json['items'], SalesAnomaly.fromJson),
+      );
+}
+
+class AudienceSegment {
+  final String name;
+  final String description;
+  final int buyers;
+  final double sharePercent;
+  final double revenueSharePercent;
+  final double averageSpend;
+  final double averageTickets;
+  final int averageRecencyDays;
+
+  const AudienceSegment({
+    required this.name,
+    required this.description,
+    required this.buyers,
+    required this.sharePercent,
+    required this.revenueSharePercent,
+    required this.averageSpend,
+    required this.averageTickets,
+    required this.averageRecencyDays,
+  });
+
+  factory AudienceSegment.fromJson(Map<String, dynamic> json) => AudienceSegment(
+        name: json['name'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        buyers: json['buyers'] as int? ?? 0,
+        sharePercent: _toDouble(json['sharePercent']),
+        revenueSharePercent: _toDouble(json['revenueSharePercent']),
+        averageSpend: _toDouble(json['averageSpend']),
+        averageTickets: _toDouble(json['averageTickets']),
+        averageRecencyDays: json['averageRecencyDays'] as int? ?? 0,
+      );
+}
+
+class SegmentBlock {
+  final AnalyticsSource source;
+
+  /// Segmentation deliberately ignores the selected range in favour of a
+  /// trailing year; this label says so, so the mismatch reads as a decision
+  /// rather than a bug.
+  final String windowLabel;
+  final int totalBuyers;
+  final List<AudienceSegment> items;
+
+  const SegmentBlock({
+    required this.source,
+    required this.windowLabel,
+    required this.totalBuyers,
+    required this.items,
+  });
+
+  factory SegmentBlock.fromJson(Map<String, dynamic> json) => SegmentBlock(
+        source: AnalyticsSource.fromJson(json['source']),
+        windowLabel: json['windowLabel'] as String? ?? '',
+        totalBuyers: json['totalBuyers'] as int? ?? 0,
+        items: _list(json['items'], AudienceSegment.fromJson),
+      );
+}
+
+/// One generated finding. [metric] arrives pre-formatted in Bosnian.
+class BusinessInsight {
+  final InsightSeverity severity;
+  final InsightCategory category;
+  final String title;
+  final String body;
+  final String? metric;
+
+  const BusinessInsight({
+    required this.severity,
+    required this.category,
+    required this.title,
+    required this.body,
+    required this.metric,
+  });
+
+  factory BusinessInsight.fromJson(Map<String, dynamic> json) => BusinessInsight(
+        severity: InsightSeverity.fromJson(json['severity']),
+        category: InsightCategory.fromJson(json['category']),
+        title: json['title'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        metric: json['metric'] as String?,
+      );
+}
+
+/// Everything the AI Uvidi tab renders.
+///
+/// [narrative] is null whenever no model is configured or the call failed — the
+/// tab is fully usable without it, so the card is simply omitted.
+class AnalyticsInsights {
+  final ReportPeriod period;
+  final String scope;
+  final ForecastBlock forecast;
+  final AnomalyBlock anomalies;
+  final SegmentBlock segments;
+  final List<BusinessInsight> insights;
+  final String? narrative;
+
+  const AnalyticsInsights({
+    required this.period,
+    required this.scope,
+    required this.forecast,
+    required this.anomalies,
+    required this.segments,
+    required this.insights,
+    required this.narrative,
+  });
+
+  factory AnalyticsInsights.fromJson(Map<String, dynamic> json) => AnalyticsInsights(
+        period: ReportPeriod.fromJson(json['period'] as Map<String, dynamic>),
+        scope: json['scope'] as String? ?? '',
+        forecast: ForecastBlock.fromJson(json['forecast'] as Map<String, dynamic>? ?? const {}),
+        anomalies: AnomalyBlock.fromJson(json['anomalies'] as Map<String, dynamic>? ?? const {}),
+        segments: SegmentBlock.fromJson(json['segments'] as Map<String, dynamic>? ?? const {}),
+        insights: _list(json['insights'], BusinessInsight.fromJson),
+        narrative: json['narrative'] as String?,
+      );
+}

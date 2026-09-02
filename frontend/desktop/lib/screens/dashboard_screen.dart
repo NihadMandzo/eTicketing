@@ -18,6 +18,7 @@ import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/reports/report_bar_chart.dart';
 import 'widgets/reports/report_data_table.dart';
+import 'widgets/reports/report_insight_card.dart';
 import 'widgets/reports/report_metric_card.dart';
 
 /// Kontrolna tabla — the post-login landing page, built from
@@ -58,6 +59,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ProductReport? _products;
   OrganizationReport? _organizations;
   List<UpcomingEventResponse>? _upcomingEvents;
+  AnalyticsInsights? _insights;
 
   bool get _isSuperAdmin => widget.user.roleName == 'SuperAdmin';
   bool get _isAdmin => widget.user.roleName == 'Admin';
@@ -147,6 +149,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_isPlatformStaff) {
       futures.add(_fetch(() async => _organizations = await ReportProvider().getOrganizations(from, to)));
+    }
+
+    // AI Uvidi shares the Sales access matrix, so the same roles that get a
+    // revenue card get the findings teaser. Fetched through _fetch like every
+    // other card: the analysis is the most expensive thing on this page, and a
+    // slow or failed one must leave the rest of the dashboard intact.
+    if (_hasSalesAccess) {
+      futures.add(_fetch(() async => _insights = await ReportProvider().getInsights(from, to)));
     }
 
     // Available to every role that reaches this shell.
@@ -305,6 +315,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return formatCount(amount.round());
   }
 
+  // ── AI uvidi ─────────────────────────────────────────────────────────────
+
+  /// The top findings from the AI Uvidi analysis, as a teaser.
+  ///
+  /// Null — so the card is dropped from the layout entirely — for a role
+  /// without sales access, and also when the fetch failed or the period had
+  /// nothing to analyse. An empty "AI uvidi" panel is worse than no panel: it
+  /// invites the reader to wonder what broke.
+  Widget? _insightsCard(Brightness brightness) {
+    final report = _insights;
+    if (!_hasSalesAccess || report == null || report.insights.isEmpty) return null;
+
+    // Three at most. The full set lives on Izvještaji; this is a pointer to it,
+    // and six cards here would push the rest of the dashboard off the fold.
+    final top = report.insights.take(3).toList();
+
+    return ReportCard(
+      title: 'AI uvidi',
+      subtitle: 'Analiza posljednjih 30 dana · ${report.scope}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final insight in top) ...[
+            ReportInsightCard(insight: insight),
+            if (insight != top.last) const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Cijela analiza — prognoza, neuobičajeni dani i segmenti kupaca — '
+            'nalazi se na kartici "AI Uvidi" u Izvještajima.',
+            style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Upcoming events ──────────────────────────────────────────────────────
 
   Widget _upcomingEventsCard(Brightness brightness) {
@@ -451,9 +498,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final topSelling = _topSellingCard(brightness);
     final orgOverview = _isPlatformStaff ? _orgOverviewCard(brightness) : null;
     final salesChannels = _hasSalesAccess ? _salesChannelsCard(brightness) : null;
+    final insights = _insightsCard(brightness);
 
     // Narrow layout: one column, in reading order.
-    final stacked = <Widget>[upcoming, ?orgOverview, topSelling, ?salesChannels];
+    final stacked = <Widget>[upcoming, ?insights, ?orgOverview, topSelling, ?salesChannels];
 
     // Wide layout: two balanced columns. Cards are assigned by hand to keep the two columns
     // ending at roughly the same height — the tall events card alone on the left, the shorter
@@ -469,6 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_isPlatformStaff && salesChannels != null) salesChannels,
     ];
     final right = <Widget>[
+      ?insights,
       ?orgOverview,
       topSelling,
       if (!_isPlatformStaff && salesChannels != null) salesChannels,
