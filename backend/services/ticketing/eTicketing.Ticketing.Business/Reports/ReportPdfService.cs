@@ -96,10 +96,10 @@ public class ReportPdfService : IReportPdfService
     ///
     /// Fixed rather than carried on ReportExportQuery: the export request has no horizon field
     /// (the four other tabs have nothing to put in it), and adding one would let a caller export a
-    /// horizon the screen never showed them. 14 is the desktop selector's own default, so the
-    /// exported page matches the tab as it opens.
+    /// horizon the screen never showed them. 30 — one month — is the desktop selector's own
+    /// default, so the exported page matches the tab as it opens.
     /// </summary>
-    private const int DefaultExportHorizon = 14;
+    private const int DefaultExportHorizon = 30;
 
     // ── Per-tab model building ───────────────────────────────────────────────────────────────
 
@@ -286,7 +286,7 @@ public class ReportPdfService : IReportPdfService
             Tiles:
             [
                 new ReportPdfTile(
-                    $"Projekcija prihoda ({report.Forecast.Horizon} dana)",
+                    $"Projekcija prihoda ({HorizonLabel.Phrase(report.Forecast.Horizon)})",
                     Money(report.Forecast.ProjectedRevenue),
                     report.Forecast.ChangePercent is null
                         ? SourceHint(report.Forecast.Source)
@@ -307,7 +307,7 @@ public class ReportPdfService : IReportPdfService
                         ? SourceHint(report.Segments.Source)
                         : $"{Percent(topSegment.RevenueSharePercent)} prihoda · {Count(report.Segments.TotalBuyers)} kupaca"),
             ],
-            ChartTitle: $"Prihod i projekcija ({report.Forecast.Horizon} dana unaprijed)",
+            ChartTitle: $"Prihod i projekcija — {HorizonLabel.Next(report.Forecast.Horizon)}",
             Chart: bars.Count == 0
                 ? null
                 : [.. bars.Select(b => new ReportPdfBar(b.Label, Money(b.Revenue), peak == 0 ? 0f : (float)(b.Revenue / peak)))],

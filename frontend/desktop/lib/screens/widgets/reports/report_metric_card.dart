@@ -117,19 +117,12 @@ class ReportCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
-  /// A control belonging to this card's heading row — the AI Uvidi forecast
-  /// card's horizon selector. Same idea as `ReportRangeBar.trailing`: the
-  /// control that changes what a card shows belongs beside that card's own
-  /// title, not floating above the page next to unrelated filters.
-  final Widget? trailing;
-
   const ReportCard({
     super.key,
     this.title,
     this.subtitle,
     required this.child,
     this.padding = const EdgeInsets.all(20),
-    this.trailing,
   });
 
   @override
@@ -148,36 +141,18 @@ class ReportCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (title != null || subtitle != null)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Expanded, so a long Bosnian subtitle wraps instead of pushing
-                // the trailing control off the card
-                // (.claude/rules/21-frontend-desktop.md).
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (title != null)
-                        Text(
-                          title!,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle!,
-                          style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-              ],
+          if (title != null)
+            Text(
+              title!,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+            ),
+          ],
           if (title != null || subtitle != null) const SizedBox(height: 16),
           child,
         ],

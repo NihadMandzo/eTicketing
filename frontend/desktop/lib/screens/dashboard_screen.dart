@@ -18,6 +18,7 @@ import '../providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/reports/report_bar_chart.dart';
 import 'widgets/reports/report_data_table.dart';
+import 'widgets/reports/report_horizon_bar.dart';
 import 'widgets/reports/report_insight_card.dart';
 import 'widgets/reports/report_metric_card.dart';
 
@@ -162,7 +163,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // only the first load after a cache miss (e.g. first login of the day)
     // pays the full cost.
     if (_hasSalesAccess) {
-      futures.add(_fetch(() async => _insights = await ReportProvider().getInsights(from, to)));
+      futures.add(_fetch(() async => _insights = await ReportProvider()
+          .getInsights(from, to, horizon: ReportHorizon.defaultDays)));
     }
 
     // Available to every role that reaches this shell.

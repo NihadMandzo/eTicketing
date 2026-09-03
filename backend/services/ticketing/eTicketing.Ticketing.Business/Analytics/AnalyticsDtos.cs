@@ -67,22 +67,33 @@ public sealed record InsightsQuery : IReportRange
     public DateOnly From { get; init; }
     public DateOnly To { get; init; }
 
-    /// <summary>Days to forecast past <see cref="To"/>. Restricted to the three the desktop
-    /// selector offers — an arbitrary horizon would let a caller ask SSA to extrapolate a year
-    /// past its own training window, which produces a confident-looking straight line.</summary>
-    public int Horizon { get; init; } = 14;
+    /// <summary>Days to forecast past <see cref="To"/> — 30, 90, 180 or 365, the four the desktop
+    /// selector offers. An arbitrary horizon would let a caller ask SSA to extrapolate far past its
+    /// own training window, which produces a confident-looking straight line.</summary>
+    public int Horizon { get; init; } = 30;
 }
 
-/// <summary>One projected day. <paramref name="LowerBound"/>/<paramref name="UpperBound"/> are the
-/// 95% confidence interval — always rendered, because a forecast drawn without its uncertainty
-/// reads as a promise.</summary>
+/// <summary>
+/// One drawn point of the forecast series. <paramref name="LowerBound"/>/<paramref name="UpperBound"/>
+/// are the 95% confidence interval — always rendered, because a forecast drawn without its
+/// uncertainty reads as a promise.
+///
+/// A point is one day on a one-month horizon and one week, fortnight or month on the longer ones:
+/// a year projected as 365 daily bars is 16,000px of chart nobody scrolls through. The bucketing
+/// happens here rather than in each client so the desktop chart and the PDF cannot disagree about
+/// what a bar covers, and <paramref name="Date"/> is always the first day the point covers.
+/// <see cref="ForecastBlock.ProjectedRevenue"/> and <c>ProjectedSold</c> are the true daily totals
+/// regardless — they are summed before the points are folded.
+/// </summary>
 public sealed record ForecastPoint(
     DateOnly Date, string Label, decimal Revenue, decimal LowerBound, decimal UpperBound, int Sold);
 
 /// <summary>
 /// The forecast block. <paramref name="ChangePercent"/> compares the projected total against the
 /// equally-long stretch of actuals immediately before it, so "+18,2%" always means "than the last
-/// <c>Horizon</c> days" — null when that stretch sold nothing, same rule as the Prodaja tab.
+/// <c>Horizon</c> days" — null when that stretch sold nothing, same rule as the Prodaja tab, and
+/// null too when the selected range is shorter than the horizon, since then no equally-long stretch
+/// exists and comparing a projected year against a month of actuals would read as +1.000%.
 /// </summary>
 public sealed record ForecastBlock(
     AnalyticsSource Source,

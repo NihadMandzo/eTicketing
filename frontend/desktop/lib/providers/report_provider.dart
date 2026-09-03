@@ -66,7 +66,8 @@ class ReportProvider extends BaseProvider<SalesReport, String> {
   /// One request rather than one per block: the screen loads exactly one tab at
   /// a time, and the three blocks share the same range and the same three
   /// underlying report queries server-side.
-  Future<AnalyticsInsights> getInsights(DateTime from, DateTime to, {int horizon = 14}) async {
+  Future<AnalyticsInsights> getInsights(
+      DateTime from, DateTime to, {required int horizon}) async {
     final response = await send(() => apiClient.get(
           'reports/insights',
           queryParameters: {

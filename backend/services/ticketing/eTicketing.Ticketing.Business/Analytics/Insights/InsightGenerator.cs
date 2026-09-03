@@ -129,9 +129,9 @@ public sealed class InsightGenerator : IInsightGenerator
             insights.Add(new BusinessInsight(
                 InsightSeverity.Neutral,
                 InsightCategory.Forecast,
-                $"Stabilna prodaja u narednih {forecast.Horizon} dana",
+                $"Stabilna prodaja u {HorizonLabel.Next(forecast.Horizon)}",
                 $"Projekcija prihoda je {Money(forecast.ProjectedRevenue)} ({forecast.ProjectedSold} karata), " +
-                $"približno jednako prethodnih {forecast.Horizon} dana.",
+                $"približno jednako {HorizonLabel.Previous(forecast.Horizon)}.",
                 SignedPercent(change)));
             return;
         }
@@ -141,10 +141,10 @@ public sealed class InsightGenerator : IInsightGenerator
             rising ? InsightSeverity.Positive : InsightSeverity.Warning,
             InsightCategory.Forecast,
             rising
-                ? $"Prodaja raste u narednih {forecast.Horizon} dana"
-                : $"Prodaja opada u narednih {forecast.Horizon} dana",
+                ? $"Prodaja raste u {HorizonLabel.Next(forecast.Horizon)}"
+                : $"Prodaja opada u {HorizonLabel.Next(forecast.Horizon)}",
             $"Projekcija prihoda je {Money(forecast.ProjectedRevenue)} ({forecast.ProjectedSold} karata), " +
-            $"{SignedPercent(change)} u odnosu na prethodnih {forecast.Horizon} dana." +
+            $"{SignedPercent(change)} u odnosu na {HorizonLabel.Previous(forecast.Horizon)}." +
             // The rung of the ladder is stated in the card itself, not only in the block header —
             // a card that survives into the PDF must carry its own caveat with it.
             (forecast.Source == AnalyticsSource.Heuristic

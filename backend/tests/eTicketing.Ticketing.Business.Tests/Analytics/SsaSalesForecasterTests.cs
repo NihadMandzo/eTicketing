@@ -176,6 +176,108 @@ public class SsaSalesForecasterTests
         result.Points.Should().OnlyContain(p => p.UpperBound >= p.Revenue);
     }
 
+    // ── Horizons longer than a month ─────────────────────────────────────────────────────────
+
+    /// <summary>The one-month horizon is still drawn a day at a time — the weekly rhythm is the
+    /// whole reason to look at a month, and pooling the days would erase it.</summary>
+    [Fact]
+    public void Forecast_ForAMonthHorizon_DrawsOnePointPerDay()
+    {
+        var result = _sut.Forecast(Series(120), 30);
+
+        result.Points.Should().HaveCount(30);
+        result.Points.Select(p => p.Date).Should().BeInAscendingOrder();
+    }
+
+    /// <summary>A year of daily bars is 16,000px of chart nobody scrolls through, so the longer
+    /// horizons are folded into weeks, fortnights and months — around a dozen bars whichever is
+    /// asked for.</summary>
+    [Theory]
+    [InlineData(90, 13)]
+    [InlineData(180, 13)]
+    [InlineData(365, 13)]
+    public void Forecast_ForALongHorizon_FoldsTheProjectionIntoADrawableNumberOfBars(
+        int horizon, int expectedPoints)
+    {
+        var result = _sut.Forecast(Series(366), horizon);
+
+        result.Points.Should().HaveCount(expectedPoints);
+        result.Points.Select(p => p.Date).Should().BeInAscendingOrder();
+        result.Points.Should().OnlyContain(p => !string.IsNullOrWhiteSpace(p.Label));
+    }
+
+    /// <summary>Folding is a drawing decision, never an arithmetic one: the headline total is the
+    /// sum of the projected days and must survive being bucketed.</summary>
+    [Theory]
+    [InlineData(30)]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(365)]
+    public void Forecast_KeepsTheProjectedTotalEqualToTheSumOfItsPoints(int horizon)
+    {
+        var result = _sut.Forecast(Series(366), horizon);
+
+        result.Points.Sum(p => p.Revenue).Should().BeApproximately(result.ProjectedRevenue, 0.05m);
+        result.Points.Sum(p => p.Sold).Should().Be(result.ProjectedSold);
+    }
+
+    /// <summary>
+    /// The tail of actuals is anchored at its last day, not its first.
+    ///
+    /// The last actual bar sits against the first projected one, so a short bucket there would
+    /// invent a slump at exactly the join. The short one belongs at the far, oldest end.
+    /// </summary>
+    [Fact]
+    public void Forecast_AnchorsTheBucketedActualTailAtTheJoinWithTheProjection()
+    {
+        var history = Series(366);
+
+        var result = _sut.Forecast(history, 365);
+
+        var bucketDays = SsaSalesForecaster.BucketDays(365);
+        result.Actual[^1].Date.Should().Be(history[^1].Date.AddDays(-(bucketDays - 1)));
+        result.Actual[^1].Revenue.Should().Be(
+            Math.Round(history.TakeLast(bucketDays).Sum(p => p.Revenue), 2));
+    }
+
+    /// <summary>
+    /// A model may not project further than it has seen.
+    ///
+    /// Asked for a year from a month of history SSA does not fail — it extrapolates the month's
+    /// weekly component 365 times and returns a confident straight line with a 95% band around it.
+    /// The heuristic rung says the same thing with the caveat attached, which is the honest answer.
+    /// </summary>
+    [Fact]
+    public void Forecast_WhenTheHorizonOutrunsTheHistory_FallsBackToHeuristic()
+    {
+        var result = _sut.Forecast(Series(30), 365);
+
+        result.Source.Should().Be(AnalyticsSource.Heuristic);
+        result.Points.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Forecast_WhenTheHistoryIsAsLongAsTheHorizon_StillUsesTheModel()
+    {
+        var result = _sut.Forecast(Series(90), 90);
+
+        result.Source.Should().Be(AnalyticsSource.Model);
+    }
+
+    /// <summary>Without an equally-long stretch of actuals behind it there is nothing to compare
+    /// against, and a projected year read against a month of sales would print +1.000%.</summary>
+    [Fact]
+    public void Forecast_WhenTheHorizonOutrunsTheHistory_ReportsNoChangePercent()
+    {
+        _sut.Forecast(Series(30), 365).ChangePercent.Should().BeNull();
+    }
+
+    [Fact]
+    public void Forecast_WhenTheHistoryCoversTheHorizon_StillReportsAChangePercent()
+    {
+        _sut.Forecast(Series(120), 90).ChangePercent.Should().NotBeNull();
+    }
+
     /// <summary>Two runs over identical input must agree — the tab is re-fetched on every horizon
     /// change and a projection that wobbles between requests reads as broken.</summary>
     [Fact]

@@ -85,11 +85,11 @@ public sealed class SsaSalesForecaster : ISalesForecaster
             ? TryFitSsa(sold, horizon) ?? Heuristic(sold, history, horizon)
             : Heuristic(sold, history, horizon);
 
-        var points = new List<ForecastPoint>(horizon);
+        var daily = new List<ForecastPoint>(horizon);
         for (var i = 0; i < horizon; i++)
         {
             var date = lastDate.AddDays(i + 1);
-            points.Add(new ForecastPoint(
+            daily.Add(new ForecastPoint(
                 Date: date,
                 Label: ReportSeries.DayLabel(date),
                 Revenue: Round2(NonNegative(revenueForecast.Values[i])),
@@ -100,35 +100,104 @@ public sealed class SsaSalesForecaster : ISalesForecaster
                 Sold: (int)Math.Round(Math.Max(0f, soldForecast.Values[i]), MidpointRounding.AwayFromZero)));
         }
 
-        var projectedRevenue = points.Sum(p => p.Revenue);
+        var projectedRevenue = daily.Sum(p => p.Revenue);
 
         // Compared against the equally-long tail of actuals, not against the whole range: "+18%"
         // has to mean "than the last <horizon> days" or the number is comparing a fortnight to a
-        // year. Null when that tail sold nothing — the Prodaja tab drops the same line for the
-        // same reason.
-        var tail = history.TakeLast(horizon).Sum(p => p.Revenue);
-        var changePercent = tail == 0 ? (decimal?)null : Round2((projectedRevenue - tail) / tail * 100m);
+        // year. Null when that tail sold nothing — the Prodaja tab drops the same line for the same
+        // reason — and null when the range is shorter than the horizon, because then there is no
+        // equally-long tail to compare against and the honest answer is to say nothing rather than
+        // to report a projected year as +1.000% of the month it was fitted on.
+        var tail = history.Count >= horizon ? history.TakeLast(horizon).Sum(p => p.Revenue) : (decimal?)null;
+        var changePercent = tail is null or 0m
+            ? (decimal?)null
+            : Round2((projectedRevenue - tail.Value) / tail.Value * 100m);
+
+        var bucketDays = BucketDays(horizon);
 
         return new ForecastBlock(
             Source: source,
             Horizon: horizon,
             ProjectedRevenue: Round2(projectedRevenue),
-            ProjectedSold: points.Sum(p => p.Sold),
+            ProjectedSold: daily.Sum(p => p.Sold),
             ChangePercent: changePercent,
             // The tail the projection continues, so the client draws one unbroken series. Capped at
             // the horizon's own length so the chart never becomes mostly history.
-            Actual:
-            [
-                .. history.TakeLast(horizon).Select(p => new ForecastPoint(
-                    p.Date, ReportSeries.DayLabel(p.Date), Round2(p.Revenue), Round2(p.Revenue), Round2(p.Revenue), p.Sold))
-            ],
-            Points: points);
+            Actual: Bucket(
+                [
+                    .. history.TakeLast(horizon).Select(p => new ForecastPoint(
+                        p.Date, ReportSeries.DayLabel(p.Date), Round2(p.Revenue), Round2(p.Revenue), Round2(p.Revenue), p.Sold))
+                ],
+                bucketDays,
+                anchorAtEnd: true),
+            Points: Bucket(daily, bucketDays, anchorAtEnd: false));
+    }
+
+    /// <summary>
+    /// How many days one drawn point covers, so a chart of any horizon comes out around a dozen
+    /// bars a side.
+    ///
+    /// A month stays daily — the weekly rhythm is the whole reason to look at a month, and it
+    /// disappears the moment the days are pooled. Past that the rhythm is not what is being asked
+    /// about, and a year drawn as 365 bars is 16,000px of horizontal scroll: nobody reads bar 200.
+    /// </summary>
+    internal static int BucketDays(int horizon) => horizon switch
+    {
+        <= 31 => 1,
+        <= 100 => 7,
+        <= 200 => 14,
+        _ => 30
+    };
+
+    /// <summary>
+    /// Folds daily points into the points the chart draws. A pass-through when
+    /// <paramref name="bucketDays"/> is 1, which is the one-month horizon.
+    ///
+    /// <paramref name="anchorAtEnd"/> decides where the short bucket lands when the series does not
+    /// divide evenly. A projection is anchored at its first day and runs as far as the horizon
+    /// reaches, so its remainder falls at the far end; the tail of actuals is anchored at its *last*
+    /// day — the join with the projection — so its remainder falls at the start, on the oldest bar.
+    /// Anchoring both at the start would put a half-height stub exactly at the join and invent a
+    /// slump there that the data does not contain.
+    /// </summary>
+    private static List<ForecastPoint> Bucket(List<ForecastPoint> days, int bucketDays, bool anchorAtEnd)
+    {
+        if (bucketDays <= 1 || days.Count == 0) return days;
+
+        var buckets = new List<ForecastPoint>((days.Count / bucketDays) + 1);
+        var remainder = days.Count % bucketDays;
+        var index = 0;
+
+        // The first bucket is the short one when the series is anchored at its end; every bucket
+        // after it is a full one.
+        var length = anchorAtEnd && remainder > 0 ? remainder : bucketDays;
+
+        while (index < days.Count)
+        {
+            var take = Math.Min(length, days.Count - index);
+            var slice = days.GetRange(index, take);
+
+            buckets.Add(new ForecastPoint(
+                Date: slice[0].Date,
+                Label: ReportSeries.DayLabel(slice[0].Date),
+                Revenue: Round2(slice.Sum(p => p.Revenue)),
+                // The bounds are summed with the values they belong to: a bucket's band is the band
+                // of the days inside it, which is what the legend already states as one total.
+                LowerBound: Round2(slice.Sum(p => p.LowerBound)),
+                UpperBound: Round2(slice.Sum(p => p.UpperBound)),
+                Sold: slice.Sum(p => p.Sold)));
+
+            index += take;
+            length = bucketDays;
+        }
+
+        return buckets;
     }
 
     private (Projection Values, AnalyticsSource Source) Project(
         float[] series, IReadOnlyList<DailyPoint> history, int horizon)
     {
-        if (series.Length >= MinPointsForModel)
+        if (CanFitModel(series.Length, horizon))
         {
             var fitted = TryFitSsa(series, horizon);
             if (fitted is not null)
@@ -137,6 +206,23 @@ public sealed class SsaSalesForecaster : ISalesForecaster
 
         return (Heuristic(series, history, horizon), AnalyticsSource.Heuristic);
     }
+
+    /// <summary>
+    /// Whether SSA is allowed to answer a horizon this long from a history this short.
+    ///
+    /// Two conditions, and the second is the one the longer horizons added. A model may not project
+    /// further than it has seen: asked for a year from a month of history, SSA does not fail — it
+    /// extrapolates the month's weekly component 365 times and returns a confident straight line
+    /// with a 95% band around it, which is exactly the artefact the horizon allow-list was written
+    /// to keep out. Refusing here drops that request to the heuristic rung instead, where the UI
+    /// prints "procjena na osnovu prosjeka" and the reader is told what they are looking at.
+    ///
+    /// The consequence is worth stating plainly: a one-year projection is only ever fitted when the
+    /// selected range is itself about a year. That is the honest constraint, not a limitation to
+    /// work around.
+    /// </summary>
+    internal static bool CanFitModel(int points, int horizon)
+        => points >= MinPointsForModel && horizon <= points;
 
     /// <summary>
     /// Fits SSA and returns null rather than throwing if it cannot.

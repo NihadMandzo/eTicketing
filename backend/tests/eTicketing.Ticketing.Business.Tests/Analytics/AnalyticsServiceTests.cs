@@ -107,7 +107,7 @@ public class AnalyticsServiceTests : IDisposable
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
     }
 
-    private static InsightsQuery Query(int horizon = 14) => new() { From = RangeFrom, To = RangeTo, Horizon = horizon };
+    private static InsightsQuery Query(int horizon = 30) => new() { From = RangeFrom, To = RangeTo, Horizon = horizon };
 
     // ── Role matrix ──────────────────────────────────────────────────────────────────────────
 
@@ -211,11 +211,17 @@ public class AnalyticsServiceTests : IDisposable
 
     // ── Shape ────────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The horizon comes back as asked for, and the drawn series covers exactly it — one point per
+    /// day on the one-month horizon, one per bucket on the longer ones, which is where the count
+    /// stops being the horizon itself (see SsaSalesForecasterTests for the folding rules).
+    /// </summary>
     [Theory]
-    [InlineData(7)]
-    [InlineData(14)]
-    [InlineData(30)]
-    public async Task GetInsightsAsync_ReturnsTheRequestedHorizon(int horizon)
+    [InlineData(30, 30)]
+    [InlineData(90, 13)]
+    [InlineData(180, 13)]
+    [InlineData(365, 13)]
+    public async Task GetInsightsAsync_ReturnsTheRequestedHorizon(int horizon, int expectedPoints)
     {
         SeedSeason(_sectorA, _productA);
 
@@ -223,7 +229,7 @@ public class AnalyticsServiceTests : IDisposable
             .GetInsightsAsync(Query(horizon), Caller("SuperAdmin"));
 
         result.Value!.Forecast.Horizon.Should().Be(horizon);
-        result.Value.Forecast.Points.Should().HaveCount(horizon);
+        result.Value.Forecast.Points.Should().HaveCount(expectedPoints);
     }
 
     [Fact]
@@ -328,8 +334,8 @@ public class AnalyticsServiceTests : IDisposable
         var writer = new CountingNarrativeWriter();
         var sut = _fixture.CreateAnalyticsService(writer);
 
-        await sut.GetInsightsAsync(Query(horizon: 7), Caller("SuperAdmin"));
         await sut.GetInsightsAsync(Query(horizon: 30), Caller("SuperAdmin"));
+        await sut.GetInsightsAsync(Query(horizon: 90), Caller("SuperAdmin"));
 
         writer.Calls.Should().Be(2);
     }

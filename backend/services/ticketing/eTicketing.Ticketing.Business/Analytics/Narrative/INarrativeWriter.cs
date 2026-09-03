@@ -85,7 +85,7 @@ public static class NarrativePromptBuilder
                 ? "model vremenske serije"
                 : "procjena na osnovu prosjeka (malo historijskih podataka)";
             lines.Add(
-                $"Prognoza za narednih {context.Forecast.Horizon} dana: {Money(context.Forecast.ProjectedRevenue)}, " +
+                $"Prognoza za {HorizonLabel.Next(context.Forecast.Horizon)}: {Money(context.Forecast.ProjectedRevenue)}, " +
                 $"{Count(context.Forecast.ProjectedSold)} karata, osnova: {basis}" +
                 (context.Forecast.ChangePercent is { } forecastChange
                     ? $", promjena {SignedPercent(forecastChange)}"

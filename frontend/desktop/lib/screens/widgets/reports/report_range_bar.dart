@@ -150,7 +150,7 @@ class ReportRangeBar extends StatelessWidget {
                 ),
               ),
               for (final preset in ReportPreset.all)
-                _PresetPill(
+                ReportPeriodPill(
                   label: preset.label,
                   selected: preset.id == activePresetId,
                   onTap: () => onPreset(preset),
@@ -238,12 +238,32 @@ class ReportRangeBar extends StatelessWidget {
   }
 }
 
-class _PresetPill extends StatelessWidget {
+/// The pill both period controls are built from — the date presets here and the
+/// projection horizons on the AI Uvidi tab (`ReportHorizonBar`).
+///
+/// Shared rather than duplicated because the two bars sit inches apart on the
+/// same screen: two pills that looked almost alike would read as a rendering
+/// bug, and two that drifted apart over time would read as two unrelated
+/// controls when they are the same gesture applied to two periods.
+class ReportPeriodPill extends StatelessWidget {
   final String label;
   final bool selected;
-  final VoidCallback onTap;
 
-  const _PresetPill({required this.label, required this.selected, required this.onTap});
+  /// Null while the pill cannot be pressed — a request is already in flight, or
+  /// the screen is loading.
+  final VoidCallback? onTap;
+
+  /// Shows a small spinner in place of nothing while this pill's own request is
+  /// running, so the click has visible feedback without blanking the tab.
+  final bool busy;
+
+  const ReportPeriodPill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.busy = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -259,13 +279,29 @@ class _PresetPill extends StatelessWidget {
           border: Border.all(color: selected ? AppColors.primary : AppColors.border(brightness)),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.textTertiary(brightness),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy) ...[
+              SizedBox(
+                width: 11,
+                height: 11,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: selected ? Colors.white : AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 7),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppColors.textTertiary(brightness),
+              ),
+            ),
+          ],
         ),
       ),
     );

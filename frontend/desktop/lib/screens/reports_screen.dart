@@ -13,6 +13,7 @@ import '../providers/report_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/reports/report_bar_chart.dart';
 import 'widgets/reports/report_data_table.dart';
+import 'widgets/reports/report_horizon_bar.dart';
 import 'widgets/reports/report_insight_card.dart';
 import 'widgets/reports/report_metric_card.dart';
 import 'widgets/reports/report_narrative_card.dart';
@@ -69,19 +70,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
   OrganizationReport? _organizations;
   AnalyticsInsights? _insights;
 
-  /// Forecast horizon for the AI Uvidi tab. The three the API accepts — see
-  /// `InsightsQueryValidator`, which refuses anything else. Selected from the
-  /// heading of the Prognoza prihoda card (see `_horizonSelector`), beside the
-  /// chart it redraws.
-  int _horizon = 14;
+  /// How far past the selected range the AI Uvidi tab projects. The four the
+  /// API accepts — see `InsightsQueryValidator`, which refuses anything else —
+  /// picked from the `ReportHorizonBar` strip at the top of the tab, above every
+  /// block it governs.
+  int _horizon = ReportHorizon.defaultDays;
 
   /// True while a horizon change is being applied.
   ///
   /// Deliberately separate from `_isLoading`: that flag blanks the whole tab
   /// behind a spinner, which is the "full refresh" a horizon change must not
-  /// cause — findings, anomalies and segments don't depend on the horizon and
-  /// have no reason to disappear while only the forecast re-fetches. See
-  /// `_changeHorizon`.
+  /// cause. The projection and the findings written from it do change; the
+  /// anomalies and the segments cannot, since neither depends on the horizon —
+  /// and none of the four has any reason to vanish while the answer is on its
+  /// way. See `_changeHorizon`.
   bool _isRefreshingInsights = false;
 
   /// The tabs each role may see — the client half of the matrix in
@@ -200,10 +202,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   /// Re-fetches AI Uvidi for a new horizon without the tab's full loading
   /// spinner — the "full refresh" the horizon control must not cause. The
-  /// selected chip shows its own small spinner instead (see
-  /// `_horizonSelector`), while everything else already on screen — tiles,
-  /// findings, anomalies, segments — stays exactly as it is, since none of it
-  /// depends on the horizon.
+  /// selected pill in `ReportHorizonBar` shows its own small spinner instead,
+  /// and every block already on screen stays where it is until the answer
+  /// arrives, rather than the tab blanking and rebuilding under the reader.
   ///
   /// Shares `_loadGeneration` with `_load()` rather than a horizon-local
   /// counter: a date change or tab switch mid-flight has to supersede this
@@ -805,14 +806,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
       builder: (context, constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // First, above everything it changes — the tiles, the findings, the
+          // chart and the summary are all projected this far.
+          ReportHorizonBar(
+            selectedDays: _horizon,
+            isRefreshing: _isRefreshingInsights,
+            onSelect: _isLoading ? null : (horizon) => _changeHorizon(horizon.days),
+          ),
+          const SizedBox(height: 16),
           _tileGrid([
             ReportMetricCard(
               label: 'Projekcija prihoda',
               value: formatMoney(report.forecast.projectedRevenue),
               hint: report.forecast.changePercent == null
-                  ? 'Narednih ${report.forecast.horizon} dana'
+                  ? 'Narednih ${ReportHorizon.phraseFor(report.forecast.horizon)}'
                   : '${formatSignedPercent(report.forecast.changePercent)} '
-                        'u odnosu na prethodnih ${report.forecast.horizon} dana',
+                        'u odnosu na ${ReportHorizon.previous(report.forecast.horizon)}',
               // Only a projected fall is coloured. A rise stays neutral: it is a
               // projection, and painting it green reads as money already earned.
               emphasis: (report.forecast.changePercent ?? 0) < 0
@@ -822,7 +831,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ReportMetricCard(
               label: 'Projekcija karata',
               value: formatCount(report.forecast.projectedSold),
-              hint: 'Narednih ${report.forecast.horizon} dana',
+              hint: 'Narednih ${ReportHorizon.phraseFor(report.forecast.horizon)}',
             ),
             ReportMetricCard(
               label: 'Neuobičajenih dana',
@@ -976,8 +985,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return ReportCard(
       title: 'Prognoza prihoda',
       subtitle: forecast.source.caveat ??
-          'Model vremenske serije (SSA) · projekcija za ${forecast.horizon} dana',
-      trailing: _horizonSelector(),
+          'Model vremenske serije (SSA) · projekcija za ${ReportHorizon.phraseFor(forecast.horizon)}',
       child: forecast.points.isEmpty
           ? _emptyBlock('Nema dovoljno historijskih podataka za prognozu u ovom periodu.')
           : Column(
@@ -1068,43 +1076,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'Interval pouzdanosti 95%: ${formatMoney(lower)} – ${formatMoney(upper)}',
           style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
         ),
-      ],
-    );
-  }
-
-  /// 7 / 14 / 30, the only horizons the API accepts. Sits in the heading of the
-  /// Prognoza prihoda card, against the chart and the caption that both restate
-  /// the number it holds — see `_rangeBarTrailing` for why it is no longer up in
-  /// the period bar next to the date presets. Goes through `_changeHorizon`,
-  /// which re-fetches quietly instead of the tab's full loading spinner; the
-  /// selected chip shows its own small spinner while that is in flight.
-  Widget _horizonSelector() {
-    final brightness = Theme.of(context).brightness;
-
-    return Wrap(
-      spacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final horizon in const [7, 14, 30])
-          ChoiceChip(
-            avatar: (_isRefreshingInsights && _horizon == horizon)
-                ? const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : null,
-            label: Text('$horizon d'),
-            selected: _horizon == horizon,
-            labelStyle: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: _horizon == horizon ? Colors.white : AppColors.textSecondary(brightness),
-            ),
-            selectedColor: AppColors.primary,
-            showCheckmark: false,
-            onSelected: (_isLoading || _isRefreshingInsights) ? null : (_) => _changeHorizon(horizon),
-          ),
       ],
     );
   }

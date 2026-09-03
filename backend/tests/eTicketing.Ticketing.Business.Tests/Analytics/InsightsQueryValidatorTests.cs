@@ -28,7 +28,7 @@ public class InsightsQueryValidatorTests
         _sut = new InsightsQueryValidator(clock);
     }
 
-    private static InsightsQuery Query(int horizon = 14, DateOnly? from = null, DateOnly? to = null) => new()
+    private static InsightsQuery Query(int horizon = 30, DateOnly? from = null, DateOnly? to = null) => new()
     {
         From = from ?? Today.AddDays(-30),
         To = to ?? Today,
@@ -36,9 +36,10 @@ public class InsightsQueryValidatorTests
     };
 
     [Theory]
-    [InlineData(7)]
-    [InlineData(14)]
     [InlineData(30)]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(365)]
     public void Validate_ForAnOfferedHorizon_Passes(int horizon)
     {
         _sut.Validate(Query(horizon)).IsValid.Should().BeTrue();
@@ -48,15 +49,18 @@ public class InsightsQueryValidatorTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(-7)]
-    [InlineData(15)]
-    [InlineData(45)]
-    [InlineData(365)]
+    // The three the selector used to offer: a stale client must be refused, not quietly served a
+    // horizon the screen can no longer name.
+    [InlineData(7)]
+    [InlineData(14)]
+    [InlineData(31)]
+    [InlineData(400)]
     public void Validate_ForAHorizonTheUiNeverOffers_FailsWithTheBosnianMessage(int horizon)
     {
         var result = _sut.Validate(Query(horizon));
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.ErrorMessage == "Horizont prognoze mora biti 7, 14 ili 30 dana.");
+        result.Errors.Should().Contain(e => e.ErrorMessage == "Horizont prognoze mora biti 30, 90, 180 ili 365 dana.");
     }
 
     [Fact]
