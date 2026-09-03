@@ -155,6 +155,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // revenue card get the findings teaser. Fetched through _fetch like every
     // other card: the analysis is the most expensive thing on this page, and a
     // slow or failed one must leave the rest of the dashboard intact.
+    //
+    // This drives the same full SSA-forecast + SSA-anomaly + K-Means pipeline
+    // as the Izvještaji tab, just to show a 3-item teaser — accepted because
+    // AnalyticsService caches the result for 10 minutes per org+role+range;
+    // only the first load after a cache miss (e.g. first login of the day)
+    // pays the full cost.
     if (_hasSalesAccess) {
       futures.add(_fetch(() async => _insights = await ReportProvider().getInsights(from, to)));
     }

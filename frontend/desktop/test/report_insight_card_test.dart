@@ -122,7 +122,8 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
     });
 
-    /// The 2×2 stats grid — four real fields off `AudienceSegment`, not two.
+    /// Four real fields off `AudienceSegment`, not two — in whichever grid the
+    /// card's width calls for.
     testWidgets('renders all four stats in its grid', (tester) async {
       await tester.pumpWidget(host(ReportSegmentCard(segment: segment())));
 
@@ -133,6 +134,41 @@ void main() {
       expect(find.text('Prosječno karata'), findsOneWidget);
       // averageTickets: 4.5 in the fixture segment().
       expect(find.text('4,5'), findsOneWidget);
+    });
+
+    /// The wide arrangement, which is what a maximised window produces. Both
+    /// share bars sit on one line and all four stats on the next, so the card
+    /// gets denser instead of flinging each label and its figure to opposite
+    /// edges of a 900px box.
+    testWidgets('lays out bars and stats in rows once it is wide', (tester) async {
+      await tester.pumpWidget(host(ReportSegmentCard(segment: segment()), width: 700));
+
+      expect(tester.takeException(), isNull);
+
+      final buyers = tester.getTopLeft(find.text('Udio kupaca'));
+      final revenue = tester.getTopLeft(find.text('Udio prihoda'));
+      expect(revenue.dy, buyers.dy);
+      expect(revenue.dx, greaterThan(buyers.dx));
+
+      final firstStat = tester.getTopLeft(find.text('Prosječna potrošnja'));
+      final lastStat = tester.getTopLeft(find.text('Prosječno karata'));
+      expect(lastStat.dy, firstStat.dy);
+    });
+
+    /// Below the breakpoint the same four figures stack — bars above each
+    /// other, stats 2×2 — rather than being squeezed onto one line.
+    testWidgets('stacks bars and pairs stats when narrow', (tester) async {
+      await tester.pumpWidget(host(ReportSegmentCard(segment: segment()), width: 380));
+
+      expect(tester.takeException(), isNull);
+
+      final buyers = tester.getTopLeft(find.text('Udio kupaca'));
+      final revenue = tester.getTopLeft(find.text('Udio prihoda'));
+      expect(revenue.dy, greaterThan(buyers.dy));
+
+      final firstStat = tester.getTopLeft(find.text('Prosječna potrošnja'));
+      final lastStat = tester.getTopLeft(find.text('Prosječno karata'));
+      expect(lastStat.dy, greaterThan(firstStat.dy));
     });
 
     /// A share is a percentage of a whole and cannot exceed it, but a rounding
@@ -154,5 +190,53 @@ void main() {
 
       expect(tester.takeException(), isNull);
     });
+  });
+
+  /// The no-orphan rule for the Segmenti kupaca grid: K-Means asks for four
+  /// clusters and drops empty ones, so three segments is routine, and laying
+  /// three out two-across is what left half a row of white space beside the
+  /// last card.
+  group('ReportSegmentCard.columnsFor', () {
+    test('never leaves a partly filled row', () {
+      for (var count = 1; count <= 4; count++) {
+        for (final width in [320.0, 700.0, 1060.0, 1400.0, 1810.0]) {
+          final columns = ReportSegmentCard.columnsFor(count, width);
+
+          expect(
+            count % columns,
+            0,
+            reason: '$count segments at ${width}px came out $columns across',
+          );
+        }
+      }
+    });
+
+    test('fills the row with one card each when they fit', () {
+      expect(ReportSegmentCard.columnsFor(3, 1060), 3);
+      expect(ReportSegmentCard.columnsFor(4, 1810), 4);
+      expect(ReportSegmentCard.columnsFor(2, 700), 2);
+    });
+
+    /// Rather than squeezing four cards below the width they are readable at,
+    /// the grid steps down to the next divisor — two rows of two.
+    test('drops to a divisor rather than below the minimum card width', () {
+      expect(ReportSegmentCard.columnsFor(4, 1060), 2);
+      expect(ReportSegmentCard.columnsFor(3, 700), 1);
+      expect(ReportSegmentCard.columnsFor(4, 500), 1);
+    });
+
+    test('keeps every card at or above the readable minimum', () {
+      for (var count = 1; count <= 4; count++) {
+        for (final width in [400.0, 700.0, 1060.0, 1810.0]) {
+          final columns = ReportSegmentCard.columnsFor(count, width);
+          if (columns == 1) continue;
+
+          final cardWidth = (width - 16 * (columns - 1)) / columns;
+          expect(cardWidth, greaterThanOrEqualTo(ReportSegmentCard.minWidth),
+              reason: '$count segments at ${width}px');
+        }
+      }
+    });
+
   });
 }

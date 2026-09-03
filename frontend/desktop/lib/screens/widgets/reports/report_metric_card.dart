@@ -119,8 +119,8 @@ class ReportCard extends StatelessWidget {
 
   /// A control belonging to this card's heading row — the AI Uvidi forecast
   /// card's horizon selector. Same idea as `ReportRangeBar.trailing`: the
-  /// control that changes what the card shows belongs beside the card's own
-  /// title, not floating above the page.
+  /// control that changes what a card shows belongs beside that card's own
+  /// title, not floating above the page next to unrelated filters.
   final Widget? trailing;
 
   const ReportCard({

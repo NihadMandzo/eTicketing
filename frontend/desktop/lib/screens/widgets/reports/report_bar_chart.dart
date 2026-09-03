@@ -66,7 +66,13 @@ class ReportBarChart extends StatelessWidget {
       );
     }
 
-    final peak = bars.map((b) => b.ratio).reduce((a, b) => a > b ? a : b);
+    // Peak is only ever compared against actual bars (see isPeak below), so it
+    // must be computed from actual bars too — a projected bar with the
+    // highest ratio in the series would otherwise become the peak and no
+    // actual bar could ever satisfy `>= peak`, silently disabling the
+    // highlight.
+    final actualRatios = bars.where((b) => !b.isProjected).map((b) => b.ratio);
+    final peak = actualRatios.isEmpty ? 0.0 : actualRatios.reduce((a, b) => a > b ? a : b);
 
     // Horizontally scrollable below a minimum per-bar width: a 12-month or
     // 24-hour series squeezed into a narrow window turns every label into an
