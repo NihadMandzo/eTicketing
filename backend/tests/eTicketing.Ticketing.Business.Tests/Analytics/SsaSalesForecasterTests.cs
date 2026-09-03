@@ -35,10 +35,11 @@ public class SsaSalesForecasterTests
         ];
     }
 
+    /// <summary>Daily horizons — a fortnight and under — are drawn a day at a time, so the point
+    /// count is the horizon itself. The longer ones fold; see the bucketing tests below.</summary>
     [Theory]
     [InlineData(7)]
     [InlineData(14)]
-    [InlineData(30)]
     public void Forecast_WithFullSeason_UsesModelAndReturnsExactlyTheRequestedHorizon(int horizon)
     {
         var result = _sut.Forecast(Series(90), horizon);
@@ -149,7 +150,9 @@ public class SsaSalesForecasterTests
 
         var result = _sut.Forecast(history, 14);
 
-        result.Actual.Should().HaveCount(14);
+        // Six bars of history at most, whatever a bar covers — enough to see where the line comes
+        // from, not so much that half the chart is the past.
+        result.Actual.Should().HaveCount(6);
         result.Actual[^1].Date.Should().Be(history[^1].Date);
         result.Actual[^1].Revenue.Should().Be(Math.Round(history[^1].Revenue, 2));
     }
@@ -178,14 +181,15 @@ public class SsaSalesForecasterTests
 
     // ── Horizons longer than a month ─────────────────────────────────────────────────────────
 
-    /// <summary>The one-month horizon is still drawn a day at a time — the weekly rhythm is the
-    /// whole reason to look at a month, and pooling the days would erase it.</summary>
+    /// <summary>A month is drawn as weeks, matching what ReportRange.Unit does with a month on the
+    /// Prodaja tab. Thirty labelled daily bars are not more informative than five weekly ones — they
+    /// are the same five weeks with twenty-five more labels over them.</summary>
     [Fact]
-    public void Forecast_ForAMonthHorizon_DrawsOnePointPerDay()
+    public void Forecast_ForAMonthHorizon_DrawsWeeks()
     {
         var result = _sut.Forecast(Series(120), 30);
 
-        result.Points.Should().HaveCount(30);
+        result.Points.Should().HaveCount(5);
         result.Points.Select(p => p.Date).Should().BeInAscendingOrder();
     }
 
@@ -219,6 +223,21 @@ public class SsaSalesForecasterTests
 
         result.Points.Sum(p => p.Revenue).Should().BeApproximately(result.ProjectedRevenue, 0.05m);
         result.Points.Sum(p => p.Sold).Should().Be(result.ProjectedSold);
+    }
+
+    /// <summary>However long the horizon, the history in front of it stays a handful of bars —
+    /// the card is named after the projection, not after the past.</summary>
+    [Theory]
+    [InlineData(30)]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(365)]
+    public void Forecast_NeverDrawsMoreThanAHandfulOfActualBars(int horizon)
+    {
+        var result = _sut.Forecast(Series(366), horizon);
+
+        result.Actual.Should().HaveCountLessThanOrEqualTo(6);
+        result.Actual.Should().NotBeEmpty();
     }
 
     /// <summary>
@@ -276,6 +295,40 @@ public class SsaSalesForecasterTests
     public void Forecast_WhenTheHistoryCoversTheHorizon_StillReportsAChangePercent()
     {
         _sut.Forecast(Series(120), 90).ChangePercent.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// One freak day must not blow up the confidence band.
+    ///
+    /// The band used to be built on the standard deviation, which a single sold-out night in an
+    /// otherwise quiet month drags up by orders of magnitude — the interval printed under the chart
+    /// came out in the tens of millions against a projection of a few hundred thousand. A number
+    /// that absurd is not caution; it teaches the reader to ignore the band. The robust spread
+    /// ignores the outlier the anomaly block is there to report separately.
+    /// </summary>
+    [Fact]
+    public void Forecast_WithOneFreakDay_KeepsTheConfidenceBandProportionate()
+    {
+        // Twenty ordinary days around 100 KM, and one night that sold 1.5 million.
+        var history = Series(20, i => i == 6 ? 1_500_000m : 80m + (i % 5) * 10m);
+
+        var result = _sut.Forecast(history, 14);
+
+        result.Source.Should().Be(AnalyticsSource.Heuristic);
+        result.Points.Sum(p => p.UpperBound).Should().BeLessThan(result.ProjectedRevenue * 5);
+    }
+
+    /// <summary>The band still has to exist. A projection presented without uncertainty reads as a
+    /// promise, so a robust spread of zero — every day identical — falls back to something rather
+    /// than collapsing the interval onto the line.</summary>
+    [Fact]
+    public void Forecast_OnASeriesWithOneOutlierAndNoOtherVariation_StillProducesABand()
+    {
+        var history = Series(20, i => i == 6 ? 900_000m : 100m);
+
+        var result = _sut.Forecast(history, 14);
+
+        result.Points.Should().OnlyContain(p => p.UpperBound > p.Revenue);
     }
 
     /// <summary>Two runs over identical input must agree — the tab is re-fetched on every horizon

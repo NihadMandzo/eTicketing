@@ -212,12 +212,12 @@ public class AnalyticsServiceTests : IDisposable
     // ── Shape ────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// The horizon comes back as asked for, and the drawn series covers exactly it — one point per
-    /// day on the one-month horizon, one per bucket on the longer ones, which is where the count
-    /// stops being the horizon itself (see SsaSalesForecasterTests for the folding rules).
+    /// The horizon comes back as asked for, and the drawn series is folded into around a dozen
+    /// points whichever horizon that is — weeks for a month or a quarter, fortnights and months
+    /// beyond (see SsaSalesForecasterTests for the folding rules).
     /// </summary>
     [Theory]
-    [InlineData(30, 30)]
+    [InlineData(30, 5)]
     [InlineData(90, 13)]
     [InlineData(180, 13)]
     [InlineData(365, 13)]
@@ -355,6 +355,47 @@ public class AnalyticsServiceTests : IDisposable
         await sut.GetInsightsAsync(Query(), Caller("OrganizationAdmin", _orgA));
 
         writer.Calls.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Two organizations, the same role, the same range — and no shared cache entry.
+    ///
+    /// The scoping itself is asserted above (ForecastsOnlyItsOwnOrganizationsSales); this is the
+    /// other half of the same guarantee, and the half that fails quietly. A cache key that dropped
+    /// the organization would hand the second caller the first organization's revenue with every
+    /// query still perfectly scoped, and nothing in the response would look wrong.
+    /// </summary>
+    [Fact]
+    public async Task GetInsightsAsync_ForTwoOrganizations_NeverServesOneTheOthersFigures()
+    {
+        // Different prices, so the two organizations cannot produce the same number by accident.
+        SeedSeason(_sectorA, _productA, price: 50m);
+        SeedSeason(_sectorB, _productB, price: 130m);
+
+        var sut = _fixture.CreateAnalyticsService();
+
+        var first = await sut.GetInsightsAsync(Query(), Caller("OrganizationSuperAdmin", _orgA));
+        var second = await sut.GetInsightsAsync(Query(), Caller("OrganizationSuperAdmin", _orgB));
+
+        first.Value!.Forecast.ProjectedRevenue.Should().BeGreaterThan(0);
+        second.Value!.Forecast.ProjectedRevenue.Should().BeGreaterThan(0);
+        second.Value.Forecast.ProjectedRevenue.Should().NotBe(first.Value.Forecast.ProjectedRevenue);
+    }
+
+    /// <summary>The organization is read from the caller's own token, never from the request, so
+    /// there is no parameter for an organizer to point at somebody else's data. This pins the claim
+    /// that would have to change for that to stop being true.</summary>
+    [Fact]
+    public async Task GetInsightsAsync_ForAnOrganizer_IgnoresEveryOrganizationButItsOwn()
+    {
+        SeedSeason(_sectorB, _productB, price: 130m);
+
+        var result = await _fixture.CreateAnalyticsService()
+            .GetInsightsAsync(Query(), Caller("OrganizationSuperAdmin", _orgA));
+
+        // Organization A sold nothing in this range; B sold every day of it.
+        result.Value!.Forecast.ProjectedRevenue.Should().Be(0);
+        result.Value.Segments.TotalBuyers.Should().Be(0);
     }
 
     public void Dispose() => _fixture.Dispose();

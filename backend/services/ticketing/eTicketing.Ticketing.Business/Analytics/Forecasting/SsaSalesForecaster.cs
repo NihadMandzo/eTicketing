@@ -121,12 +121,15 @@ public sealed class SsaSalesForecaster : ISalesForecaster
             ProjectedRevenue: Round2(projectedRevenue),
             ProjectedSold: daily.Sum(p => p.Sold),
             ChangePercent: changePercent,
-            // The tail the projection continues, so the client draws one unbroken series. Capped at
-            // the horizon's own length so the chart never becomes mostly history.
+            // The tail the projection continues, so the client draws one unbroken series. Capped
+            // at both ends: never longer than the horizon it introduces, and never more than
+            // MaxActualBuckets bars of it.
             Actual: Bucket(
                 [
-                    .. history.TakeLast(horizon).Select(p => new ForecastPoint(
-                        p.Date, ReportSeries.DayLabel(p.Date), Round2(p.Revenue), Round2(p.Revenue), Round2(p.Revenue), p.Sold))
+                    .. history
+                        .TakeLast(Math.Min(horizon, MaxActualBuckets * bucketDays))
+                        .Select(p => new ForecastPoint(
+                            p.Date, ReportSeries.DayLabel(p.Date), Round2(p.Revenue), Round2(p.Revenue), Round2(p.Revenue), p.Sold))
                 ],
                 bucketDays,
                 anchorAtEnd: true),
@@ -137,17 +140,28 @@ public sealed class SsaSalesForecaster : ISalesForecaster
     /// How many days one drawn point covers, so a chart of any horizon comes out around a dozen
     /// bars a side.
     ///
-    /// A month stays daily — the weekly rhythm is the whole reason to look at a month, and it
-    /// disappears the moment the days are pooled. Past that the rhythm is not what is being asked
-    /// about, and a year drawn as 365 bars is 16,000px of horizontal scroll: nobody reads bar 200.
+    /// The tiers mirror <c>ReportRange.Unit</c> — daily up to a fortnight, weekly up to a quarter,
+    /// coarser beyond — so a bar on this chart covers what a bar on the Prodaja chart covers for
+    /// the same span. A month projected as 30 daily bars is not more informative than as four
+    /// weekly ones; it is the same four weeks with 26 extra labels over it, and a year drawn daily
+    /// is 16,000px of horizontal scroll that nobody reaches the end of.
     /// </summary>
     internal static int BucketDays(int horizon) => horizon switch
     {
-        <= 31 => 1,
-        <= 100 => 7,
+        <= 14 => 1,
+        <= 92 => 7,
         <= 200 => 14,
         _ => 30
     };
+
+    /// <summary>
+    /// How many buckets of history are drawn in front of the projection.
+    ///
+    /// Enough to see where the line is coming from, not so many that the chart is mostly the past:
+    /// the tail used to run the full length of the horizon, which put half the bars — and half the
+    /// scrolling — behind the thing the card is named after.
+    /// </summary>
+    private const int MaxActualBuckets = 6;
 
     /// <summary>
     /// Folds daily points into the points the chart draws. A pass-through when
@@ -300,13 +314,19 @@ public sealed class SsaSalesForecaster : ISalesForecaster
             return Math.Clamp(stats.Mean / overallMean, 0.5f, 2f);
         }
 
-        // One standard deviation of the series, widened to a 95% band. Wider than SSA's interval
-        // would be, which is the honest outcome: less history means less certainty, and the band
-        // should say so.
-        var variance = series.Length < 2
-            ? 0f
-            : series.Sum(v => (v - overallMean) * (v - overallMean)) / (series.Length - 1);
-        var margin = 1.96f * MathF.Sqrt(variance);
+        // A 95% band around a *robust* spread, not around the standard deviation.
+        //
+        // The standard deviation is the textbook choice and the wrong one here. One sold-out
+        // stadium night in an otherwise quiet month — exactly the day the anomaly block flags —
+        // drags the deviation up by orders of magnitude, and since the band is then carried across
+        // every projected day, the summed interval printed under the chart came out in the tens of
+        // millions on a projection of a few hundred thousand. A number that absurd is not caution,
+        // it is noise, and it teaches the reader to ignore the band entirely.
+        //
+        // The median absolute deviation scaled by 1.4826 estimates the same spread for a normal
+        // series and simply ignores the outliers — the same robust statistic SsaAnomalyDetector
+        // already uses to decide what counts as unusual in the first place.
+        var margin = 1.96f * RobustSpread(series);
 
         var lastDate = history[^1].Date;
         var values = new float[horizon];
@@ -322,6 +342,35 @@ public sealed class SsaSalesForecaster : ISalesForecaster
         }
 
         return new Projection(values, lower, upper);
+    }
+
+    /// <summary>
+    /// 1.4826 × the median absolute deviation — the normal-consistent estimate of a series' spread
+    /// that a handful of freak days cannot move.
+    ///
+    /// Falls back to the mean absolute deviation when the MAD is zero, which happens whenever more
+    /// than half the days sold nothing: the median is then 0, every deviation from it is 0 for
+    /// those days, and a band of exactly zero would present a guess as a certainty.
+    /// </summary>
+    private static float RobustSpread(float[] series)
+    {
+        if (series.Length < 2) return 0f;
+
+        var median = Median(series);
+        var mad = Median([.. series.Select(v => MathF.Abs(v - median))]);
+        if (mad > 0f) return 1.4826f * mad;
+
+        return series.Select(v => MathF.Abs(v - median)).DefaultIfEmpty(0f).Average();
+    }
+
+    private static float Median(float[] values)
+    {
+        var sorted = values.Order().ToArray();
+        var middle = sorted.Length / 2;
+
+        return sorted.Length % 2 == 1
+            ? sorted[middle]
+            : (sorted[middle - 1] + sorted[middle]) / 2f;
     }
 
     /// <summary>Revenue cannot be negative, and an SSA extrapolation of a declining series

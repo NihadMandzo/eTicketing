@@ -50,6 +50,24 @@ class ReportBarChart extends StatelessWidget {
     this.highlightPeak = false,
   });
 
+  /// Past this many bars every one of them carrying its own figure stops being
+  /// data and becomes texture — a projection that is flat by construction prints
+  /// the same number a dozen times in a row. Above the threshold only the
+  /// tallest bar of each series keeps its label, which is the number a reader
+  /// actually takes from the chart: how high it got, and how high it is expected
+  /// to get.
+  static const int _denseBarCount = 12;
+
+  /// The shortest a bar carrying a non-zero value may be drawn, as a fraction of
+  /// the plot.
+  ///
+  /// Without a floor a quiet day beside a sold-out one is 0.002% of the tallest
+  /// bar and disappears completely, so the series looks like it stops and starts
+  /// again — which is exactly what a reader reports as a bug. A stub says "this
+  /// happened, and it was small"; nothing at all says "no data here", and only
+  /// one of those is true.
+  static const double _minVisibleRatio = 0.03;
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
@@ -74,6 +92,14 @@ class ReportBarChart extends StatelessWidget {
     final actualRatios = bars.where((b) => !b.isProjected).map((b) => b.ratio);
     final peak = actualRatios.isEmpty ? 0.0 : actualRatios.reduce((a, b) => a > b ? a : b);
 
+    // The tallest bar of each half. On a dense chart these two are the only ones
+    // that keep their figure — the first of each, so a flat projection labels
+    // its leading bar rather than all thirteen of them.
+    final dense = bars.length > _denseBarCount;
+    final labelled = dense
+        ? {_firstPeakIndex(projected: false), _firstPeakIndex(projected: true)}
+        : null;
+
     // Horizontally scrollable below a minimum per-bar width: a 12-month or
     // 24-hour series squeezed into a narrow window turns every label into an
     // ellipsis, so the chart scrolls instead of shrinking past legibility.
@@ -87,14 +113,15 @@ class ReportBarChart extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              for (final bar in bars)
+              for (var i = 0; i < bars.length; i++)
                 Expanded(
                   child: _Bar(
-                    data: bar,
+                    data: bars[i],
                     // A projected bar is never the "peak" worth highlighting:
                     // the highlight means "this actually happened here".
-                    isPeak: highlightPeak && !bar.isProjected && peak > 0 && bar.ratio >= peak,
+                    isPeak: highlightPeak && !bars[i].isProjected && peak > 0 && bars[i].ratio >= peak,
                     muted: highlightPeak,
+                    showValue: labelled == null || labelled.contains(i),
                   ),
                 ),
             ],
@@ -107,6 +134,20 @@ class ReportBarChart extends StatelessWidget {
       },
     );
   }
+
+  /// The index of the first bar reaching the tallest value of its own half of
+  /// the series, or -1 when that half is empty. First, not last: a projection
+  /// whose bars are all equal — the shape the moving-average rung produces —
+  /// would otherwise label its final bar, far from the join the eye starts at.
+  int _firstPeakIndex({required bool projected}) {
+    var best = -1;
+    for (var i = 0; i < bars.length; i++) {
+      if (bars[i].isProjected != projected) continue;
+      if (best == -1 || bars[i].ratio > bars[best].ratio) best = i;
+    }
+
+    return best;
+  }
 }
 
 class _Bar extends StatelessWidget {
@@ -114,13 +155,30 @@ class _Bar extends StatelessWidget {
   final bool isPeak;
   final bool muted;
 
-  const _Bar({required this.data, required this.isPeak, required this.muted});
+  /// False on a dense chart's ordinary bars. The `Text` is still built, with an
+  /// empty string: it holds the line of space above every bar, so suppressing a
+  /// figure cannot leave one bar standing taller than its neighbours.
+  final bool showValue;
+
+  const _Bar({
+    required this.data,
+    required this.isPeak,
+    required this.muted,
+    this.showValue = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final ratio = data.ratio.clamp(0.0, 1.0);
     final solid = (!muted || isPeak) && !data.isProjected;
+
+    // A bar with something in it is never drawn as nothing — see
+    // ReportBarChart._minVisibleRatio. Zero stays zero: a day that sold nothing
+    // must read as a flat baseline, not as a small amount.
+    final raw = data.ratio.clamp(0.0, 1.0);
+    final ratio = raw > 0 && raw < ReportBarChart._minVisibleRatio
+        ? ReportBarChart._minVisibleRatio
+        : raw;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -128,7 +186,7 @@ class _Bar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
-            data.value,
+            showValue ? data.value : '',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
