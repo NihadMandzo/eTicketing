@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.External;
@@ -96,6 +96,7 @@ public class ReportPdfServiceTests : IDisposable
     [InlineData(ReportTab.Products)]
     [InlineData(ReportTab.Redemption)]
     [InlineData(ReportTab.Organizations)]
+    [InlineData(ReportTab.Insights)]
     public async Task ExportAsync_ForSuperAdmin_RendersEveryTabAsAPdf(ReportTab tab)
     {
         var result = await _sut.ExportAsync(Query(tab), Caller("SuperAdmin"));
@@ -105,6 +106,35 @@ public class ReportPdfServiceTests : IDisposable
         // %PDF- is the file's magic number: proof the bytes are a real document rather than an
         // empty buffer that happened not to throw.
         Encoding.ASCII.GetString(result.Value.Content, 0, 5).Should().Be("%PDF-");
+    }
+
+    [Fact]
+    public async Task ExportAsync_ForAdminExportingInsights_PropagatesTheTabsOwnRefusal()
+    {
+        // Insights sits with Sales on the matrix — it forecasts and segments money, which is not
+        // Admin's remit — so the refusal is the tab's, not a separate export rule.
+        var result = await _sut.ExportAsync(Query(ReportTab.Insights), Caller("Admin"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("report.forbidden");
+    }
+
+    [Fact]
+    public async Task ExportAsync_ForOrganizationAdminExportingInsights_ReturnsExportForbidden()
+    {
+        var result = await _sut.ExportAsync(Query(ReportTab.Insights), Caller("OrganizationAdmin", _org));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("report.export_forbidden");
+    }
+
+    [Fact]
+    public async Task ExportAsync_ForInsights_NamesTheFileAfterThatTab()
+    {
+        var result = await _sut.ExportAsync(Query(ReportTab.Insights), Caller("SuperAdmin"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.FileName.Should().Be("izvjestaj-uvidi-2026-08-01-2026-08-24.pdf");
     }
 
     [Fact]

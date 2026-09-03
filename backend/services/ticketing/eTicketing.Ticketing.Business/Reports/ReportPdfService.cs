@@ -1,5 +1,6 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using eTicketing.Contracts.Results;
+using eTicketing.Ticketing.Business.Analytics;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
@@ -12,11 +13,13 @@ namespace eTicketing.Ticketing.Business.Reports;
 public class ReportPdfService : IReportPdfService
 {
     private readonly IReportService _reports;
+    private readonly IAnalyticsService _analytics;
     private readonly PlatformClock _clock;
 
-    public ReportPdfService(IReportService reports, PlatformClock clock)
+    public ReportPdfService(IReportService reports, IAnalyticsService analytics, PlatformClock clock)
     {
         _reports = reports;
+        _analytics = analytics;
         _clock = clock;
     }
 
@@ -42,6 +45,14 @@ public class ReportPdfService : IReportPdfService
             ReportTab.Products => await BuildAsync(_reports.GetProductsAsync(range, user, ct), BuildProducts),
             ReportTab.Redemption => await BuildAsync(_reports.GetRedemptionAsync(range, user, ct), BuildRedemption),
             ReportTab.Organizations => await BuildAsync(_reports.GetOrganizationsAsync(range, user, ct), BuildOrganizations),
+            // The one arm that does not go through IReportService: the insights are computed by
+            // AnalyticsService, which the export shares rather than recomputes — including its
+            // cache, so exporting the tab the user is looking at costs no second analysis and can
+            // never disagree with what is on their screen.
+            ReportTab.Insights => await BuildAsync(
+                _analytics.GetInsightsAsync(
+                    new InsightsQuery { From = query.From, To = query.To, Horizon = DefaultExportHorizon }, user, ct),
+                BuildInsights),
             _ => Result<ReportPdfModel>.Failure(Error.Validation("report.unknown_tab", "Nepoznat tip izvještaja."))
         };
 
@@ -74,10 +85,21 @@ public class ReportPdfService : IReportPdfService
             ReportTab.Sales => "prodaja",
             ReportTab.Products => "proizvodi",
             ReportTab.Redemption => "iskoristenost",
+            ReportTab.Insights => "uvidi",
             _ => "organizacije"
         };
         return $"izvjestaj-{slug}-{query.From:yyyy-MM-dd}-{query.To:yyyy-MM-dd}.pdf";
     }
+
+    /// <summary>
+    /// Horizon used for an exported AI Uvidi report.
+    ///
+    /// Fixed rather than carried on ReportExportQuery: the export request has no horizon field
+    /// (the four other tabs have nothing to put in it), and adding one would let a caller export a
+    /// horizon the screen never showed them. 30 — one month — is the desktop selector's own
+    /// default, so the exported page matches the tab as it opens.
+    /// </summary>
+    private const int DefaultExportHorizon = 30;
 
     // ── Per-tab model building ───────────────────────────────────────────────────────────────
 
@@ -237,6 +259,107 @@ public class ReportPdfService : IReportPdfService
                     })
                 ]));
     }
+
+    /// <summary>
+    /// Flattens the AI Uvidi tab into the same tile/chart/notes/table vocabulary as every other
+    /// export. The chart is the forecast (its actual tail and its projection drawn as one series,
+    /// exactly as the screen draws it), the notes are the generated insights, and the table is the
+    /// anomalies — segments are folded into the tiles rather than given a table of their own,
+    /// because four rows of shares do not justify a page block next to the findings.
+    /// </summary>
+    private ReportPdfModel BuildInsights(AnalyticsInsightsResponse report)
+    {
+        // The projection continues the actual tail, so both halves must be scaled against the same
+        // peak or the join would show a step that is an artefact of the drawing rather than the data.
+        var bars = report.Forecast.Actual.Concat(report.Forecast.Points).ToList();
+        var peak = bars.Count == 0 ? 0m : bars.Max(b => b.Revenue);
+
+        var topSegment = report.Segments.Items.Count == 0
+            ? null
+            : report.Segments.Items.MaxBy(s => s.RevenueSharePercent);
+
+        return new ReportPdfModel(
+            Title: "AI uvidi",
+            Scope: report.Scope,
+            RangeLabel: Range(report.Period.From, report.Period.To),
+            GeneratedAtLabel: Footer(),
+            Tiles:
+            [
+                new ReportPdfTile(
+                    $"Projekcija prihoda ({HorizonLabel.Phrase(report.Forecast.Horizon)})",
+                    Money(report.Forecast.ProjectedRevenue),
+                    report.Forecast.ChangePercent is null
+                        ? SourceHint(report.Forecast.Source)
+                        : $"{SignedPercent(report.Forecast.ChangePercent)} — {SourceHint(report.Forecast.Source)}",
+                    // Only a projected fall is coloured as bad news. A rise is left neutral rather
+                    // than green: it is a projection, and colouring it as money already earned is
+                    // exactly the overclaim the confidence band exists to prevent.
+                    report.Forecast.ChangePercent < 0 ? ReportPdfEmphasis.Negative : ReportPdfEmphasis.Neutral),
+                new ReportPdfTile("Projekcija karata", Count(report.Forecast.ProjectedSold)),
+                new ReportPdfTile(
+                    "Neuobičajenih dana",
+                    Count(report.Anomalies.Items.Count),
+                    SourceHint(report.Anomalies.Source)),
+                new ReportPdfTile(
+                    "Najvrjedniji segment",
+                    topSegment?.Name ?? "—",
+                    topSegment is null
+                        ? SourceHint(report.Segments.Source)
+                        : $"{Percent(topSegment.RevenueSharePercent)} prihoda · {Count(report.Segments.TotalBuyers)} kupaca"),
+            ],
+            ChartTitle: $"Prihod i projekcija — {HorizonLabel.Next(report.Forecast.Horizon)}",
+            Chart: bars.Count == 0
+                ? null
+                : [.. bars.Select(b => new ReportPdfBar(b.Label, Money(b.Revenue), peak == 0 ? 0f : (float)(b.Revenue / peak)))],
+            Table: report.Anomalies.Items.Count == 0
+                ? null
+                : new ReportPdfTable(
+                    Title: $"Neuobičajeni dani ({Count(report.Anomalies.Items.Count)})",
+                    Columns:
+                    [
+                        new ReportPdfColumn("Datum", 1.4f),
+                        new ReportPdfColumn("Vrsta", 1.2f),
+                        new ReportPdfColumn("Prihod", 1.4f, RightAligned: true),
+                        new ReportPdfColumn("Očekivano", 1.4f, RightAligned: true),
+                        new ReportPdfColumn("Odstupanje", 1.3f, RightAligned: true),
+                    ],
+                    Rows:
+                    [
+                        .. report.Anomalies.Items.Select(a => (IReadOnlyList<string>)new[]
+                        {
+                            a.Label,
+                            a.Direction == AnomalyDirection.Spike ? "Skok" : "Pad",
+                            Money(a.Revenue),
+                            Money(a.ExpectedRevenue),
+                            SignedPercent(a.DeviationPercent),
+                        })
+                    ]),
+            // Null when no LLM is configured or the call failed — the document simply omits the
+            // panel, and the findings below it stand on their own.
+            Summary: report.Narrative,
+            NotesTitle: $"Poslovni uvidi ({Count(report.Insights.Count)})",
+            Notes:
+            [
+                .. report.Insights.Select(i => new ReportPdfNote(i.Title, i.Body, EmphasisFor(i.Severity)))
+            ]);
+    }
+
+    /// <summary>Says which rung of the source ladder produced a block, in the tile's hint line. A
+    /// figure that made it into a PDF has left the screen that explained it, so it has to carry its
+    /// own caveat.</summary>
+    private static string SourceHint(AnalyticsSource source) => source switch
+    {
+        AnalyticsSource.Model => "model vremenske serije",
+        AnalyticsSource.Heuristic => "procjena — malo historijskih podataka",
+        _ => "nema dovoljno podataka"
+    };
+
+    private static ReportPdfEmphasis EmphasisFor(InsightSeverity severity) => severity switch
+    {
+        InsightSeverity.Critical or InsightSeverity.Warning => ReportPdfEmphasis.Negative,
+        InsightSeverity.Positive => ReportPdfEmphasis.Positive,
+        _ => ReportPdfEmphasis.Neutral
+    };
 
     private ReportPdfModel BuildOrganizations(OrganizationReportResponse report)
     {

@@ -142,7 +142,10 @@ class ReportCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (title != null)
-            Text(title!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Text(
+              title!,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(

@@ -109,6 +109,22 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// bar. Products with zero sales are simply absent, not a zero row.</summary>
     Task<List<ProductSoldCount>> GetSoldCountsByProductIdsAsync(
         IReadOnlyList<Guid> productIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// One row per buyer — the feature table the AI Uvidi tab's K-Means segmentation is fitted on.
+    ///
+    /// Online tickets only, and not because printed ones are unimportant: a ticket sold over a
+    /// counter has no UserId and no account behind it (see TicketOrigin), so it cannot be attributed
+    /// to a buyer at all. Folding those rows in would invent one enormous anonymous "customer".
+    ///
+    /// Only sold statuses count, same definition as every aggregation above — segmenting people by
+    /// money they later got back is not a description of anything.
+    ///
+    /// Grouped in SQL, so the row count is buyers rather than tickets: the segmentation window is a
+    /// full year and a platform-wide fetch of the underlying rows would be unbounded.
+    /// </summary>
+    Task<List<BuyerFacts>> GetBuyerFactsAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
 }
 
 /// <summary>Projection, not an entity — one row per (product, mode) with today's ticket tallies.</summary>
@@ -140,3 +156,14 @@ public record OrganizationSalesFacts(Guid OrganizationId, int Sold, decimal Reve
 
 /// <summary>Current sold count for one product, unscoped by purchase date.</summary>
 public record ProductSoldCount(Guid ProductId, int Sold);
+
+/// <summary>
+/// One buyer's behaviour over the segmentation window — the raw RFM inputs, before any
+/// normalization or clustering, which both happen in the Business layer.
+///
+/// <paramref name="Orders"/> counts distinct OrderId values, not tickets: someone who bought three
+/// seats to one show in one transaction is one purchase occasion, and counting them as three would
+/// make party-buyers look like frequent customers.
+/// </summary>
+public record BuyerFacts(
+    Guid UserId, int Orders, int Tickets, decimal Spend, DateTime FirstPurchaseUtc, DateTime LastPurchaseUtc);

@@ -124,11 +124,61 @@ public class ReportDocument : IDocument
             if (_model.Tiles.Count > 0)
                 column.Item().Element(ComposeTiles);
 
+            // Above the chart, not below it: on the AI Uvidi export this paragraph is the point of
+            // the page, and a reader who stops after the first block should have read the summary.
+            if (!string.IsNullOrWhiteSpace(_model.Summary))
+                column.Item().PaddingTop(Px(18)).Element(ComposeSummary);
+
             if (_model.Chart is { Count: > 0 })
                 column.Item().PaddingTop(Px(18)).Element(ComposeChart);
 
+            if (_model.Notes is { Count: > 0 })
+                column.Item().PaddingTop(Px(18)).Element(ComposeNotes);
+
             if (_model.Table is not null)
                 column.Item().PaddingTop(Px(18)).Element(ComposeTable);
+        });
+    }
+
+    /// <summary>The generated lead paragraph. Marked as such in the panel's label rather than
+    /// presented as the platform's own words — a reader deciding how much to trust a sentence needs
+    /// to know a model wrote it.</summary>
+    private void ComposeSummary(IContainer container)
+    {
+        container
+            .Border(Px(1)).BorderColor(GreenLight).CornerRadius(Px(12))
+            .Background(StubSurface)
+            .Padding(Px(14))
+            .Column(column =>
+            {
+                column.Item().Text("AI SAŽETAK").Style(Label(8, GreenDark, strong: true));
+                column.Item().PaddingTop(Px(6)).Text(_model.Summary!).Style(Body(10.5f, 1.45f, TextBody));
+            });
+    }
+
+    private void ComposeNotes(IContainer container)
+    {
+        var notes = _model.Notes!;
+
+        container.Element(Card).Column(column =>
+        {
+            column.Item().PaddingBottom(Px(10))
+                .Text(_model.NotesTitle ?? "Nalazi").Style(Title(12));
+
+            foreach (var note in notes)
+            {
+                column.Item()
+                    // A colour bar rather than a tinted background: these blocks stack, and four
+                    // filled panels in a row turn the page into a traffic light.
+                    .PaddingBottom(Px(10))
+                    .BorderLeft(Px(3)).BorderColor(ColorFor(note.Emphasis))
+                    .PaddingLeft(Px(10))
+                    .Column(noteColumn =>
+                    {
+                        noteColumn.Item().Text(note.Title).Style(Value(10.5f, TextPrimary));
+                        noteColumn.Item().PaddingTop(Px(3)).Text(note.Body).Style(Body(9.5f, 1.35f, TextBody));
+                    });
+            }
         });
     }
 

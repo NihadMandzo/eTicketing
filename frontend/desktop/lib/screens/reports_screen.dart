@@ -13,8 +13,12 @@ import '../providers/report_provider.dart';
 import '../theme/app_colors.dart';
 import 'widgets/reports/report_bar_chart.dart';
 import 'widgets/reports/report_data_table.dart';
+import 'widgets/reports/report_horizon_bar.dart';
+import 'widgets/reports/report_insight_card.dart';
 import 'widgets/reports/report_metric_card.dart';
+import 'widgets/reports/report_narrative_card.dart';
 import 'widgets/reports/report_range_bar.dart';
+import 'widgets/reports/report_segment_card.dart';
 
 /// Izvještaji — the back-office reporting screen from docs/Design/Reports.dc.html.
 ///
@@ -64,14 +68,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
   ProductReport? _products;
   RedemptionReport? _redemption;
   OrganizationReport? _organizations;
+  AnalyticsInsights? _insights;
+
+  /// How far past the selected range the AI Uvidi tab projects. The four the
+  /// API accepts — see `InsightsQueryValidator`, which refuses anything else —
+  /// picked from the `ReportHorizonBar` strip at the top of the tab, above every
+  /// block it governs.
+  int _horizon = ReportHorizon.defaultDays;
+
+  /// True while a horizon change is being applied.
+  ///
+  /// Deliberately separate from `_isLoading`: that flag blanks the whole tab
+  /// behind a spinner, which is the "full refresh" a horizon change must not
+  /// cause. The projection and the findings written from it do change; the
+  /// anomalies and the segments cannot, since neither depends on the horizon —
+  /// and none of the four has any reason to vanish while the answer is on its
+  /// way. See `_changeHorizon`.
+  bool _isRefreshingInsights = false;
 
   /// The tabs each role may see — the client half of the matrix in
   /// `ReportService.Authorize`.
+  ///
+  /// AI Uvidi sits with Prodaja: it forecasts and segments money, so Admin —
+  /// whose remit is operational — does not get it, exactly as for Prodaja.
   static const _tabsByRole = <String, List<ReportTab>>{
-    'SuperAdmin': [ReportTab.sales, ReportTab.products, ReportTab.redemption, ReportTab.organizations],
+    'SuperAdmin': [
+      ReportTab.sales,
+      ReportTab.products,
+      ReportTab.redemption,
+      ReportTab.organizations,
+      ReportTab.insights,
+    ],
     'Admin': [ReportTab.products, ReportTab.organizations],
-    'OrganizationSuperAdmin': [ReportTab.sales, ReportTab.products, ReportTab.redemption],
-    'OrganizationAdmin': [ReportTab.sales, ReportTab.products],
+    'OrganizationSuperAdmin': [
+      ReportTab.sales,
+      ReportTab.products,
+      ReportTab.redemption,
+      ReportTab.insights,
+    ],
+    'OrganizationAdmin': [ReportTab.sales, ReportTab.products, ReportTab.insights],
   };
 
   /// Every staff role but OrganizationAdmin may carry a report out of the app.
@@ -139,6 +174,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         case ReportTab.organizations:
           _organizations = await _provider.getOrganizations(_from, _to);
           break;
+        case ReportTab.insights:
+          _insights = await _provider.getInsights(_from, _to, horizon: _horizon);
+          break;
       }
 
       if (!mounted || requestId != _loadGeneration) return;
@@ -159,6 +197,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _errorMessage = 'Izvještaj nije moguće učitati. Pokušajte ponovo.';
         _isLoading = false;
       });
+    }
+  }
+
+  /// Re-fetches AI Uvidi for a new horizon without the tab's full loading
+  /// spinner — the "full refresh" the horizon control must not cause. The
+  /// selected pill in `ReportHorizonBar` shows its own small spinner instead,
+  /// and every block already on screen stays where it is until the answer
+  /// arrives, rather than the tab blanking and rebuilding under the reader.
+  ///
+  /// Shares `_loadGeneration` with `_load()` rather than a horizon-local
+  /// counter: a date change or tab switch mid-flight has to supersede this
+  /// fetch exactly the way it supersedes any other one, and one guard is what
+  /// makes that automatic.
+  Future<void> _changeHorizon(int horizon) async {
+    if (_horizon == horizon || _isRefreshingInsights) return;
+
+    final requestId = ++_loadGeneration;
+    setState(() {
+      _horizon = horizon;
+      _isRefreshingInsights = true;
+    });
+
+    try {
+      final result = await _provider.getInsights(_from, _to, horizon: horizon);
+      if (!mounted || requestId != _loadGeneration) return;
+      setState(() {
+        _insights = result;
+        _isRefreshingInsights = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _loadGeneration) return;
+      setState(() => _isRefreshingInsights = false);
+      handleApiError(e);
     }
   }
 
@@ -248,7 +319,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             // Sits with the period controls rather than up in the page header:
             // what gets exported is whatever range is selected right here, so
             // the button belongs next to the thing that decides it.
-            trailing: _canExport ? _exportButton() : null,
+            trailing: _rangeBarTrailing(),
           ),
           if (_rangeInvalid) ...[
             const SizedBox(height: 10),
@@ -301,6 +372,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     label: Text(_isExporting ? 'Izvoz...' : 'Izvezi PDF'),
   );
 
+  /// The one thing pinned to the range bar's right edge: the export button
+  /// every exporting role gets on every tab.
+  ///
+  /// The AI Uvidi forecast horizon used to sit here too and deliberately no
+  /// longer does. Three chips reading "7 d · 14 d · 30 d" immediately beside the
+  /// bar's own "7 dana · 30 dana · 90 dana" date presets are one control group
+  /// to the eye and two different things in fact — one picks the period being
+  /// reported on, the other how far past it to project. The horizon now sits in
+  /// the heading of the Prognoza prihoda card, which is the only thing it
+  /// changes.
+  Widget? _rangeBarTrailing() => _canExport ? _exportButton() : null;
+
   /// The design's per-role subtitle: what this role's copy of the screen is for.
   String get _subtitle => switch (widget.user.roleName) {
     'SuperAdmin' => 'Puni uvid u prodaju, organizacije i iskorištenost karata na platformi',
@@ -342,6 +425,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ReportTab.products => _productsTab(),
       ReportTab.redemption => _redemptionTab(),
       ReportTab.organizations => _organizationsTab(),
+      ReportTab.insights => _insightsTab(),
     };
   }
 
@@ -705,6 +789,378 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  // ── AI Uvidi ──────────────────────────────────────────────────────────────
+
+  /// The AI tab: an optional generated summary, the ranked findings, the
+  /// forecast chart, the anomaly table and the audience segments.
+  ///
+  /// Every block prints the strategy that produced it. A forecast fitted from
+  /// four weeks of history and one extrapolated from a fortnight's average are
+  /// not the same claim, and a screen that presents them identically is lying
+  /// by omission — see `AnalyticsSource.caveat`.
+  Widget _insightsTab() {
+    final report = _insights;
+    if (report == null) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // First, above everything it changes — the tiles, the findings, the
+          // chart and the summary are all projected this far.
+          ReportHorizonBar(
+            selectedDays: _horizon,
+            isRefreshing: _isRefreshingInsights,
+            onSelect: _isLoading ? null : (horizon) => _changeHorizon(horizon.days),
+          ),
+          const SizedBox(height: 16),
+          _tileGrid([
+            ReportMetricCard(
+              label: 'Projekcija prihoda',
+              value: formatMoney(report.forecast.projectedRevenue),
+              hint: report.forecast.changePercent == null
+                  ? 'Narednih ${ReportHorizon.phraseFor(report.forecast.horizon)}'
+                  : '${formatSignedPercent(report.forecast.changePercent)} '
+                        'u odnosu na ${ReportHorizon.previous(report.forecast.horizon)}',
+              // Only a projected fall is coloured. A rise stays neutral: it is a
+              // projection, and painting it green reads as money already earned.
+              emphasis: (report.forecast.changePercent ?? 0) < 0
+                  ? ReportEmphasis.negative
+                  : ReportEmphasis.neutral,
+            ),
+            ReportMetricCard(
+              label: 'Projekcija karata',
+              value: formatCount(report.forecast.projectedSold),
+              hint: 'Narednih ${ReportHorizon.phraseFor(report.forecast.horizon)}',
+            ),
+            ReportMetricCard(
+              label: 'Neuobičajenih dana',
+              value: formatCount(report.anomalies.items.length),
+              hint: report.anomalies.source == AnalyticsSource.insufficient
+                  ? 'Nema dovoljno podataka'
+                  : 'U odabranom periodu',
+            ),
+            ReportMetricCard(
+              label: 'Kupaca u analizi',
+              value: formatCount(report.segments.totalBuyers),
+              hint: report.segments.windowLabel,
+            ),
+          ], constraints.maxWidth),
+          if (report.narrative != null) ...[
+            const SizedBox(height: 16),
+            ReportNarrativeCard(narrative: report.narrative!),
+          ],
+          const SizedBox(height: 16),
+          _insightsAndForecastRow(report, constraints.maxWidth),
+          const SizedBox(height: 16),
+          _anomaliesAndSegmentsRow(report, constraints.maxWidth),
+        ],
+      ),
+    );
+  }
+
+  /// The anomaly table and the audience segments share the last row on a window
+  /// wide enough for both.
+  ///
+  /// Both are bounded server-side — at most five anomalies
+  /// (`SsaAnomalyDetector.MaxAnomalies`) and four segments
+  /// (`KMeansAudienceSegmenter.ClusterCount`) — so the two cards come out close
+  /// to the same height, and neither has any use for the full width of a
+  /// maximised window: a five-column table stretched that far leaves a hand-span
+  /// of nothing between a date and its figure.
+  ///
+  /// The condition is measured, not a round breakpoint, because getting it wrong
+  /// costs more than the row is worth: too narrow a table scrolls sideways
+  /// inside its own card, and too narrow a segment column collapses to a single
+  /// stack of tall cards beside a short table — both worse than the full-width
+  /// stack this falls back to.
+  Widget _anomaliesAndSegmentsRow(AnalyticsInsights report, double width) {
+    final segments = _segmentsCard(report);
+
+    // Nothing unusual in the period: the segments take the row on their own,
+    // and lay themselves out against the width they are actually given.
+    if (report.anomalies.items.isEmpty) return segments;
+
+    const gap = 16.0;
+    // ReportCard's default padding, on both edges.
+    const cardPadding = 40.0;
+    final anomaliesWidth = (width - gap) * 2 / 5 - cardPadding;
+    final segmentsWidth = (width - gap) * 3 / 5 - cardPadding;
+
+    final segmentCount = report.segments.items.length;
+    final fits = anomaliesWidth >= _anomalyTableMinWidth &&
+        (segmentCount <= 1 || ReportSegmentCard.columnsFor(segmentCount, segmentsWidth) > 1);
+
+    final anomalies = _anomaliesCard(report);
+    if (!fits) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [anomalies, const SizedBox(height: 16), segments],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: anomalies),
+        const SizedBox(width: 16),
+        Expanded(flex: 3, child: segments),
+      ],
+    );
+  }
+
+  /// Where the anomaly table stops shrinking and scrolls sideways instead.
+  ///
+  /// Lower than `ReportDataTable`'s 720px default, which is set for the seven
+  /// columns of the product and organization tables. This one has five, the
+  /// widest of them holding a figure like `1.469.555,00 KM` — 620 keeps that
+  /// off the ellipsis and lets the table sit in the narrower of the two columns
+  /// on this row.
+  static const double _anomalyTableMinWidth = 620;
+
+  /// Poslovni uvidi and the forecast chart share one row on a wide window: the
+  /// chart is deliberately the narrower of the two — its bars scroll
+  /// horizontally once they need more width than they are given
+  /// (`ReportBarChart` already does this) — so the findings card gets the room
+  /// it needs to lay its own cards two-across instead of stacking one long
+  /// single-file column.
+  Widget _insightsAndForecastRow(AnalyticsInsights report, double width) {
+    final insights = _insightsCard(report);
+    final forecast = _forecastCard(report);
+
+    // Same breakpoint the rest of this screen uses for a two-column split
+    // (see the Prodaja tab). Below it, a squeezed findings column and a
+    // horizontally-scrolling chart would both be fighting for the same narrow
+    // space, so they stack instead.
+    if (width < 1100) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [insights, const SizedBox(height: 16), forecast],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 3, child: insights),
+        const SizedBox(width: 16),
+        Expanded(flex: 2, child: forecast),
+      ],
+    );
+  }
+
+  Widget _insightsCard(AnalyticsInsights report) => ReportCard(
+    title: 'Poslovni uvidi',
+    subtitle: '${formatCount(report.insights.length)} '
+        '${report.insights.length == 1 ? 'nalaz' : 'nalaza'} · ${report.scope}',
+    // Wrapped into columns rather than one long stack: this card sits beside
+    // the forecast chart and is already narrower than the tab itself, so the
+    // cards read in multiple lines instead of a single tall column.
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 10.0;
+        final columns = constraints.maxWidth >= 480 ? 2 : 1;
+        final cardWidth = columns == 1 ? constraints.maxWidth : (constraints.maxWidth - gap) / 2;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final insight in report.insights)
+              SizedBox(width: cardWidth, child: ReportInsightCard(insight: insight)),
+          ],
+        );
+      },
+    ),
+  );
+
+  /// Actuals and projection drawn as one series. Both halves are scaled against
+  /// the same peak, or the join would show a step that is an artefact of the
+  /// drawing rather than of the data.
+  Widget _forecastCard(AnalyticsInsights report) {
+    final forecast = report.forecast;
+    final bars = [...forecast.actual, ...forecast.points];
+    final peak = bars.isEmpty ? 0.0 : bars.map((p) => p.revenue).reduce((a, b) => a > b ? a : b);
+
+    return ReportCard(
+      title: 'Prognoza prihoda',
+      subtitle: forecast.source.caveat ??
+          'Model vremenske serije (SSA) · projekcija za ${ReportHorizon.phraseFor(forecast.horizon)}',
+      child: forecast.points.isEmpty
+          ? _emptyBlock('Nema dovoljno historijskih podataka za prognozu u ovom periodu.')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ReportBarChart(
+                  bars: [
+                    for (final point in forecast.actual)
+                      ReportBarData(
+                        label: point.label,
+                        // A day with no sales prints nothing above its empty
+                        // slot. A row of zeroes over flat baseline is noise the
+                        // reader has to filter out to find the days that
+                        // actually carry a figure.
+                        value: point.revenue == 0 ? '' : _compactMoney(point.revenue),
+                        ratio: peak == 0 ? 0 : point.revenue / peak,
+                      ),
+                    for (final point in forecast.points)
+                      ReportBarData(
+                        label: point.label,
+                        value: point.revenue == 0 ? '' : _compactMoney(point.revenue),
+                        ratio: peak == 0 ? 0 : point.revenue / peak,
+                        isProjected: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _forecastLegend(forecast),
+              ],
+            ),
+    );
+  }
+
+  /// Explains the hollow bars, and states the confidence band in words — the
+  /// chart cannot draw the interval at this bar width, and a projection shown
+  /// without its uncertainty reads as a promise.
+  Widget _forecastLegend(ForecastBlock forecast) {
+    final brightness = Theme.of(context).brightness;
+    final lower = forecast.points.fold<double>(0, (sum, p) => sum + p.lowerBound);
+    final upper = forecast.points.fold<double>(0, (sum, p) => sum + p.upperBound);
+
+    return Wrap(
+      spacing: 18,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 10,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [AppColors.secondary, AppColors.primary],
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Ostvareno',
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 10,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.secondary.withValues(alpha: 0.75), width: 1.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Projekcija',
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+            ),
+          ],
+        ),
+        Text(
+          'Interval pouzdanosti 95%: ${formatMoney(lower)} – ${formatMoney(upper)}',
+          style: TextStyle(fontSize: 12, color: AppColors.textTertiary(brightness)),
+        ),
+      ],
+    );
+  }
+
+  Widget _anomaliesCard(AnalyticsInsights report) => ReportCard(
+    title: 'Neuobičajeni dani',
+    subtitle: report.anomalies.source.caveat ??
+        'Dani koji odstupaju od trenda i sedmičnog ritma prodaje',
+    child: ReportDataTable(
+      minWidth: _anomalyTableMinWidth,
+      columns: const [
+        ReportColumn('Datum', flex: 16),
+        ReportColumn('Vrsta', flex: 12),
+        ReportColumn('Prihod', flex: 18, rightAligned: true),
+        ReportColumn('Očekivano', flex: 18, rightAligned: true),
+        ReportColumn('Odstupanje', flex: 16, rightAligned: true),
+      ],
+      rows: [
+        for (final anomaly in report.anomalies.items)
+          [
+            ReportCell(anomaly.label),
+            ReportCell.custom(
+              ReportBadge(
+                label: anomaly.direction.label,
+                color: anomaly.direction == AnomalyDirection.spike ? _positive : AppColors.warningDark,
+              ),
+            ),
+            ReportCell(formatMoney(anomaly.revenue), bold: true),
+            ReportCell(formatMoney(anomaly.expectedRevenue)),
+            ReportCell(
+              formatSignedPercent(anomaly.deviationPercent),
+              color: anomaly.direction == AnomalyDirection.spike ? _positive : AppColors.warningDark,
+              bold: true,
+            ),
+          ],
+      ],
+    ),
+  );
+
+  Widget _segmentsCard(AnalyticsInsights report) {
+    final segments = report.segments.items;
+
+    return ReportCard(
+      title: 'Segmenti kupaca',
+      subtitle: report.segments.source.caveat ??
+          'K-Means grupisanje po ponašanju kupaca · ${report.segments.windowLabel}',
+      child: segments.isEmpty
+          ? _emptyBlock('Nema dovoljno kupaca za segmentaciju u ovom periodu.')
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                const gap = 16.0;
+                final columns =
+                    ReportSegmentCard.columnsFor(segments.length, constraints.maxWidth, gap: gap);
+                final cardWidth = (constraints.maxWidth - gap * (columns - 1)) / columns;
+
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (var i = 0; i < segments.length; i++)
+                      SizedBox(
+                        width: cardWidth,
+                        child: ReportSegmentCard(segment: segments[i], isLeading: i == 0),
+                      ),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _emptyBlock(String message) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 28),
+    child: Center(
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 13,
+          color: AppColors.textTertiary(Theme.of(context).brightness),
+        ),
+      ),
+    ),
+  );
+
   // ── Shared bits ───────────────────────────────────────────────────────────
 
   /// The tile strip. Four across on a wide window, two on a medium one, one
@@ -737,6 +1193,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     ReportTab.products => 'proizvodi',
     ReportTab.redemption => 'iskoristenost',
     ReportTab.organizations => 'organizacije',
+    ReportTab.insights => 'uvidi',
   };
 
   static String _isoDate(DateTime date) =>

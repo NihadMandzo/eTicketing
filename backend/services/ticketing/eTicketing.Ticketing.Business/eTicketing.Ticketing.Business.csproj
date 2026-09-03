@@ -13,6 +13,15 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="FluentValidation" Version="12.0.0" />
     <PackageReference Include="Mapster" Version="10.0.11" />
+    <!-- AI Uvidi (Analytics/): K-Means for audience segmentation comes from the base package;
+         SSA forecasting and spike detection need the time-series one. Same Microsoft.ML version
+         eTicketing.Catalog.Business pins for the recommender, so the two AI features cannot drift
+         onto different runtimes of the same library. -->
+    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML.TimeSeries" Version="5.0.0" />
+    <!-- AnalyticsService caches a computed report; transitively available through EF Core, but
+         referenced explicitly because this project depends on it directly. -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
     <!-- PngByteQRCode only — deliberately not QRCoder's System.Drawing-backed renderers, which
          don't work on the Linux container this service actually runs in. -->
     <PackageReference Include="QRCoder" Version="1.8.0" />

@@ -244,6 +244,25 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .ToListAsync(ct);
     }
 
+    public Task<List<BuyerFacts>> GetBuyerFactsAsync(
+        Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => ReportScope(organizationId, fromUtc, toUtcExclusive)
+            // Printed stubs carry no UserId at all, so this is both the "real buyers only" filter
+            // and what makes the GroupBy key non-nullable below.
+            .Where(t => t.UserId != null)
+            .Where(t => t.Status == TicketStatus.Confirmed || t.Status == TicketStatus.Ready || t.Status == TicketStatus.Used)
+            .GroupBy(t => t.UserId!.Value)
+            .Select(g => new BuyerFacts(
+                g.Key,
+                // Distinct purchase occasions, not tickets — see BuyerFacts. Translated by both
+                // providers as COUNT(DISTINCT ...) inside the group.
+                g.Select(t => t.OrderId).Distinct().Count(),
+                g.Count(),
+                g.Sum(t => t.PricePaid),
+                g.Min(t => t.CreatedAt),
+                g.Max(t => t.CreatedAt)))
+            .ToListAsync(ct);
+
     /// <summary>The window every report aggregation starts from: tickets minted inside the range,
     /// optionally narrowed to one organization, with Processing rows dropped up front so no
     /// downstream projection has to remember to exclude them. The upper bound is exclusive so a

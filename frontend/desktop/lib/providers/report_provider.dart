@@ -14,7 +14,8 @@ enum ReportTab {
   sales('Sales', 'Prodaja'),
   products('Products', 'Učinak Proizvoda'),
   redemption('Redemption', 'Iskorištenost Karata'),
-  organizations('Organizations', 'Organizacije');
+  organizations('Organizations', 'Organizacije'),
+  insights('Insights', 'AI Uvidi');
 
   const ReportTab(this.wireName, this.label);
 
@@ -59,6 +60,39 @@ class ReportProvider extends BaseProvider<SalesReport, String> {
   /// GET /api/reports/organizations
   Future<OrganizationReport> getOrganizations(DateTime from, DateTime to) async =>
       OrganizationReport.fromJson(await _get('reports/organizations', from, to));
+
+  /// GET /api/reports/insights - the AI Uvidi tab, in one call.
+  ///
+  /// One request rather than one per block: the screen loads exactly one tab at
+  /// a time, and the three blocks share the same range and the same three
+  /// underlying report queries server-side.
+  Future<AnalyticsInsights> getInsights(
+      DateTime from, DateTime to, {required int horizon}) async {
+    final response = await send(() => apiClient.get(
+          'reports/insights',
+          queryParameters: {
+            'from': _asDateOnly(from),
+            'to': _asDateOnly(to),
+            'horizon': horizon.toString(),
+          },
+          options: Options(
+            // Well past the client's 10s default, for the same reason `downloadPdf` overrides it:
+            // this is the most expensive call the back-office makes. One request runs three report
+            // queries plus the daily series and a year of buyer facts, and — when a narrative model
+            // is configured — waits on inference that is allowed up to 20s on its own. At the
+            // default the request was being abandoned client-side mid-flight, which cancelled the
+            // model call server-side and looked like the model failing.
+            //
+            // Only the first load of a range pays this: the response is cached server-side for
+            // minutes afterwards.
+            receiveTimeout: const Duration(seconds: 60),
+          ),
+        ));
+
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+
+    return AnalyticsInsights.fromJson(response.data as Map<String, dynamic>);
+  }
 
   /// GET /api/reports/upcoming-events — the Dashboard's "Nadolazeći događaji" card. Not a
   /// from/to report tab: no date range, just the next [count] published SingleOccurrence events.
