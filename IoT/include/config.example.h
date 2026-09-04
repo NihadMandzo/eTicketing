@@ -20,29 +20,50 @@
 //
 // Free GPIO on an AI-Thinker ESP32-CAM is scarce — the camera takes most of it and PSRAM takes
 // GPIO16. These defaults assume the microSD slot is UNUSED, which frees GPIO 2/4/12/13/14/15.
+
+#define GATE_PIN_SERVO 12      // MG90S signal. MTDI strapping pin — see docs/wiring.md before rewiring.
+#define GATE_PIN_BUZZER 15     // Passive piezo. MTDO strapping pin.
+#define GATE_PIN_LED_GREEN 2   // Strapping pin; an LED to GND keeps it low at boot, which is safe.
+#define GATE_PIN_LED_RED 14
+#define GATE_PIN_STATUS 33     // Onboard red LED, already wired. ACTIVE LOW.
+#define GATE_PIN_FLASH 4       // Onboard white flash LED, already wired. Very bright, very thirsty.
+
+// 0 = passive piezo (a bare disc that only makes sound from a driven frequency) — this build.
+// 1 = active buzzer (tones on its own from a steady DC level); the frequencies below are then
+// ignored, and the verdicts differ only by beep count and length.
+#define GATE_BUZZER_ACTIVE 0
+
+// ---- barrier servo: CONTINUOUS ROTATION, not positional ----
 //
-// GPIO 12 is deliberately left alone: it is the MTDI strapping pin, and anything holding it high
-// at boot tells the chip to run its flash at 1.8V, which stops the module booting at all.
+// This is a 360° MG90S, so a pulse width sets a SPEED AND DIRECTION, not an angle. The gate
+// therefore moves in timed bursts — drive for N ms, then return to STOP — and there is no
+// position feedback anywhere in the system. Everything below follows from that.
+//
+// STOP is a per-unit calibration, not a constant: it is whatever pulse leaves YOUR servo
+// perfectly still. 1500 is nominal; this unit sits at 1520. If the servo creeps while the gate
+// is idle, retune this first — that drift is the arm slowly walking out of alignment.
+#define GATE_SERVO_STOP_US 1520
+#define GATE_SERVO_OPEN_US 1659
+#define GATE_SERVO_CLOSE_US 1367
 
-#define GATE_PIN_SERVO 13   // MG90S signal. Non-strapping, PWM-capable.
-#define GATE_PIN_BUZZER 14  // Active buzzer (the kind that tones on its own from a DC level).
-#define GATE_PIN_LED_GREEN 15
-#define GATE_PIN_LED_RED 2  // Strapping pin; an LED to GND keeps it low at boot, which is safe.
-#define GATE_PIN_STATUS 33  // Onboard red LED, already wired. ACTIVE LOW.
-#define GATE_PIN_FLASH 4    // Onboard white flash LED, already wired. Very bright, very thirsty.
-
-// Set to 0 if your buzzer is a passive one (a bare piezo disc that needs a driven frequency).
-// The firmware then pulses the pin in software instead of just holding it high.
-#define GATE_BUZZER_ACTIVE 1
-
-// MG90S travel. 0 = barrier down, 90 = barrier up. Swap if your horn is mounted mirrored.
-#define GATE_SERVO_CLOSED_DEG 0
-#define GATE_SERVO_OPEN_DEG 90
-
-// Standard hobby-servo pulse envelope, in microseconds. Widen if your MG90S does not reach a
-// full 90°; narrow it if it buzzes and strains at the ends of travel.
+// Pulse envelope handed to attach(). Wider than the positional default because the calibrated
+// values above must sit comfortably inside it.
 #define GATE_SERVO_MIN_US 500
-#define GATE_SERVO_MAX_US 2400
+#define GATE_SERVO_MAX_US 2500
+
+// How long each burst runs. Keep these two EQUAL: a close that travels exactly as far as the
+// open is what returns the arm to where it started, so error does not accumulate over a shift.
+#define GATE_SERVO_OPEN_TRAVEL_MS 350
+#define GATE_SERVO_CLOSE_TRAVEL_MS 350
+
+// Boot only. A continuous-rotation servo cannot report where the arm is, so a gate that reboots
+// mid-shift has no idea whether it is holding the barrier up. This deliberately overshoots the
+// normal close travel to drive the arm into its mechanical closed stop, which re-establishes a
+// known position from any starting point — and doubles as drift correction.
+//
+// REQUIRES a physical stop at the closed position. Without one there is nothing to stop the
+// overshoot, and the arm simply rotates past closed. See docs/wiring.md.
+#define GATE_SERVO_REDATUM_MS 525
 
 // Light the flash LED while scanning. Helpful for printed tickets in a dim entrance, harmful for
 // phone screens (it reflects straight back into the lens). Off by default.
@@ -50,15 +71,73 @@
 
 // -------------------------------------------------------------------------------------- timings
 
-#define GATE_SERVO_OPEN_MS 3000       // How long the barrier stays up after a valid ticket.
-#define GATE_VERDICT_HOLD_MS 2000     // How long a red/green verdict is shown before scanning again.
+#define GATE_OPEN_HOLD_MS 3000        // How long the barrier stays up after a valid ticket.
+#define GATE_VERDICT_HOLD_MS 2500     // How long a red/green verdict is shown before scanning again.
 #define GATE_RESCAN_GUARD_MS 3000     // Ignore the same payload again within this window.
 #define GATE_CONFIG_REFRESH_MS 300000 // Re-fetch /gate/config every 5 min, so a sector change made
                                       // in the back-office reaches this door with no re-flash.
 #define GATE_HTTP_TIMEOUT_MS 8000
 #define GATE_WIFI_RETRY_MS 5000
 
-// Camera frame size used for decoding. VGA (640x480) gives quirc roughly twice the pixels per QR
-// module that QVGA does, which is what makes a ticket readable at arm's length instead of having
-// to fill the frame. Drop to FRAMESIZE_QVGA only if you are chasing latency.
-#define GATE_FRAME_SIZE FRAMESIZE_VGA
+// ------------------------------------------------------------------------------ testing / debug
+//
+// Serves a diagnostic page from the gate itself: live camera feed beside the decoder log, at
+// http://<device-ip>/ (the IP is printed at boot). Use it to see what the lens actually sees when
+// a ticket refuses to scan.
+//
+// TURN THIS OFF FOR ANYTHING RESEMBLING PRODUCTION. It publishes an unauthenticated view of the
+// camera to everyone on the venue's network, and it slows scanning down (see below).
+#define GATE_DEBUG_SERVER 1
+
+// The page is on this port; the MJPEG stream is on this port + 1. Two servers because an MJPEG
+// response never finishes, so it would otherwise block the log endpoint behind it.
+#define GATE_DEBUG_PORT 80
+
+// Log a per-stage timing breakdown of the MJPEG loop (frame grab / JPEG encode / downscale / socket
+// send) into the decoder log every 25 frames. Answers "why is the feed slow" with measurements
+// instead of guesses. Off in normal use — it is noise in the log panel.
+#define GATE_DEBUG_STREAM_PROFILE 0
+
+// Camera frame buffers. The library hardcodes 1, which tears the moment a second consumer (the
+// debug stream) exists. Two stops the tearing; three additionally gives the sensor's DMA a spare to
+// fill while the decoder holds one for quirc and the stream holds the other, which is what keeps the
+// preview moving instead of stalling behind each decode. VGA grayscale is ~300KB per buffer, out of
+// 4MB of PSRAM. camera_qr::begin() walks this down if the allocation fails.
+#define GATE_CAM_FB_COUNT 3
+
+// 1..100, HIGHER is better. This is the jpge software encoder's scale — not the sensor's hardware
+// `jpeg_quality` field, which is 0..63 and inverted. Conflating the two is why this used to read 12
+// and produce a visibly blocky picture. The camera runs in GRAYSCALE for the decoder, so every
+// streamed frame is compressed on the CPU and quality does cost real time — though at ~76ms for an
+// HVGA frame it is not what limits the feed; the ~195ms sensor grab is.
+#define GATE_DEBUG_JPEG_QUALITY 70
+
+// Halve the streamed frame to QVGA before encoding. A quarter of the pixels is roughly a quarter of
+// the encode time and a quarter of the bytes on the wire, and this preview only has to be good
+// enough to aim the lens — the decoder keeps reading full GATE_FRAME_SIZE frames either way. Set to
+// 0 to stream at the sensor's full resolution.
+#define GATE_DEBUG_STREAM_HALVE 0
+
+// Pause between streamed frames. The stream and the decoder pull from the same buffer pool, so
+// every frame sent to a browser is one the decoder does not get. Raise this to favour scanning,
+// lower it for a smoother picture.
+#define GATE_DEBUG_STREAM_DELAY_MS 40
+
+// Ask the QR library to dump its own per-frame chatter to serial (very noisy: heap, stack, frame
+// dimensions and a line per failed decode, ~10x/second). Off unless you are chasing the decoder
+// itself — the gate's own log already reports located-but-unreadable codes with quirc's reason.
+#define GATE_QR_LIBRARY_DEBUG 0
+
+// Camera frame size used for decoding — the single biggest control over how responsive this gate
+// feels, because quirc needs GRAYSCALE and grayscale frames are uncompressed. Every frame is DMA'd
+// whole into PSRAM, so the time to fetch one scales directly with its pixel count: measured at
+// ~387ms for VGA, which capped both the decoder and the debug preview at about 2/sec. (The
+// Espressif camera examples are fast at this resolution only because PIXFORMAT_JPEG lets the OV2640
+// compress in hardware to a few KB before the data ever crosses the bus. quirc cannot read a JPEG,
+// so that path is not open to us.)
+//
+// HVGA (480x320) halves the pixels and so roughly halves the grab to ~195ms, while keeping 1.5x the
+// linear resolution of QVGA — enough modules per QR to read a ticket at a normal presenting
+// distance. Raise to FRAMESIZE_VGA for maximum read range at ~2 fps; drop to FRAMESIZE_QVGA for
+// ~6-7 fps if tickets are always presented close to the lens.
+#define GATE_FRAME_SIZE FRAMESIZE_HVGA

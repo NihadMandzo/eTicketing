@@ -413,36 +413,43 @@ class _GateDeviceUpsertDialogState extends State<GateDeviceUpsertDialog> {
       return _hint(isDark, 'Ovaj proizvod nema nijedan sektor. Prvo kreirajte sektor.');
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      itemCount: _sectors.length,
-      itemBuilder: (context, index) {
-        final sector = _sectors[index];
-        final selected = _selectedSectorIds.contains(sector.id);
-
-        return CheckboxListTile(
-          dense: true,
-          value: selected,
-          activeColor: primary,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: Text(sector.name, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            sector.isPublished ? 'Objavljen' : 'U pripremi',
-            style: TextStyle(
-              fontSize: 11,
-              color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+    // A Column in a SingleChildScrollView rather than a ListView, deliberately. AlertDialog sizes
+    // its content through IntrinsicWidth, which measures the whole subtree, and a lazy viewport
+    // (ListView/GridView) throws outright when asked for an intrinsic dimension — instantiating
+    // every child to answer is exactly what a viewport exists to avoid. SingleChildScrollView
+    // delegates intrinsics straight to its child, so it measures fine, and a product's sector
+    // count is small enough that laziness buys nothing here anyway.
+    //
+    // The enclosing Container's maxHeight is what keeps this scrollable instead of unbounded.
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final sector in _sectors)
+            CheckboxListTile(
+              dense: true,
+              value: _selectedSectorIds.contains(sector.id),
+              activeColor: primary,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(sector.name, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                sector.isPublished ? 'Objavljen' : 'U pripremi',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary,
+                ),
+              ),
+              onChanged: (checked) => setState(() {
+                if (checked ?? false) {
+                  _selectedSectorIds.add(sector.id);
+                } else {
+                  _selectedSectorIds.remove(sector.id);
+                }
+                _sectorError = null;
+              }),
             ),
-          ),
-          onChanged: (checked) => setState(() {
-            if (checked ?? false) {
-              _selectedSectorIds.add(sector.id);
-            } else {
-              _selectedSectorIds.remove(sector.id);
-            }
-            _sectorError = null;
-          }),
-        );
-      },
+        ],
+      ),
     );
   }
 

@@ -16,6 +16,8 @@
 
 #include "camera_qr.h"
 #include "config.h"
+#include "debug_log.h"
+#include "debug_server.h"
 #include "gate_api.h"
 #include "gate_io.h"
 #include "wifi_link.h"
@@ -33,17 +35,18 @@ bool halted = false; // Set when the server rejects our key. Terminal until some
 
 void logConfig(const gate_api::GateConfig &config) {
   if (!config.ok) {
-    Serial.println("[gate] Nije moguće preuzeti konfiguraciju uređaja.");
+    debug_log::addf(debug_log::Level::Bad, "[gate] Nije moguće preuzeti konfiguraciju uređaja.");
     return;
   }
 
   Serial.println("------------------------------------------------------------");
-  Serial.printf("[gate] Uređaj  : %s\n", config.deviceName.c_str());
-  Serial.printf("[gate] Proizvod: %s\n", config.productName.c_str());
+  debug_log::addf(debug_log::Level::Info, "[gate] Uređaj  : %s", config.deviceName.c_str());
+  debug_log::addf(debug_log::Level::Info, "[gate] Proizvod: %s", config.productName.c_str());
   if (config.allSectors) {
-    Serial.println("[gate] Sektori : SVI sektori ovog proizvoda");
+    debug_log::addf(debug_log::Level::Info, "[gate] Sektori : SVI sektori ovog proizvoda");
   } else {
-    Serial.printf("[gate] Sektori : %s (%u)\n", config.sectorSummary.c_str(), config.sectorCount);
+    debug_log::addf(debug_log::Level::Info, "[gate] Sektori : %s (%u)",
+                    config.sectorSummary.c_str(), config.sectorCount);
   }
   Serial.println("------------------------------------------------------------");
 }
@@ -63,29 +66,32 @@ bool isDuplicateScan(const String &code) {
 void handle(const gate_api::Verdict &verdict) {
   switch (verdict.outcome) {
     case gate_api::Outcome::Valid:
-      Serial.printf("[gate] VALIDNA — %s | sektor: %s | %s\n",
-                    verdict.message.c_str(), verdict.sectorName.c_str(), verdict.holderEmail.c_str());
+      debug_log::addf(debug_log::Level::Good, "[gate] VALIDNA — %s | sektor: %s | %s",
+                      verdict.message.c_str(), verdict.sectorName.c_str(), verdict.holderEmail.c_str());
       gate_io::performGranted();
       return;
 
     case gate_api::Outcome::Invalid:
-      Serial.printf("[gate] NIJE VALIDNA (%s) — %s\n", verdict.code.c_str(), verdict.message.c_str());
+      debug_log::addf(debug_log::Level::Bad, "[gate] NIJE VALIDNA (%s) — %s",
+                      verdict.code.c_str(), verdict.message.c_str());
       gate_io::performDenied();
       return;
 
     case gate_api::Outcome::Retry:
-      Serial.printf("[gate] PONOVITE — %s\n", verdict.message.c_str());
+      debug_log::addf(debug_log::Level::Warn, "[gate] PONOVITE — %s", verdict.message.c_str());
       gate_io::performRetry();
       return;
 
     case gate_api::Outcome::Unauthorized:
-      Serial.println("[gate] Ključ uređaja je odbijen. Provjerite GATE_DEVICE_KEY ili status uređaja");
-      Serial.println("[gate] u desktop aplikaciji (Ulazni uređaji). Skeniranje je zaustavljeno.");
+      debug_log::addf(debug_log::Level::Bad,
+                      "[gate] Ključ uređaja je odbijen. Provjerite GATE_DEVICE_KEY ili status "
+                      "uređaja u desktop aplikaciji (Ulazni uređaji). Skeniranje je zaustavljeno.");
       halted = true;
       return;
 
     case gate_api::Outcome::TransportError:
-      Serial.printf("[gate] GREŠKA VEZE (HTTP %d) — %s\n", verdict.httpStatus, verdict.message.c_str());
+      debug_log::addf(debug_log::Level::Bad, "[gate] GREŠKA VEZE (HTTP %d) — %s",
+                      verdict.httpStatus, verdict.message.c_str());
       gate_io::performNetworkError();
       return;
   }
@@ -98,6 +104,8 @@ void setup() {
   delay(300);
   Serial.println("\n[gate] eTicketing — ulazni skener");
 
+  debug_log::begin();
+
   // First, and before anything that can fail: drive the barrier closed. A gate that reboots
   // mid-shift must come back down, not sit open.
   gate_io::begin();
@@ -109,6 +117,10 @@ void setup() {
 
   wifi_link::begin();
   wifi_link::waitUntilConnected();
+
+  // After WiFi (it needs an IP to bind and to print a reachable URL), before the first config
+  // fetch, so a key or scope problem at boot is already visible in the web log.
+  debug_server::begin();
 
   refreshConfig(true);
 
@@ -146,14 +158,27 @@ void loop() {
   refreshConfig(false);
 
   String code;
-  if (!camera_qr::poll(code)) return;
+  String decodeError;
+  const camera_qr::Scan scan = camera_qr::poll(code, decodeError);
+
+  if (scan == camera_qr::Scan::None) return;
+
+  // A located-but-unreadable code is worth surfacing rather than swallowing: it means the holder
+  // is aiming correctly and something else (focus, glare, a creased printout) is in the way, which
+  // is a different instruction to give them than "hold it up to the camera".
+  if (scan == camera_qr::Scan::Failed) {
+    debug_log::addf(debug_log::Level::Warn,
+                    "[qr] QR pronađen ali nečitak (%s) — pomjerite dalje ili smanjite odsjaj.",
+                    decodeError.c_str());
+    return;
+  }
 
   if (isDuplicateScan(code)) return;
 
   lastCode = code;
   lastCodeAt = millis();
 
-  Serial.printf("[gate] Skenirano: %s\n", code.c_str());
+  debug_log::addf(debug_log::Level::Info, "[gate] Skenirano: %s", code.c_str());
 
   const gate_api::Verdict verdict = gate_api::validate(code);
   handle(verdict);

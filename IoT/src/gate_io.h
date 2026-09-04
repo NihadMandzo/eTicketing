@@ -1,25 +1,34 @@
 // LEDs, buzzer and the MG90S barrier servo — everything the gate does that a person can see or
 // hear. Nothing in here decides anything; main.cpp tells it which verdict to perform.
+//
+// The servo is a CONTINUOUS-ROTATION unit, so nothing here can ask it for an angle or read one
+// back: a pulse width is a speed, movement is expressed as a burst duration, and the firmware
+// never truly knows where the arm is. begin()'s re-datum is what substitutes for that missing
+// feedback.
 #pragma once
 
 #include <Arduino.h>
 
 namespace gate_io {
 
-// Call once, first thing in setup(), before the camera. The barrier is driven to CLOSED here, so a
-// gate that reboots mid-shift comes back down rather than sitting open.
+// Call once, first thing in setup(), before the camera. Holds the servo neutral, then drives it
+// into its mechanical closed stop for longer than a normal close takes — so a gate that reboots
+// mid-shift ends up closed no matter where the reboot found the arm.
+//
+// This assumes a physical stop exists at the closed position (see docs/wiring.md). Without one
+// there is nothing to arrest the overshoot and the arm rotates past closed.
 void begin();
 
 // --- verdict performances (blocking, each returns with the barrier closed and the LEDs off) ---
 
-// Valid ticket: green, one long beep, barrier up for GATE_SERVO_OPEN_MS, barrier down.
+// Valid ticket: green, a rising two-tone chime, barrier up for GATE_OPEN_HOLD_MS, barrier down.
 void performGranted();
 
-// Rejected ticket: red, three short beeps. The barrier never moves.
+// Rejected ticket: red, one long low tone. The barrier never moves.
 void performDenied();
 
-// 409 — another scanner is mid-validation on this same ticket. Amber (both LEDs) and two medium
-// beeps: this is "try again", not "you are not getting in", and the gate staff should read it that
+// 409 — another scanner is mid-validation on this same ticket. Amber (both LEDs) and two mid
+// tones: this is "try again", not "you are not getting in", and the gate staff should read it that
 // way rather than turning the holder away.
 void performRetry();
 
