@@ -1,0 +1,8 @@
+.pio/
+.vscode/
+.pioenvs/
+.piolibdeps/
+
+# Holds this gate's WiFi password and its device API key. Copy config.example.h to config.h and
+# fill it in locally — the key is a working credential for a door and must never be committed.
+include/config.h

@@ -93,6 +93,12 @@ public class Ticket : BaseEntity
     public DateTime? ValidatedAt { get; private set; }
     public Guid? ValidatedByUserId { get; private set; }
 
+    // Set alongside the two above when the scan came from an unattended gate scanner rather than a
+    // person holding a phone (see GateDevice). ValidatedByUserId still names the organizer who
+    // registered that device, so "who admitted this" always resolves to an accountable human; this
+    // column additionally says which door they were admitted through.
+    public Guid? ValidatedByDeviceId { get; private set; }
+
     // Parameterless constructor stays available (private, not public) for EF Core materialization
     // and the object-initializer syntax the factories below use — nothing outside this class can
     // call `new Ticket { ... }` any more, so ValidDate/ValidFrom/ValidTo/SubscriptionId can only
@@ -182,10 +188,11 @@ public class Ticket : BaseEntity
     /// the terminal <see cref="TicketStatus.Used"/> so a second scan of the same QR is rejected.
     /// Callers must already hold the per-ticket Redis validation lock and must already have
     /// checked the ticket is currently admittable — this method does not re-check, it commits.</summary>
-    public void MarkValidated(Guid byUserId, DateTime at)
+    public void MarkValidated(Guid byUserId, DateTime at, Guid? byDeviceId = null)
     {
         Status = TicketStatus.Used;
         ValidatedAt = at;
         ValidatedByUserId = byUserId;
+        ValidatedByDeviceId = byDeviceId;
     }
 }

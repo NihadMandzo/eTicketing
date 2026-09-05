@@ -2,6 +2,7 @@
 using eTicketing.Shared.Auth;
 using eTicketing.Ticketing.Api.Endpoints;
 using eTicketing.Ticketing.Api.Infrastructure;
+using eTicketing.Ticketing.Api.Infrastructure.Auth;
 using eTicketing.Ticketing.Data;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -11,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddTicketingInfrastructure();
 builder.Services.AddSharedJwtBearerAuthentication(builder.Configuration);
 builder.Services.AddPlatformAuthorizationPolicies();
+builder.Services.AddGateDeviceAuthentication();
 builder.AddPlatformApiEssentials<TicketingDbContext>();
 
 var app = builder.Build();
@@ -38,6 +40,8 @@ app.MapTicketEndpoints();
 app.MapTicketPrintEndpoints();
 app.MapReportEndpoints();
 app.MapAnalyticsEndpoints();
+app.MapGateDeviceEndpoints();
+app.MapGateEndpoints();
 app.MapHealthChecks("/health");
 
 app.Run();

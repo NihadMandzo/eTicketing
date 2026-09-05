@@ -39,6 +39,20 @@ const List<NavItem> kNavItems = [
     icon: Icons.category_rounded,
     allowedRoles: ['Admin', 'SuperAdmin'],
   ),
+  // NavItem(
+  //   id: 'tickets',
+  //   label: 'Karte',
+  //   icon: Icons.confirmation_number_rounded,
+  //   allowedRoles: ['OrganizationAdmin', 'OrganizationSuperAdmin'],
+  // ),
+  NavItem(
+    id: 'gate-devices',
+    label: 'Ulazni uređaji',
+    icon: Icons.sensor_door_rounded,
+    // PlatformStaff too: they hold the same override over every organization's devices as they do
+    // over its products/sectors/tickets (see .claude/rules/01-domain.md).
+    allowedRoles: ['OrganizationAdmin', 'OrganizationSuperAdmin', 'Admin', 'SuperAdmin'],
+  ),
   NavItem(
     id: 'organizations',
     label: 'Organizacije',

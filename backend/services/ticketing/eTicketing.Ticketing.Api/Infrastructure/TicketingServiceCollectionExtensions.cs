@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Headers;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Ticketing.Api.Infrastructure.Auth;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
 using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
@@ -10,9 +11,11 @@ using eTicketing.Ticketing.Business.Analytics.Insights;
 using eTicketing.Ticketing.Business.Analytics.Narrative;
 using eTicketing.Ticketing.Business.Analytics.Segmentation;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.TicketPrint;
@@ -43,6 +46,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketRepository, TicketRepository>();
         builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         builder.Services.AddScoped<ITicketPrintBatchRepository, TicketPrintBatchRepository>();
+        builder.Services.AddScoped<IGateDeviceRepository, GateDeviceRepository>();
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
@@ -111,6 +115,10 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketPrintRenderer, TicketPrintRenderer>();
         builder.Services.AddScoped<IReportService, ReportService>();
         builder.Services.AddScoped<IReportPdfService, ReportPdfService>();
+        builder.Services.AddScoped<IGateDeviceService, GateDeviceService>();
+
+        // Stateless SHA-256 + CSPRNG wrapper, same reasoning as TicketQrCodec's singleton above.
+        builder.Services.AddSingleton<GateDeviceKeyGenerator>();
 
         // The queue is a singleton the worker reads and request threads write; ITicketPrintQueue is
         // what Business depends on, and the worker needs the concrete type for its ChannelReader.

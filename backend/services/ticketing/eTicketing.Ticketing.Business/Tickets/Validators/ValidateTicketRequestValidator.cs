@@ -12,6 +12,10 @@ public class ValidateTicketRequestValidator : AbstractValidator<ValidateTicketRe
     /// what a rogue client can push through the codec.</summary>
     public const int MaxCodeLength = 200;
 
+    /// <summary>Matches UpsertGateDeviceRequestValidator.MaxSectors — the two describe the same
+    /// thing (how many sectors one door can cover) and must not drift apart.</summary>
+    public const int MaxSectors = 50;
+
     public ValidateTicketRequestValidator()
     {
         RuleFor(x => x.ProductId)
@@ -20,5 +24,15 @@ public class ValidateTicketRequestValidator : AbstractValidator<ValidateTicketRe
         RuleFor(x => x.Code)
             .NotEmpty().WithMessage("Kod ulaznice je obavezan.")
             .MaximumLength(MaxCodeLength).WithMessage($"Kod ulaznice može imati najviše {MaxCodeLength} znakova.");
+
+        // Optional field — only checked when the caller actually narrowed to sectors.
+        When(x => x.SectorIds is { Count: > 0 }, () =>
+        {
+            RuleFor(x => x.SectorIds!)
+                .Must(ids => ids.Count <= MaxSectors)
+                    .WithMessage($"Moguće je odabrati najviše {MaxSectors} sektora.")
+                .Must(ids => ids.All(id => id != Guid.Empty))
+                    .WithMessage("Lista sektora sadrži neispravan identifikator.");
+        });
     }
 }
