@@ -22,16 +22,28 @@
 // GPIO16. These defaults assume the microSD slot is UNUSED, which frees GPIO 2/4/12/13/14/15.
 
 #define GATE_PIN_SERVO 12      // MG90S signal. MTDI strapping pin — see docs/wiring.md before rewiring.
-#define GATE_PIN_BUZZER 15     // Passive piezo. MTDO strapping pin.
+#define GATE_PIN_BUZZER 14     // Passive piezo. No boot-time role, unlike 12 and 15 either side of it.
 #define GATE_PIN_LED_GREEN 2   // Strapping pin; an LED to GND keeps it low at boot, which is safe.
-#define GATE_PIN_LED_RED 14
+#define GATE_PIN_LED_RED 15    // MTDO strapping pin. An LED to GND holds it low at boot, which only
+                               // silences the ROM bootloader's serial chatter — harmless here.
 #define GATE_PIN_STATUS 33     // Onboard red LED, already wired. ACTIVE LOW.
 #define GATE_PIN_FLASH 4       // Onboard white flash LED, already wired. Very bright, very thirsty.
 
-// 0 = passive piezo (a bare disc that only makes sound from a driven frequency) — this build.
-// 1 = active buzzer (tones on its own from a steady DC level); the frequencies below are then
-// ignored, and the verdicts differ only by beep count and length.
-#define GATE_BUZZER_ACTIVE 0
+// This gate drives a PASSIVE piezo only — a bare disc with no oscillator, which makes sound solely
+// from a driven waveform. There is deliberately no switch for an active buzzer: the branch that
+// used to exist was selected by any non-zero value of a #if'd macro, and setting it wrong left the
+// disc held at a DC level and completely silent. Swapping in an active buzzer now means changing
+// beepAt() in gate_io.cpp, which is a visible edit rather than a silent misconfiguration.
+//
+// Tone frequencies, Hz. A passive piezo disc is a RESONANT transducer: it radiates loudest around
+// 2-4kHz and falls off steeply below that, so a lower tone is not merely lower-pitched, it is much
+// quieter — the 700Hz a rejection used to sound is close to inaudible across an entrance. Valid and
+// invalid are therefore told apart by PATTERN (a rising pair vs three short bursts) while both
+// pitches stay inside the band where the disc actually radiates.
+#define GATE_TONE_GRANTED_LOW_HZ 2000
+#define GATE_TONE_GRANTED_HIGH_HZ 3000
+#define GATE_TONE_DENIED_HZ 1800
+#define GATE_TONE_RETRY_HZ 2400
 
 // ---- barrier servo: CONTINUOUS ROTATION, not positional ----
 //
