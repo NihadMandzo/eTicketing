@@ -219,8 +219,6 @@ class _PageContent extends StatelessWidget {
         return 'Proizvodi';
       case 'categories':
         return 'Kategorije';
-      case 'tickets':
-        return 'Karte';
       case 'gate-devices':
         return 'Ulazni uređaji';
       case 'organizations':
