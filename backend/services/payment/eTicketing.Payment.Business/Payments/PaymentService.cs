@@ -1,66 +1,99 @@
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using eTicketing.Payment.Business.Payments.Gateways;
+using eTicketing.Payment.Data.Entities;
 using eTicketing.Payment.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
 using PaymentEntity = eTicketing.Payment.Data.Entities.Payment;
-using PaymentStatus = eTicketing.Payment.Data.Entities.PaymentStatus;
 
 namespace eTicketing.Payment.Business.Payments;
 
 public class PaymentService : IPaymentService
 {
     private readonly IPaymentRepository _paymentRepository;
+    private readonly IStripeCustomerRepository _customerRepository;
+    private readonly IPaymentGateway _gateway;
+    private readonly StripeOptions _stripeOptions;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<PaymentService> _logger;
 
-    public PaymentService(IPaymentRepository paymentRepository, IUnitOfWork unitOfWork)
+    public PaymentService(
+        IPaymentRepository paymentRepository,
+        IStripeCustomerRepository customerRepository,
+        IPaymentGateway gateway,
+        IOptions<StripeOptions> stripeOptions,
+        IUnitOfWork unitOfWork,
+        ILogger<PaymentService> logger)
     {
         _paymentRepository = paymentRepository;
+        _customerRepository = customerRepository;
+        _gateway = gateway;
+        _stripeOptions = stripeOptions.Value;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
-    public async Task<Result<PaymentResponse>> ChargeAsync(ChargeRequest request, CancellationToken ct = default)
+    public async Task<Result<PaymentIntentResponse>> CreateIntentAsync(CreateIntentRequest request, CancellationToken ct = default)
     {
-        // OrderRef is the idempotency key (unique index — see PaymentConfiguration). A caller can
-        // legitimately retry with the same OrderRef (e.g. Ticketing's Polly retry re-sending after
-        // the response to an already-successful charge was lost) — replaying must return the
-        // original result rather than charging the card a second time.
-        var existing = await _paymentRepository.GetByOrderRefAsync(request.OrderRef, ct);
-        if (existing is not null)
-            return Result<PaymentResponse>.Success(ToResponse(existing));
-
-        // Deterministic mock per docs/payment-setup-guide.md §2.1: a card ending "0000" simulates a
-        // decline, so the circuit-breaker/decline paths can be demoed without any external gateway.
-        var status = request.CardNumberLast4 == "0000" ? PaymentStatus.Failed : PaymentStatus.Succeeded;
-
-        var payment = new PaymentEntity
-        {
-            Id = Guid.NewGuid(),
-            Amount = request.Amount,
-            Status = status,
-            OrderRef = request.OrderRef,
-        };
-
-        await _paymentRepository.AddAsync(payment, ct);
+        var currency = _stripeOptions.Currency;
+        var metadata = BuildMetadata(request);
 
         try
         {
-            await _unitOfWork.SaveChangesAsync(ct);
+            if (request.IsSubscription)
+                return await CreateSubscriptionIntentAsync(request, currency, metadata, ct);
+
+            // The gateway is handed OrderRef as its idempotency key, so a replayed create returns
+            // the SAME provider intent -- including its client secret -- rather than a second one.
+            // That is why this does not need to short-circuit on an existing row: the provider is
+            // already the authority on uniqueness, and the local row is simply brought up to date.
+            var intent = await _gateway.CreateIntentAsync(
+                new GatewayIntentRequest(
+                    request.Amount, currency, request.OrderRef, request.UserId,
+                    request.CustomerEmail, request.Description, metadata),
+                ct);
+
+            await UpsertPendingAsync(request, currency, intent.IntentId, providerSubscriptionId: null, ct);
+
+            return Result<PaymentIntentResponse>.Success(new PaymentIntentResponse(
+                _gateway.Name, _gateway.PublishableKey, intent.IntentId, intent.ClientSecret,
+                request.Amount, currency, SubscriptionReference: null));
         }
-        catch (DbUpdateException)
+        catch (PaymentGatewayUnavailableException ex)
         {
-            // Two concurrent charges for the same OrderRef raced past the GetByOrderRefAsync check
-            // above; the unique index rejected the loser. The loser isn't a failure — the winner's
-            // row is the authoritative result, so fetch and return it instead of erroring out.
-            var winner = await _paymentRepository.GetByOrderRefAsync(request.OrderRef, ct);
-            if (winner is not null)
-                return Result<PaymentResponse>.Success(ToResponse(winner));
-
-            throw;
+            return ProviderUnavailable<PaymentIntentResponse>(ex, request.OrderRef, "kreiranje namjere plaćanja");
         }
-
-        return Result<PaymentResponse>.Success(ToResponse(payment));
     }
 
-    private static PaymentResponse ToResponse(PaymentEntity payment) =>
-        new(payment.Id, payment.Amount, payment.Status, payment.OrderRef, payment.CreatedAt);
-}
+    private async Task<Result<PaymentIntentResponse>> CreateSubscriptionIntentAsync(
+        CreateIntentRequest request,
+        string currency,
+        IReadOnlyDictionary<string, string> metadata,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.SubscriptionProductName))
+            return Result<PaymentIntentResponse>.Failure(Error.Validation(
+                "payment.subscription_name_required", "Naziv pretplate je obavezan."));
+
+        if (string.IsNullOrWhiteSpace(request.CustomerEmail))
+            return Result<PaymentIntentResponse>.Failure(Error.Validation(
+                "payment.customer_email_required", "Email kupca je obavezan za pretplatu."));
+
+        var customerReference = await ResolveCustomerAsync(request.UserId, request.CustomerEmail, ct);
+
+        var subscription = await _gateway.CreateSubscriptionAsync(
+            new GatewaySubscriptionRequest(
+                request.Amount, currency, request.OrderRef, request.UserId,
+                customerReference, request.SubscriptionProductName, metadata),
+            ct);
+
+        await UpsertPendingAsync(request, currency, subscription.ClientSecret is null ? null : subscription.SubscriptionId,
+            subscription.SubscriptionId, ct);
+
+        return Result<PaymentIntentResponse>.Success(new PaymentIntentResponse(
+            _gateway.Name, _gateway.PublishableKey, subscription.SubscriptionId, subscription.ClientSecret,
+            request.Amount, currency, subscription.SubscriptionId));
+    }
