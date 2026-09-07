@@ -182,11 +182,35 @@ services:
     container_name: eticketing-payment
     environment:
       ConnectionStrings__PaymentDb: "Server=sqlserver,1433;Database=PaymentDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      # Renewals originate at Stripe and land here as webhooks, but the Ticket/Subscription rows live
+      # in Ticketing — so this service publishes subscription.* events for it to consume.
+      RabbitMq__Host: "rabbitmq"
+      # "Mock" (default) or "Stripe". This is the whole rollback story for the payment integration:
+      # docs/arhitektura-migracija-mikroservisi-eda.md section 9 names Stripe the second thing to
+      # sacrifice, with an explicit fallback to the internal mock. Flipping this back to Mock and
+      # restarting this one container returns the entire stack to the pre-Stripe behaviour — the
+      # provider name travels to the clients on every payment-intent response, so web and mobile
+      # switch to the legacy card form on their own, with NO rebuild.
+      Payment__Provider: "${PAYMENT_PROVIDER:-Mock}"
+      # Note ":-" and not ":?" — the stack must still boot with no Stripe credentials at all, which
+      # is what keeps the Mock fallback genuinely usable.
+      Payment__Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
+      # Safe to hand to a browser by definition; returned to the clients rather than baked into their
+      # builds, so rotating it is an .env edit plus a restart.
+      Payment__Stripe__PublishableKey: "${STRIPE_PUBLISHABLE_KEY:-}"
+      # From `stripe listen` when testing locally, NOT the value shown in the Stripe dashboard.
+      Payment__Stripe__WebhookSecret: "${STRIPE_WEBHOOK_SECRET:-}"
+      # Prices display as KM everywhere, but a Stripe test account can only present the currencies
+      # its country allows and BAM is unavailable on most of them. See docs/payment-setup-guide.md.
+      Payment__Stripe__Currency: "${STRIPE_CURRENCY:-eur}"
     depends_on:
       sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     networks: [eticketing-network]
     restart: unless-stopped
-    # Intentionally no "ports:" — internal only, called exclusively by ticketing-service.
+    # Still intentionally no "ports:" — this service is internal, called by ticketing-service. The
+    # one exception is the Stripe webhook, which reaches it through the Gateway on an exact-path
+    # route (/api/payments/webhook); nothing else on this service is publicly routable.
 
   notifications-service:
     build:
@@ -236,12 +260,16 @@ services:
       ReverseProxy__Clusters__identity-cluster__Destinations__d1__Address: "http://identity-service:8080/"
       ReverseProxy__Clusters__catalog-cluster__Destinations__d1__Address: "http://catalog-service:8080/"
       ReverseProxy__Clusters__ticketing-cluster__Destinations__d1__Address: "http://ticketing-service:8080/"
+      # Only the Stripe webhook is routed to this cluster (exact path /api/payments/webhook) --
+      # payment-service has no other public route. See the gateway's appsettings.json.
+      ReverseProxy__Clusters__payment-cluster__Destinations__d1__Address: "http://payment-service:8080/"
     ports:
       - "${GATEWAY_PORT:-5000}:8080"
     depends_on:
       - identity-service
       - catalog-service
       - ticketing-service
+      - payment-service
     networks: [eticketing-network]
     restart: unless-stopped
 

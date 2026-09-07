@@ -166,8 +166,15 @@ namespace eTicketing.Ticketing.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("CancelAtPeriodEnd")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("CapacityHoldId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -194,10 +201,18 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PaymentReference")
+                        .IsUnique()
+                        .HasFilter("[PaymentReference] IS NOT NULL");
 
                     b.HasIndex("SectorId");
 

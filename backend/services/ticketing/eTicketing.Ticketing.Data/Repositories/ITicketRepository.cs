@@ -125,6 +125,15 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// </summary>
     Task<List<BuyerFacts>> GetBuyerFactsAsync(
         Guid? organizationId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether this subscription already has a ticket covering the period starting on
+    /// <paramref name="periodStart"/>.
+    ///
+    /// The renewal guard: provider webhooks are at-least-once, so a redelivered "invoice paid" must
+    /// not mint a second parking ticket for a month that was only paid for once.
+    /// </summary>
+    Task<bool> ExistsForSubscriptionPeriodAsync(Guid subscriptionId, DateOnly periodStart, CancellationToken ct = default);
 }
 
 /// <summary>Projection, not an entity — one row per (product, mode) with today's ticket tallies.</summary>

@@ -14,6 +14,7 @@ import 'edit_profile_screen.dart';
 import 'help_screen.dart';
 import 'login_screen.dart';
 import 'my_tickets_screen.dart';
+import 'subscriptions_screen.dart';
 import 'privacy_screen.dart';
 import 'terms_screen.dart';
 
@@ -91,6 +92,14 @@ class ProfileScreen extends StatelessWidget {
                               body: const SafeArea(child: MyTicketsScreen()),
                             ),
                           ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileRow(
+                        icon: Icons.autorenew_rounded,
+                        label: 'Moje pretplate',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SubscriptionsScreen()),
                         ),
                       ),
                     ],

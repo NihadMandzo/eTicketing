@@ -35,4 +35,17 @@ public static class EventNames
     /// (each affected buyer, plus the organization itself when platform staff did the deleting),
     /// address already resolved.</summary>
     public const string ProductDeletedNotification = "product-deleted.notification";
+
+    /// <summary>eTicketing.Payment → eTicketing.Ticketing. A recurring period was paid for; mint
+    /// that period's ticket. See <see cref="Events.SubscriptionRenewed"/> for why this is an event
+    /// rather than a synchronous call back into Ticketing.</summary>
+    public const string SubscriptionRenewed = "subscription.renewed";
+
+    /// <summary>eTicketing.Payment → eTicketing.Ticketing. A renewal charge failed; the
+    /// subscription goes PastDue while the provider keeps retrying.</summary>
+    public const string SubscriptionPaymentFailed = "subscription.payment-failed";
+
+    /// <summary>eTicketing.Payment → eTicketing.Ticketing. The subscription ended for good; release
+    /// the space back to its sector's capacity.</summary>
+    public const string SubscriptionCancelled = "subscription.cancelled";
 }

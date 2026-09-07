@@ -25,6 +25,20 @@ public record PaymentChargeResponse(
     string Currency,
     string? FailureCode);
 
+/// <summary>Mirrors eTicketing.Payment's SubscriptionChargeResponse. Carries the billing period the
+/// provider settled on, which is what the Subscription row is stamped with -- so our records and the
+/// buyer's card statement can never disagree about what was paid for.</summary>
+public record SubscriptionChargeResponse(
+    Guid Id,
+    decimal Amount,
+    PaymentChargeStatus Status,
+    string OrderRef,
+    string Currency,
+    string? FailureCode,
+    string SubscriptionReference,
+    DateOnly CurrentPeriodStart,
+    DateOnly CurrentPeriodEnd);
+
 /// <summary>Everything the client needs to drive the payment: which provider is configured (so it
 /// renders the Stripe Elements form or the mock card form), the publishable key when there is one,
 /// and the client secret to confirm against.</summary>
@@ -72,7 +86,7 @@ public interface IPaymentClient
 
     /// <summary>Confirms that the subscription's first invoice really was paid. The subscription
     /// counterpart of CapturePaymentAsync.</summary>
-    Task<PaymentChargeResponse> ConfirmSubscriptionAsync(
+    Task<SubscriptionChargeResponse> ConfirmSubscriptionAsync(
         string subscriptionReference,
         string orderRef,
         Guid userId,

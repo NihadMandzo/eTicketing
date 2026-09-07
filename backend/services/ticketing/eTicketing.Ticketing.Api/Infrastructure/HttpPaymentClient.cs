@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using eTicketing.Ticketing.Business.External;
 using Polly.CircuitBreaker;
@@ -5,11 +6,6 @@ using Polly.Timeout;
 
 namespace eTicketing.Ticketing.Api.Infrastructure;
 
-/// <summary>Calls eTicketing.Payment's only endpoint (POST /payments), protected by the project's
-/// flagship circuit breaker (registered in TicketingServiceCollectionExtensions) since this is the
-/// one call on the synchronous purchase-critical path. Translates the resilience pipeline's Polly
-/// exceptions into the plain PaymentUnavailableException so callers in .Business never need to
-/// reference Polly directly.</summary>
 public class HttpPaymentClient : IPaymentClient
 {
     private readonly HttpClient _httpClient;
@@ -21,15 +17,114 @@ public class HttpPaymentClient : IPaymentClient
         _logger = logger;
     }
 
-    public async Task<PaymentChargeResponse> ChargeAsync(decimal amount, string orderRef, string cardNumberLast4, CancellationToken ct = default)
+    public Task<PaymentIntentCreatedResponse> CreateIntentAsync(
+        decimal amount,
+        string orderRef,
+        Guid userId,
+        string userEmail,
+        string description,
+        string holdRef,
+        Guid sectorId,
+        bool isSubscription,
+        string? subscriptionProductName,
+        CancellationToken ct = default)
+        => PostAsync<PaymentIntentCreatedResponse>(
+            "/payments/intents",
+            new
+            {
+                Amount = amount,
+                OrderRef = orderRef,
+                UserId = userId,
+                CustomerEmail = userEmail,
+                Description = description,
+                HoldRef = holdRef,
+                SectorId = sectorId,
+                IsSubscription = isSubscription,
+                SubscriptionProductName = subscriptionProductName,
+            },
+            orderRef,
+            ct);
+
+    public Task<PaymentChargeResponse> CapturePaymentAsync(
+        string intentId,
+        string orderRef,
+        Guid userId,
+        decimal expectedAmount,
+        string? simulatedLast4,
+        CancellationToken ct = default)
+        => PostAsync<PaymentChargeResponse>(
+            "/payments/capture",
+            new
+            {
+                IntentId = intentId,
+                OrderRef = orderRef,
+                UserId = userId,
+                ExpectedAmount = expectedAmount,
+                SimulatedLast4 = simulatedLast4,
+            },
+            orderRef,
+            ct);
+
+    public Task<SubscriptionChargeResponse> ConfirmSubscriptionAsync(
+        string subscriptionReference,
+        string orderRef,
+        Guid userId,
+        decimal expectedAmount,
+        string? simulatedLast4,
+        CancellationToken ct = default)
+        => PostAsync<SubscriptionChargeResponse>(
+            "/payments/subscriptions/confirm",
+            new
+            {
+                SubscriptionReference = subscriptionReference,
+                OrderRef = orderRef,
+                UserId = userId,
+                ExpectedAmount = expectedAmount,
+                SimulatedLast4 = simulatedLast4,
+            },
+            orderRef,
+            ct);
+
+    public Task CancelIntentAsync(string intentId, CancellationToken ct = default)
+        => PostVoidAsync("/payments/intents/cancel", new { IntentId = intentId }, intentId, ct);
+
+    public Task CancelSubscriptionAsync(
+        string subscriptionReference, bool atPeriodEnd, bool refundLastInvoice, CancellationToken ct = default)
+        => PostVoidAsync(
+            "/payments/subscriptions/cancel",
+            new
+            {
+                SubscriptionReference = subscriptionReference,
+                AtPeriodEnd = atPeriodEnd,
+                RefundLastInvoice = refundLastInvoice,
+            },
+            subscriptionReference,
+            ct);
+
+    private async Task<T> PostAsync<T>(string path, object payload, string reference, CancellationToken ct)
+    {
+        var response = await SendAsync(path, payload, reference, ct);
+
+        try
+        {
+            return (await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct))!;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Payment servis je vratio nevažeći odgovor za {Reference}.", reference);
+            throw;
+        }
+    }
+
+    private async Task PostVoidAsync(string path, object payload, string reference, CancellationToken ct)
+        => await SendAsync(path, payload, reference, ct);
+
+    private async Task<HttpResponseMessage> SendAsync(string path, object payload, string reference, CancellationToken ct)
     {
         HttpResponseMessage response;
         try
         {
-            response = await _httpClient.PostAsJsonAsync(
-                "/payments",
-                new { Amount = amount, OrderRef = orderRef, CardNumberLast4 = cardNumberLast4 },
-                ct);
+            response = await _httpClient.PostAsJsonAsync(path, payload, ct);
         }
         // Only a genuine transport failure (no status code at all) or the resilience pipeline
         // giving up counts as "Payment unavailable" — that's the only case where it's safe to say
@@ -39,30 +134,28 @@ public class HttpPaymentClient : IPaymentClient
             throw new PaymentUnavailableException("Payment servis trenutno nije dostupan.", ex);
         }
 
+        // Payment answers 503 for exactly one thing: the payment PROVIDER is down (see
+        // PaymentService's payment.provider_unavailable). That is the same class of outage as the
+        // circuit opening above and the buyer should be told the same thing, so it is translated
+        // here rather than bubbling as a generic 5xx.
+        if (response.StatusCode == HttpStatusCode.ServiceUnavailable)
+        {
+            _logger.LogWarning("Provajder plaćanja nije dostupan (503 od Payment servisa) za {Reference}.", reference);
+            throw new PaymentUnavailableException("Provajder plaćanja trenutno nije dostupan.");
+        }
+
         if (!response.IsSuccessStatusCode)
         {
-            // A real 4xx/5xx means Payment was reachable and answered — that's a different failure
-            // mode than "unavailable" (e.g. a validation error on our own request) and must not be
-            // relabeled as retryable/unavailable, which would tell the caller it's safe to release
-            // the hold when Payment may already have processed something.
+            // A real 4xx or 5xx means Payment was reachable and answered — a different failure mode
+            // from "unavailable", and it must not be relabelled as retryable, which would tell the
+            // caller it is safe to release the hold when Payment may already have processed something.
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogError(
-                "Payment servis je odgovorio sa {StatusCode} za OrderRef {OrderRef}: {Body}",
-                response.StatusCode, orderRef, body);
+                "Payment servis je odgovorio sa {StatusCode} za {Reference}: {Body}",
+                response.StatusCode, reference, body);
             response.EnsureSuccessStatusCode();
         }
 
-        try
-        {
-            return (await response.Content.ReadFromJsonAsync<PaymentChargeResponse>(cancellationToken: ct))!;
-        }
-        catch (Exception ex)
-        {
-            // The charge itself already succeeded on Payment's side by this point — a malformed
-            // response body must not be swallowed as "unavailable" (which would look retryable);
-            // log it clearly and let it bubble up as the genuine bug it is.
-            _logger.LogError(ex, "Payment servis je vratio nevažeći odgovor za OrderRef {OrderRef}.", orderRef);
-            throw;
-        }
+        return response;
     }
 }

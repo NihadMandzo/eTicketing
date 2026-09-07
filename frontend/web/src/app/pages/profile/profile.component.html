@@ -25,6 +25,16 @@
             type="button"
             role="tab"
             class="tab-btn"
+            [class.active]="activeTab() === 'subscriptions'"
+            [attr.aria-selected]="activeTab() === 'subscriptions'"
+            (click)="openSubscriptions()"
+          >
+            Moje pretplate
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab-btn"
             [class.active]="activeTab() === 'settings'"
             [attr.aria-selected]="activeTab() === 'settings'"
             (click)="activeTab.set('settings')"
@@ -32,6 +42,76 @@
             Postavke
           </button>
         </div>
+
+        @if (activeTab() === 'subscriptions') {
+          <div class="subscriptions-panel">
+            @if (subscriptionMessage()) {
+              <div class="alert alert-success" role="status">{{ subscriptionMessage() }}</div>
+            }
+            @if (subscriptionError()) {
+              <div class="alert alert-error" role="alert">{{ subscriptionError() }}</div>
+            }
+
+            @if (isLoadingSubscriptions()) {
+              <p class="empty-text">Učitavanje pretplata...</p>
+            } @else if (subscriptions().length === 0) {
+              <p class="empty-text">Nemate aktivnih pretplata.</p>
+            } @else {
+              @for (subscription of subscriptions(); track subscription.id) {
+                <div class="subscription-card">
+                  <div class="subscription-head">
+                    <span class="subscription-name">{{ subscription.sectorName }}</span>
+                    <span
+                      class="status-chip"
+                      [class.status-active]="subscription.status === 'Active'"
+                      [class.status-cancelled]="subscription.status === 'Cancelled'"
+                      [class.status-pastdue]="subscription.status === 'PastDue'"
+                    >
+                      {{ statusLabels[subscription.status] }}
+                    </span>
+                  </div>
+
+                  <div class="subscription-row">
+                    <span>Tekući period</span>
+                    <span>{{ subscription.currentPeriodStart }} – {{ subscription.currentPeriodEnd }}</span>
+                  </div>
+                  <div class="subscription-row">
+                    <span>Cijena po periodu</span>
+                    <span>{{ subscription.pricePerPeriod }} KM</span>
+                  </div>
+                  @if (subscription.nextRenewalAt && !subscription.cancelAtPeriodEnd) {
+                    <div class="subscription-row">
+                      <span>Sljedeća naplata</span>
+                      <span>{{ subscription.nextRenewalAt | date: 'dd.MM.yyyy.' }}</span>
+                    </div>
+                  }
+
+                  @if (subscription.cancelAtPeriodEnd && subscription.status === 'Active') {
+                    <!-- Still Active on purpose: they paid for this period and keep it until it ends. -->
+                    <p class="subscription-note">
+                      Otkazano — vrijedi do {{ subscription.currentPeriodEnd }}, nakon toga se ne naplaćuje.
+                    </p>
+                  } @else if (subscription.status === 'PastDue') {
+                    <p class="subscription-note">
+                      Posljednja naplata nije uspjela. Pokušavamo ponovo; ažurirajte karticu kod svoje banke.
+                    </p>
+                  }
+
+                  @if (subscription.status === 'Active' && !subscription.cancelAtPeriodEnd) {
+                    <button
+                      type="button"
+                      class="btn btn-outline"
+                      [disabled]="cancellingSubscriptionId() === subscription.id"
+                      (click)="cancelSubscription(subscription)"
+                    >
+                      {{ cancellingSubscriptionId() === subscription.id ? 'Otkazivanje...' : 'Otkaži pretplatu' }}
+                    </button>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
 
         @if (activeTab() === 'tickets') {
           <div class="tab-switcher ticket-time-switcher" role="tablist">

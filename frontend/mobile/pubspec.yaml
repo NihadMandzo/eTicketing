@@ -53,6 +53,7 @@ dependencies:
   # unlike desktop which has no google_maps_flutter implementation at all (see
   # frontend/desktop's ProductLocationPicker, which embeds the Maps JS API via a webview instead).
   google_maps_flutter: ^2.18.0
+  flutter_stripe: ^14.0.0
 
 dependency_overrides:
   # path_provider_foundation >=2.4.0 pulls in package:objective_c, whose native

@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import '../core/api_client.dart';
 import '../models/api_error.dart';
 import '../models/requests/purchase_request.dart';
+import '../models/responses/payment_intent_response.dart';
+import '../models/requests/create_payment_intent_request.dart';
 import '../models/responses/paged_result.dart';
 import '../models/responses/purchase_response.dart';
 import '../models/responses/ticket_response.dart';
@@ -26,7 +28,16 @@ class PurchaseService {
     throw ApiException(statusCode: response.statusCode ?? 0, apiError: apiError);
   }
 
-  /// POST /api/purchases.
+  /// POST /api/purchases/payment-intent — prices the hold server-side and creates the payment
+  /// object the buyer confirms. Also reports which provider is configured, so this app knows whether
+  /// to open Stripe's payment sheet or show the offline mock card form.
+  Future<PaymentIntentResponse> createPaymentIntent(CreatePaymentIntentRequest request) async {
+    final response = await apiClient.post('Purchases/payment-intent', data: request.toJson());
+    if (!_isSuccess(response.statusCode)) _handleError(response);
+    return PaymentIntentResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// POST /api/purchases — captures the already-authorized payment and mints the tickets.
   Future<PurchaseResponse> purchase(PurchaseRequest request) async {
     final response = await apiClient.post('Purchases', data: request.toJson());
     if (!_isSuccess(response.statusCode)) _handleError(response);

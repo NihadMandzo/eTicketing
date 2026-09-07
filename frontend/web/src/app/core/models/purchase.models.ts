@@ -21,12 +21,40 @@ export interface PurchaseLineItem {
   quantity: number;
 }
 
+/** Which payment gateway the backend is configured with. Returned on every payment-intent
+ * response rather than compiled in, so switching providers needs no rebuild of this app. */
+export type PaymentProvider = 'Mock' | 'Stripe';
+
+/** Prices the hold server-side and creates the payment object the buyer confirms. */
+export interface CreatePaymentIntentRequest {
+  holdId: string;
+  lineItems: PurchaseLineItem[];
+}
+
+export interface PaymentIntentResponse {
+  provider: PaymentProvider;
+  /** Null in Mock mode — there is no payment SDK to initialise. */
+  publishableKey: string | null;
+  orderId: string;
+  intentId: string;
+  clientSecret: string | null;
+  /** Authoritative, computed by the backend from the held sector. Never sent by this app. */
+  amount: number;
+  currency: string;
+  isSubscription: boolean;
+}
+
+/**
+ * Completes a purchase the buyer has already paid for. Carries no card data: with the Stripe
+ * provider the card goes straight from this browser to Stripe and only identifiers come back.
+ */
 export interface PurchaseRequest {
   holdId: string;
   lineItems: PurchaseLineItem[];
-  cardNumber: string;
-  cardExpiry: string;
-  cardCvv: string;
+  orderId: string;
+  paymentIntentId: string;
+  /** Mock provider only — "0000" simulates a decline. Omitted entirely in Stripe mode. */
+  simulatedLast4?: string | null;
 }
 
 export interface Ticket {

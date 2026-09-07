@@ -93,10 +93,10 @@
           </div>
         }
 
-        <!-- Step 2: payment details -->
+        <!-- Step 2: contact details -->
         @if (step() === 2) {
           <div class="step-card" [formGroup]="detailsForm">
-            <h2>Detalji plaćanja</h2>
+            <h2>Kontakt podaci</h2>
             <div class="form-grid">
               <label class="field">
                 <span>Email adresa</span>
@@ -113,52 +113,67 @@
                 }
               </label>
             </div>
-            <div class="form-grid">
-                <label class="field">
-                  <span>Broj kartice</span>
-                  <input type="text" placeholder="0000 0000 0000 0000" formControlName="cardNumber" />
-                  @if (detailsForm.controls.cardNumber.invalid && detailsForm.controls.cardNumber.touched) {
-                    <span class="field-error">Unesite ispravan broj kartice (12-19 cifara).</span>
-                  }
-                </label>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Datum isteka</span>
-                    <input type="text" placeholder="MM/GG" formControlName="cardExpiry" />
-                    @if (detailsForm.controls.cardExpiry.invalid && detailsForm.controls.cardExpiry.touched) {
-                      <span class="field-error">Format MM/GG.</span>
-                    }
-                  </label>
-                  <label class="field">
-                    <span>CVV</span>
-                    <input type="text" placeholder="123" formControlName="cardCvv" />
-                    @if (detailsForm.controls.cardCvv.invalid && detailsForm.controls.cardCvv.touched) {
-                      <span class="field-error">3-4 cifre.</span>
-                    }
-                  </label>
-                </div>
-              </div>
-            <p class="hint-text">Demo: kartica koja se završava na 0000 simulira odbijeno plaćanje.</p>
+            <p class="hint-text">Na ovu adresu šaljemo potvrdu kupovine i ulaznice.</p>
           </div>
         }
 
-        <!-- Step 3: confirmation -->
+        <!-- Step 3: payment -->
         @if (step() === 3) {
-          <div class="step-card center-text">
-            <div class="success-icon small">
-              <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
-            </div>
-            <h2>Potvrda kupovine</h2>
-            <p class="hint-text">Molimo provjerite sve podatke prije finalizacije</p>
-            <div class="confirm-box">
-              <div class="line-item"><span>Proizvod</span><span>{{ cart.productName }}</span></div>
-              <div class="line-item"><span>Email</span><span>{{ detailsForm.controls.email.value }}</span></div>
-              <div class="line-item"><span>Način plaćanja</span><span>{{ paymentMethodLabel }}</span></div>
-            </div>
-            <div class="confirm-total">
-              <span>Ukupno za plaćanje</span>
-              <span class="grand-total">{{ grandTotal() | number: '1.2-2' }} KM</span>
-            </div>
+          <div class="step-card">
+            <h2>Plaćanje</h2>
+
+            @if (totalHolds() > 1) {
+              <p class="hint-text">Plaćanje {{ results().length + 1 }} od {{ results().length + totalHolds() }}</p>
+            }
+
+            @if (isPreparing()) {
+              <p class="hint-text">Priprema plaćanja...</p>
+            } @else if (intent(); as intent) {
+              @if (isMockProvider()) {
+                <!-- PAYMENT_PROVIDER=Mock: the offline gateway, so there is no payment SDK and the
+                     card is typed here. Kept working on purpose — it is the documented fallback. -->
+                <div [formGroup]="mockCardForm">
+                  <div class="form-grid">
+                    <label class="field">
+                      <span>Broj kartice</span>
+                      <input type="text" placeholder="0000 0000 0000 0000" formControlName="cardNumber" />
+                      @if (mockCardForm.controls.cardNumber.invalid && mockCardForm.controls.cardNumber.touched) {
+                        <span class="field-error">Unesite ispravan broj kartice (12-19 cifara).</span>
+                      }
+                    </label>
+                    <div class="field-row">
+                      <label class="field">
+                        <span>Datum isteka</span>
+                        <input type="text" placeholder="MM/GG" formControlName="cardExpiry" />
+                        @if (mockCardForm.controls.cardExpiry.invalid && mockCardForm.controls.cardExpiry.touched) {
+                          <span class="field-error">Format MM/GG.</span>
+                        }
+                      </label>
+                      <label class="field">
+                        <span>CVV</span>
+                        <input type="text" placeholder="123" formControlName="cardCvv" />
+                        @if (mockCardForm.controls.cardCvv.invalid && mockCardForm.controls.cardCvv.touched) {
+                          <span class="field-error">3-4 cifre.</span>
+                        }
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <p class="hint-text">Demo: kartica koja se završava na 0000 simulira odbijeno plaćanje.</p>
+              } @else {
+                <!-- Stripe renders its own card field in an iframe here. The card never touches this
+                     app, which is why there is nothing to validate on this side. -->
+                <div #paymentElement class="payment-element"></div>
+                <p class="hint-text">Podaci o kartici se šalju direktno Stripe-u i ne prolaze kroz naš sistem.</p>
+              }
+
+              <div class="confirm-total">
+                <span>Za naplatu sada</span>
+                <span class="grand-total">{{ currentHoldTotal() | number: '1.2-2' }} KM</span>
+              </div>
+            } @else {
+              <p class="hint-text">Plaćanje nije pripremljeno.</p>
+            }
           </div>
         }
 
@@ -173,7 +188,12 @@
           @if (step() < 3) {
             <button type="button" class="btn btn-primary flex-grow" [disabled]="step() === 2 && detailsForm.invalid" (click)="goNext()">Nastavi</button>
           } @else {
-            <button type="button" class="btn btn-primary flex-grow" [disabled]="isSubmitting()" (click)="finishPayment()">
+            <button
+              type="button"
+              class="btn btn-primary flex-grow"
+              [disabled]="isSubmitting() || isPreparing() || !intent()"
+              (click)="finishPayment()"
+            >
               {{ isSubmitting() ? 'Obrada...' : 'Završi plaćanje' }}
             </button>
           }

@@ -7,8 +7,14 @@ import { catchError, forkJoin, of } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PurchaseService } from '../../core/services/purchase.service';
+import { SubscriptionService } from '../../core/services/subscription.service';
 import { Product } from '../../core/models/catalog.models';
 import { Ticket } from '../../core/models/purchase.models';
+import {
+  SUBSCRIPTION_STATUS_LABELS,
+  Subscription,
+} from '../../core/models/subscription.models';
+import { extractErrorMessage } from '../../core/utils/api-error.util';
 import { TicketDetailModalComponent } from '../../components/ticket-detail-modal/ticket-detail-modal.component';
 import { environment } from '../../../environments/environment';
 import { passwordStrengthValidator } from '../../core/utils/password.validator';
@@ -36,6 +42,7 @@ export class ProfileComponent {
   private readonly authService = inject(AuthService);
   private readonly purchaseService = inject(PurchaseService);
   private readonly catalogService = inject(CatalogService);
+  private readonly subscriptionService = inject(SubscriptionService);
   private readonly router = inject(Router);
 
   readonly currentUser = this.authService.currentUser;
@@ -45,7 +52,14 @@ export class ProfileComponent {
     return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
   });
 
-  readonly activeTab = signal<'tickets' | 'settings'>('tickets');
+  readonly activeTab = signal<'tickets' | 'subscriptions' | 'settings'>('tickets');
+
+  readonly subscriptions = signal<Subscription[]>([]);
+  readonly isLoadingSubscriptions = signal(false);
+  readonly subscriptionError = signal<string | null>(null);
+  readonly subscriptionMessage = signal<string | null>(null);
+  readonly cancellingSubscriptionId = signal<string | null>(null);
+  readonly statusLabels = SUBSCRIPTION_STATUS_LABELS;
   readonly tickets = signal<Ticket[]>([]);
   readonly isLoadingTickets = signal(true);
   readonly isLoadingMoreTickets = signal(false);
@@ -284,5 +298,57 @@ export class ProfileComponent {
       return Object.values(errors).flat().join(' ');
     }
     return httpError?.error?.message ?? 'Došlo je do greške. Pokušajte ponovo.';
+  }
+
+  /**
+   * Loads the buyer's recurring reservations. Called lazily when the tab is first opened rather
+   * than on init: most buyers have none, and it is a wasted request on every profile visit.
+   */
+  openSubscriptions(): void {
+    this.activeTab.set('subscriptions');
+    if (this.subscriptions().length > 0 || this.isLoadingSubscriptions()) return;
+
+    this.loadSubscriptions();
+  }
+
+  private loadSubscriptions(): void {
+    this.isLoadingSubscriptions.set(true);
+    this.subscriptionError.set(null);
+
+    this.subscriptionService.getMine().subscribe({
+      next: (result) => {
+        this.subscriptions.set(result.items);
+        this.isLoadingSubscriptions.set(false);
+      },
+      error: (error: unknown) => {
+        this.isLoadingSubscriptions.set(false);
+        this.subscriptionError.set(extractErrorMessage(error, 'Učitavanje pretplata nije uspjelo.'));
+      },
+    });
+  }
+
+  cancelSubscription(subscription: Subscription): void {
+    if (this.cancellingSubscriptionId()) return;
+
+    this.cancellingSubscriptionId.set(subscription.id);
+    this.subscriptionError.set(null);
+    this.subscriptionMessage.set(null);
+
+    this.subscriptionService.cancel(subscription.id).subscribe({
+      next: () => {
+        this.cancellingSubscriptionId.set(null);
+        // Reloaded rather than patched locally: the row stays Active on purpose (the buyer keeps the
+        // period they paid for) and only CancelAtPeriodEnd flips, so the server's view is the honest
+        // one to show.
+        this.loadSubscriptions();
+        this.subscriptionMessage.set(
+          `Pretplata će biti otkazana na kraju tekućeg perioda (${subscription.currentPeriodEnd}).`,
+        );
+      },
+      error: (error: unknown) => {
+        this.cancellingSubscriptionId.set(null);
+        this.subscriptionError.set(extractErrorMessage(error, 'Otkazivanje pretplate nije uspjelo.'));
+      },
+    });
   }
 }
