@@ -125,6 +125,79 @@ public class StripeWebhookServiceTests : IDisposable
         _fixture.DbContext.StripeEvents.Count(e => e.Id == delivered.Id).Should().Be(1);
     }
 
+    /// <summary>
+    /// The renewal's own Payment row is booked only once the event is actually out, and it must
+    /// survive the single SaveChangesAsync that RecordProcessedAsync performs -- staging it and
+    /// then never committing it would leave a charged month with no local record of the charge.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_ForARenewalInvoice_CommitsTheRenewalPaymentRow()
+    {
+        Verifies(InvoiceEvent("invoice.paid", "sub_1", "subscription_cycle"));
+
+        var result = await _fixture.CreateWebhookService().HandleAsync("{}", Signature);
+
+        result.IsSuccess.Should().BeTrue();
+        var booked = _fixture.DbContext.Payments.Single();
+        booked.ProviderSubscriptionId.Should().Be("sub_1");
+        booked.Amount.Should().Be(60m);
+        booked.Status.Should().Be(eTicketing.Payment.Data.Entities.PaymentStatus.Succeeded);
+    }
+
+    /// <summary>
+    /// The reason RabbitMqEventPublisher rethrows instead of logging and returning. A swallowed
+    /// publish failure would let the webhook answer 2xx, and Stripe does not redeliver a success --
+    /// the renewal would be lost and the buyer would never get the month they paid for. Letting the
+    /// exception out makes it a 5xx, which is the retry signal.
+    ///
+    /// What makes that safe is asserted here too: nothing is committed before the publish, so the
+    /// failed delivery leaves no StripeEvent row to deduplicate the retry away and no half-written
+    /// Payment row.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_WhenPublishingFails_PersistsNothingAndLetsTheFailureOut()
+    {
+        Verifies(InvoiceEvent("invoice.paid", "sub_1", "subscription_cycle"));
+        _fixture.EventPublisher
+            .Setup(p => p.PublishAsync(
+                EventNames.SubscriptionRenewed, It.IsAny<SubscriptionRenewed>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("RabbitMQ je nedostupan."));
+
+        var publishing = async () => await _fixture.CreateWebhookService().HandleAsync("{}", Signature);
+
+        await publishing.Should().ThrowAsync<InvalidOperationException>();
+        _fixture.DbContext.StripeEvents.Should().BeEmpty();
+        _fixture.DbContext.Payments.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The other half of the same guarantee: because the failed delivery recorded nothing, Stripe's
+    /// retry is processed from a clean slate rather than being skipped as "already handled".
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_OnRedeliveryAfterAFailedPublish_ProcessesTheEventAgain()
+    {
+        var delivered = InvoiceEvent("invoice.paid", "sub_1", "subscription_cycle");
+        Verifies(delivered);
+        _fixture.EventPublisher
+            .SetupSequence(p => p.PublishAsync(
+                EventNames.SubscriptionRenewed, It.IsAny<SubscriptionRenewed>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("RabbitMQ je nedostupan."))
+            .Returns(Task.CompletedTask);
+
+        var failed = async () => await _fixture.CreateWebhookService().HandleAsync("{}", Signature);
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+
+        var retried = await _fixture.CreateWebhookService().HandleAsync("{}", Signature);
+
+        retried.IsSuccess.Should().BeTrue();
+        _fixture.EventPublisher.Verify(
+            p => p.PublishAsync(EventNames.SubscriptionRenewed, It.IsAny<SubscriptionRenewed>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        _fixture.DbContext.StripeEvents.Count(e => e.Id == delivered.Id).Should().Be(1);
+        _fixture.DbContext.Payments.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task HandleAsync_ForAFailedRenewalInvoice_PublishesSubscriptionPaymentFailed()
     {

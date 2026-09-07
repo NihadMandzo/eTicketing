@@ -25,11 +25,24 @@ class SectorService {
   }
 
   /// GET /api/sectors?productId= — Published only, public.
-  Future<PagedResult<SectorResponse>> getSectors(String productId) async {
-    final response = await apiClient.get('Sectors', queryParameters: {'productId': productId, 'pageSize': 100});
+  ///
+  /// [date] is only meaningful for a DailyEntry product: capacity there is counted per
+  /// (Sector, date), so without it the backend leaves `remainingCapacity` null and the caller
+  /// cannot tell a full day from an empty one. Every other mode ignores it.
+  Future<PagedResult<SectorResponse>> getSectors(String productId, {DateTime? date}) async {
+    final response = await apiClient.get('Sectors', queryParameters: {
+      'productId': productId,
+      'pageSize': 100,
+      if (date != null) 'date': _formatDate(date),
+    });
     if (!_isSuccess(response.statusCode)) _handleError(response);
     return PagedResult.fromJson(response.data as Map<String, dynamic>, SectorResponse.fromJson);
   }
+
+  /// `DateOnly` on the wire — the backend binds yyyy-MM-dd, and sending a full ISO timestamp
+  /// would drag the device's timezone into a calendar-date decision.
+  static String _formatDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   /// POST /api/sectors/{id}/hold — Redis atomic decrement/lock, TTL 5 min.
   /// Requires auth — callers should route to LoginScreen on a 401.

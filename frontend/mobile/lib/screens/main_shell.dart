@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/session.dart';
 import '../models/responses/user_response.dart';
 import '../theme/app_colors.dart';
+import '../theme/system_ui.dart';
 import '../widgets/initials_avatar.dart';
 import 'events_screen.dart';
 import 'my_tickets_screen.dart';
@@ -121,12 +122,17 @@ class _KudaBottomNav extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     final inactive = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final background = (isDark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.92);
+    // Fully opaque, not the old .withValues(alpha: 0.92): a translucent bar let the list scroll
+    // visibly underneath, which is exactly the "app is going behind the navigation bar" effect.
+    final background = isDark ? AppColors.darkSurface : AppColors.lightSurface;
 
     final items = [..._baseItems, if (showValidation) _validationItem];
 
-    return SafeArea(
-      top: false,
+    // SystemBarBackdrop, not SafeArea: a SafeArea pads *around* this bar and leaves the strip
+    // behind Android's own navigation bar showing the scaffold beneath. This paints that strip in
+    // the bar's own colour and then insets the row, so the two read as one solid surface.
+    return SystemBarBackdrop(
+      color: background,
       child: Container(
         height: 66,
         decoration: BoxDecoration(
@@ -198,26 +204,25 @@ class _EventsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Row(
-            children: [
-              Image.asset('assets/logo.png', height: 28),
-              const Spacer(),
-              ValueListenableBuilder<UserResponse?>(
-                valueListenable: Session.currentUser,
-                builder: (context, user, _) {
-                  if (user == null) return const SizedBox.shrink();
-                  return InitialsAvatar(name: user.fullName, radius: 17, onTap: onAvatarTap);
-                },
-              ),
-            ],
-          ),
+    // Passed *into* the scroll view rather than stacked above it: as a sibling it stayed frozen on
+    // screen and cost 56px of every scroll position for a logo nobody needs while browsing.
+    return EventsScreen(
+      header: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Row(
+          children: [
+            Image.asset('assets/logo.png', height: 28),
+            const Spacer(),
+            ValueListenableBuilder<UserResponse?>(
+              valueListenable: Session.currentUser,
+              builder: (context, user, _) {
+                if (user == null) return const SizedBox.shrink();
+                return InitialsAvatar(name: user.fullName, radius: 17, onTap: onAvatarTap);
+              },
+            ),
+          ],
         ),
-        const Expanded(child: EventsScreen()),
-      ],
+      ),
     );
   }
 }

@@ -35,11 +35,14 @@ public class RabbitMqEventPublisher : IEventPublisher
         }
         catch (Exception ex)
         {
-            // A dropped subscription.renewed means a buyer who WAS charged never gets that month's
-            // parking ticket, and nothing else in the system will notice -- Stripe already has its
-            // 200 and will not redeliver. Loud error, and the reason the manual test plan checks the
-            // renewal end to end rather than trusting the publish.
+            // Deliberately rethrown rather than swallowed. A dropped subscription.renewed means a
+            // buyer who WAS charged never gets that month's parking ticket, and if this returned
+            // normally the webhook would answer 2xx and Stripe would never redeliver -- the event
+            // would be lost for good. Letting it out makes the webhook a 5xx, which is precisely
+            // the signal that gets the delivery retried. Safe because StripeWebhookService commits
+            // nothing until after the publish returns, so a retry re-processes from a clean slate.
             _logger.LogError(ex, "Neuspjela objava eventa {RoutingKey} na RabbitMQ.", routingKey);
+            throw;
         }
     }
 }

@@ -19,8 +19,24 @@ namespace eTicketing.Payment.Business.Payments.Webhooks;
 /// This is the half of the subscription feature that cannot be synchronous: a monthly renewal starts
 /// at Stripe, weeks after anyone was on the site, so the only way the platform learns a parking space
 /// was paid for again is a webhook. Every delivery is verified by signature over the raw body,
-/// recorded by Stripe's own event id so a redelivery cannot mint a second ticket for a month that was
-/// paid for once, and answered fast -- the actual work happens in Ticketing, off the reply path.
+/// recorded by Stripe's own event id, and answered fast -- the actual work happens in Ticketing, off
+/// the reply path.
+///
+/// The delivery guarantee, stated precisely because the ordering below is chosen for it: publishing
+/// is AT-LEAST-ONCE, and the exactly-once *effect* is enforced jointly by two things, not by the
+/// StripeEvent table alone.
+///
+/// 1. StripeEvent covers sequential redelivery -- the overwhelmingly common case, since Stripe
+///    retries a non-2xx minutes later. The second delivery short-circuits at ExistsAsync.
+/// 2. Ticketing's own per-period guard (SubscriptionRenewalService refuses to mint a second ticket
+///    for a period that already has one) covers the narrow window where two deliveries of the same
+///    event are genuinely in flight at once and both pass ExistsAsync before either records.
+///
+/// Closing window 2 here would mean committing the StripeEvent row before publishing, and that
+/// trade is strictly worse: a publish that then failed would be deduplicated away on retry, so a
+/// buyer who was charged would never get their ticket. Nothing is committed until after the publish
+/// returns, which makes a failed publish (RabbitMqEventPublisher rethrows) a clean 5xx that Stripe
+/// retries from scratch. A duplicate publish is absorbed downstream; a lost one is not recoverable.
 /// </summary>
 public class StripeWebhookService : IStripeWebhookService
 {
@@ -84,9 +100,12 @@ public class StripeWebhookService : IStripeWebhookService
     }
 
     /// <summary>
-    /// Marks the delivery handled. The insert is what makes redelivery safe, and a duplicate-key
-    /// violation here means a concurrent delivery of the SAME event won the race -- which is exactly
-    /// the outcome the table exists to produce, so it is a success, not an error.
+    /// Marks the delivery handled, and is the only save on this path -- so reaching it at all means
+    /// the publish already succeeded. The insert is what makes a later redelivery a no-op, and a
+    /// duplicate-key violation here means a concurrent delivery of the SAME event committed first,
+    /// which is the outcome the table exists to produce, so it is a success, not an error. Both
+    /// deliveries will have published by that point; see the class comment for why that is the
+    /// deliberate side to err on.
     /// </summary>
     private async Task<Result> RecordProcessedAsync(Event stripeEvent, CancellationToken ct)
     {
@@ -150,12 +169,18 @@ public class StripeWebhookService : IStripeWebhookService
         // Stripe's period end is the next billing instant; Ticket.ValidTo is an inclusive last day.
         var periodEnd = DateOnly.FromDateTime(invoice.PeriodEnd).AddDays(-1);
 
-        await RecordRenewalPaymentAsync(subscriptionId, amount, invoice.Currency, ct);
-
+        // Publish first, stage the local bookkeeping row second, and never the other way round.
+        // RecordRenewalPaymentAsync only stages -- the single SaveChangesAsync is in
+        // RecordProcessedAsync, after this returns -- so a publish that throws leaves the change
+        // tracker empty and the retry starts from a clean slate. Staging before the publish would
+        // still work today only because no save sits between the two; ordering it this way means a
+        // future save inserted here cannot quietly turn a failed publish into a half-written state.
         await _eventPublisher.PublishAsync(
             EventNames.SubscriptionRenewed,
             new SubscriptionRenewed(subscriptionId, amount, invoice.Currency, periodStart, periodEnd, DateTime.UtcNow),
             ct);
+
+        await RecordRenewalPaymentAsync(subscriptionId, amount, invoice.Currency, ct);
 
         return true;
     }

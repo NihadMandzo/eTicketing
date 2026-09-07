@@ -61,6 +61,14 @@ export class CheckoutComponent {
   readonly intent = signal<PaymentIntentResponse | null>(null);
 
   readonly totalHolds = computed(() => this.cart()?.holds.length ?? 0);
+
+  /** How many holds the basket started with. `totalHolds` counts what is still *unpaid* — a paid
+   * hold is removed from the cart by `advanceToNextHold` — so it shrinks by exactly one each time
+   * `results` grows by one, which makes this sum invariant for the whole checkout. Named rather
+   * than re-derived at each use site: written inline it reads like a running total that drifts
+   * upward, and it is the denominator of the "Plaćanje 1 od 2" counter, so being wrong there is
+   * visible to the buyer. */
+  readonly totalHoldsAtStart = computed(() => this.results().length + this.totalHolds());
   readonly isMockProvider = computed(() => this.intent()?.provider === 'Mock');
 
   private readonly paymentElementHost = viewChild<ElementRef<HTMLDivElement>>('paymentElement');
@@ -291,7 +299,6 @@ export class CheckoutComponent {
     const succeeded = this.results().length;
     if (succeeded === 0) return base;
 
-    const total = succeeded + this.totalHolds();
-    return `${base} (${succeeded} od ${total} narudžbi je uspješno obrađeno. Preostale možete pokušati ponovo.)`;
+    return `${base} (${succeeded} od ${this.totalHoldsAtStart()} narudžbi je uspješno obrađeno. Preostale možete pokušati ponovo.)`;
   }
 }

@@ -9,8 +9,13 @@ namespace eTicketing.Payment.Data.Entities;
 /// same "invoice.paid" can and does arrive more than once. Without this table a redelivered
 /// renewal would mint a second parking ticket for a month that was only paid for once. The id is
 /// the primary key rather than a surrogate with a unique index, so a duplicate insert fails at the
-/// database and the handler can treat that failure as "already handled" with no read-then-write
-/// race in between.
+/// database rather than needing a read-then-write.
+///
+/// Scope, stated exactly: a row is written only AFTER its event has been published, so this table
+/// stops *sequential* redelivery -- the retry-minutes-later case that is essentially all of them.
+/// It does not by itself stop two deliveries of the same event that are in flight simultaneously;
+/// that window is covered downstream by Ticketing's per-period ticket guard. StripeWebhookService's
+/// class comment explains why the ordering is deliberately that way round.
 /// </summary>
 public class StripeEvent : BaseEntity
 {

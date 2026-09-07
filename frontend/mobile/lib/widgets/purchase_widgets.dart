@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/responses/organization_response.dart';
 import '../theme/app_colors.dart';
+import '../theme/system_ui.dart';
 
 /// Small circular back-chevron button overlaid on a hero image — shared by
 /// EventDetails/MuseumTicket/ParkingSpot (mockup screens 4/9/10).
@@ -80,11 +81,28 @@ class StepperButton extends StatelessWidget {
 
 /// A titled row with a price caption and a +/- quantity stepper — the
 /// "Sektori"/"Vrsta ulaznice" line shared by EventDetails and MuseumTicket.
+///
+/// Renders in two states. On sale, it is the stepper. Sold out ([isSoldOut]), the stepper is
+/// replaced by a "Rasprodano" tag, the title drops to the disabled tone and the price is struck
+/// through — the row stays visible on purpose, because "the VIP sector exists and is gone" is
+/// information a buyer wants, while a silently missing row just looks like the event has fewer
+/// sectors than the poster said.
 class QuantityRow extends StatelessWidget {
   final String title;
   final double price;
   final int quantity;
+
+  /// Effective ceiling for this row. Callers pass the smaller of the per-order cap and what is
+  /// actually left in the sector, so the stepper cannot build a selection the hold would reject.
   final int maxQuantity;
+
+  /// Nothing left to sell. The row goes read-only.
+  final bool isSoldOut;
+
+  /// Optional scarcity line under the price ("Još 3 mjesta"). Only ever set from a known count —
+  /// see SectorResponse.isLowStock.
+  final String? note;
+
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
@@ -94,6 +112,8 @@ class QuantityRow extends StatelessWidget {
     required this.price,
     required this.quantity,
     this.maxQuantity = 10,
+    this.isSoldOut = false,
+    this.note,
     required this.onDecrement,
     required this.onIncrement,
   });
@@ -102,6 +122,7 @@ class QuantityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final disabledText = isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
     final primary = Theme.of(context).colorScheme.primary;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
@@ -112,24 +133,57 @@ class QuantityRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              Text('${price.toStringAsFixed(0)} KM', style: TextStyle(fontSize: 12, color: tertiaryText)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isSoldOut ? disabledText : null,
+                ),
+              ),
+              Text(
+                '${price.toStringAsFixed(0)} KM',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSoldOut ? disabledText : tertiaryText,
+                  decoration: isSoldOut ? TextDecoration.lineThrough : null,
+                  decorationColor: disabledText,
+                ),
+              ),
+              if (note != null && !isSoldOut) ...[
+                const SizedBox(height: 2),
+                Text(note!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: primary)),
+              ],
             ],
           ),
         ),
-        Row(
-          children: [
-            StepperButton(
-              icon: Icons.remove_rounded,
-              filled: false,
-              borderColor: quantity > 0 ? primary : border,
-              iconColor: quantity > 0 ? primary : (isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled),
-              onTap: quantity > 0 ? onDecrement : null,
+        if (isSoldOut)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: border),
             ),
-            SizedBox(width: 24, child: Text('$quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
-            StepperButton(icon: Icons.add_rounded, filled: quantity < maxQuantity, onTap: quantity < maxQuantity ? onIncrement : null),
-          ],
-        ),
+            child: Text(
+              'Rasprodano',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: disabledText),
+            ),
+          )
+        else
+          Row(
+            children: [
+              StepperButton(
+                icon: Icons.remove_rounded,
+                filled: false,
+                borderColor: quantity > 0 ? primary : border,
+                iconColor: quantity > 0 ? primary : disabledText,
+                onTap: quantity > 0 ? onDecrement : null,
+              ),
+              SizedBox(width: 24, child: Text('$quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+              StepperButton(icon: Icons.add_rounded, filled: quantity < maxQuantity, onTap: quantity < maxQuantity ? onIncrement : null),
+            ],
+          ),
       ],
     );
   }
@@ -162,10 +216,13 @@ class PurchaseBottomBar extends StatelessWidget {
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final primary = Theme.of(context).colorScheme.primary;
 
-    return SafeArea(
-      top: false,
+    // SystemBarBackdrop rather than SafeArea, for the same reason as the app shell's bottom nav:
+    // SafeArea pads around the bar and leaves the strip behind Android's navigation bar showing
+    // the page scrolling underneath.
+    return SystemBarBackdrop(
+      color: background,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
         decoration: BoxDecoration(color: background, border: Border(top: BorderSide(color: border))),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -177,12 +234,15 @@ class PurchaseBottomBar extends StatelessWidget {
                 Text('${total.toStringAsFixed(0)} KM', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: primary)),
               ],
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
-              onPressed: enabled ? onPressed : null,
-              child: isLoading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(buttonLabel),
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 26)),
+                onPressed: enabled ? onPressed : null,
+                child: isLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(buttonLabel),
+              ),
             ),
           ],
         ),

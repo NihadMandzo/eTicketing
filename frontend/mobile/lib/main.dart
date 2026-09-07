@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
+import 'theme/system_ui.dart';
 import 'theme/theme_controller.dart';
 
 Future<void> main() async {
@@ -44,6 +46,15 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: mode,
+          // Applied here, not next to `mode` above, because ThemeMode.system
+          // only resolves to a real brightness inside the MaterialApp — and
+          // the Android status/navigation bar icons have to follow whichever
+          // way it resolved, or they vanish into the bar they sit on. See
+          // SystemUi for the Android 15 caveat this pairs with.
+          builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUi.styleFor(Theme.of(context).brightness),
+            child: child ?? const SizedBox.shrink(),
+          ),
           // Login-gated app (see LoginScreen) — no guest-browsable landing
           // page. A restored session skips straight to the app shell.
           home: startSignedIn ? const MainShell() : const LoginScreen(),

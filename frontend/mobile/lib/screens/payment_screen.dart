@@ -11,6 +11,7 @@ import '../services/api_exception.dart';
 import '../services/cart.dart';
 import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/system_ui.dart';
 import '../theme/theme_controller.dart';
 import '../utils/validators.dart';
 import '../widgets/labeled_field.dart';
@@ -18,10 +19,15 @@ import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
 import 'main_shell.dart';
 
-enum _PaymentMethod { card, paypal }
-
-/// Mockup screen 7 — order summary, per-hold line items, payment method
-/// radio, card form (validated identically to `PurchaseRequestValidator`).
+/// Mockup screen 7 — order summary, per-hold line items, and the card step
+/// (validated identically to `PurchaseRequestValidator` when the offline
+/// gateway is in play).
+///
+/// **Card is the only payment method, and there is no method picker.** The
+/// provider seam is pinned to cards on the backend too (see
+/// StripePaymentGateway's PaymentMethodTypes), because manual capture and the
+/// saved-card monthly renewal are both card mechanics. A radio group with one
+/// option only asks the buyer to confirm something they were never choosing.
 /// Purchases every [CartHoldGroup] in [Cart.state] **sequentially, not in
 /// parallel** — they share one card, so an early decline means the rest
 /// would fail too. Each successful purchase is immediately dropped from
@@ -45,7 +51,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _expiryCtrl = TextEditingController();
   final _cvvCtrl = TextEditingController();
 
-  _PaymentMethod _method = _PaymentMethod.card;
   bool _isSubmitting = false;
   bool _isPreparing = true;
   String? _submitError;
@@ -112,13 +117,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _submit() async {
     final cart = Cart.state.value;
     if (cart == null || cart.holds.isEmpty) return;
-
-    if (_method == _PaymentMethod.paypal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PayPal trenutno nije dostupan. Koristite platnu karticu.')),
-      );
-      return;
-    }
 
     final intent = _intent;
     if (intent == null || _isSubmitting) return;
@@ -279,6 +277,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Plaćanje')),
@@ -362,76 +361,98 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        const Text('Način plaćanja', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                        const Text('Plaćanje karticom', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 10),
-                        _MethodTile(
-                          icon: Icons.credit_card_rounded,
-                          label: 'Platna kartica',
-                          selected: _method == _PaymentMethod.card,
-                          onTap: () => setState(() => _method = _PaymentMethod.card),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: _isPreparing
+                                ? Row(
+                                    children: [
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text('Pripremamo plaćanje...',
+                                          style: TextStyle(fontSize: 13, color: tertiaryText)),
+                                    ],
+                                  )
+                                : (_intent?.isMock ?? false)
+                                    ? Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          // PAYMENT_PROVIDER=Mock: the offline gateway, so there is
+                                          // no payment SDK and the card is typed here. Kept working
+                                          // on purpose -- it is the documented fallback
+                                          // (arhitektura-migracija-mikroservisi-eda.md s9).
+                                          LabeledField(
+                                            label: 'Broj kartice',
+                                            controller: _cardNumberCtrl,
+                                            hintText: '4242 4242 4242 4242',
+                                            keyboardType: TextInputType.number,
+                                            validator: Validators.cardNumber,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: LabeledField(
+                                                  label: 'Datum isteka',
+                                                  controller: _expiryCtrl,
+                                                  hintText: 'MM/GG',
+                                                  keyboardType: TextInputType.number,
+                                                  validator: Validators.cardExpiry,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 14),
+                                              Expanded(
+                                                child: LabeledField(
+                                                  label: 'CVV',
+                                                  controller: _cvvCtrl,
+                                                  hintText: '123',
+                                                  obscureText: true,
+                                                  keyboardType: TextInputType.number,
+                                                  validator: Validators.cardCvv,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            'Testni način rada. Prolazi svaki broj koji ne završava na 0000.',
+                                            style: TextStyle(fontSize: 12, color: tertiaryText),
+                                          ),
+                                        ],
+                                      )
+                                    // Stripe collects the card in its own native payment sheet,
+                                    // which opens when "Plati" is pressed. Nothing card-shaped
+                                    // exists in this app.
+                                    : Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(Icons.credit_card_rounded, size: 20, color: primary),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Platna kartica',
+                                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Broj kartice unosite u Stripe formi koja se otvara kad potvrdite plaćanje.',
+                                                  style: TextStyle(fontSize: 13, height: 1.4, color: tertiaryText),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        _MethodTile(
-                          icon: Icons.account_balance_wallet_outlined,
-                          label: 'PayPal',
-                          selected: _method == _PaymentMethod.paypal,
-                          onTap: () => setState(() => _method = _PaymentMethod.paypal),
-                        ),
-                        if (_method == _PaymentMethod.card) ...[
-                          const SizedBox(height: 20),
-                          if (_isPreparing)
-                            Text('Priprema plaćanja...', style: TextStyle(fontSize: 13, color: tertiaryText))
-                          else if (_intent?.isMock ?? false) ...[
-                            // PAYMENT_PROVIDER=Mock: the offline gateway, so there is no payment SDK
-                            // and the card is typed here. Kept working on purpose -- it is the
-                            // documented fallback (arhitektura-migracija-mikroservisi-eda.md s9).
-                            LabeledField(
-                              label: 'Broj kartice',
-                              controller: _cardNumberCtrl,
-                              hintText: '4242 4242 4242 4242',
-                              keyboardType: TextInputType.number,
-                              validator: Validators.cardNumber,
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: LabeledField(
-                                    label: 'Datum isteka',
-                                    controller: _expiryCtrl,
-                                    hintText: 'MM/GG',
-                                    keyboardType: TextInputType.number,
-                                    validator: Validators.cardExpiry,
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: LabeledField(
-                                    label: 'CVV',
-                                    controller: _cvvCtrl,
-                                    hintText: '123',
-                                    obscureText: true,
-                                    keyboardType: TextInputType.number,
-                                    validator: Validators.cardCvv,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Test kartica: bilo koji broj koji ne završava sa 0000 se prihvata.',
-                              style: TextStyle(fontSize: 12, color: tertiaryText),
-                            ),
-                          ] else ...[
-                            // Stripe collects the card in its own native payment sheet, which opens
-                            // when "Plati" is pressed. Nothing card-shaped exists in this app.
-                            Text(
-                              'Podaci o kartici se unose u sigurnu Stripe formu koja se otvara na sljedećem koraku.',
-                              style: TextStyle(fontSize: 13, color: tertiaryText),
-                            ),
-                          ],
-                        ],
                         if (_submitError != null) ...[
                           const SizedBox(height: 16),
                           Text(_submitError!, style: const TextStyle(color: AppColors.errorDark, fontSize: 13)),
@@ -442,68 +463,34 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+            // One bar, one action. Previously this was a bordered box wrapping a white strip
+            // wrapping a stadium-shaped pill — three nested shapes for a single button. The bar is
+            // now the surface, the button fills it, and its corner radius matches the cards above
+            // it instead of introducing a fourth shape language.
+            SystemBarBackdrop(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+                ),
+                child: SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: (_isSubmitting || _isPreparing || _intent == null) ? null : _submit,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : Text(
+                            'Plati ${cart.grandTotal.toStringAsFixed(0)} KM',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
+                  ),
+                ),
               ),
-              child: FilledButton(
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                onPressed: (_isSubmitting || _isPreparing || _intent == null) ? null : _submit,
-                child: _isSubmitting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Text('Plati ${cart.grandTotal.toStringAsFixed(0)} KM'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MethodTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _MethodTile({required this.icon, required this.label, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? primary : border, width: selected ? 2 : 1),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: selected ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary) : tertiaryText),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: selected ? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary) : tertiaryText,
-              ),
-            ),
-            const Spacer(),
-            Icon(
-              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-              size: 20,
-              color: selected ? primary : border,
             ),
           ],
         ),

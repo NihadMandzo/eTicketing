@@ -69,6 +69,30 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
+      // Material 3 shapes FilledButton/OutlinedButton/TextButton as stadiums by default, which is
+      // where the pill-shaped "Plati" button came from. Every other surface in this app — cards,
+      // inputs, the filter dropdowns — is a 12-14px rounded rectangle, so a fully-round button was
+      // the one shape that belonged to nothing else on screen. Set once here rather than
+      // per-button, so the three clients' primary actions cannot drift apart again.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
       textTheme: (isDark ? ThemeData.dark() : ThemeData.light()).textTheme.apply(
             bodyColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
             displayColor: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
