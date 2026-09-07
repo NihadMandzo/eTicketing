@@ -295,3 +295,87 @@
     width: 100%;
   }
 }
+
+/* --- Moje pretplate ------------------------------------------------------ */
+.subscriptions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.subscription-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.subscription-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.subscription-name {
+  font-weight: var(--font-weight-semibold, 600);
+  font-size: 1.05rem;
+}
+
+.subscription-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.92rem;
+  color: var(--muted-foreground);
+}
+
+.subscription-row > span:last-child {
+  color: var(--foreground);
+  text-align: right;
+}
+
+.subscription-note {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted-foreground);
+}
+
+.status-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-semibold, 600);
+  white-space: nowrap;
+}
+
+.status-active {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.status-cancelled {
+  background: color-mix(in srgb, var(--muted-foreground) 15%, transparent);
+  color: var(--muted-foreground);
+}
+
+.status-pastdue {
+  background: color-mix(in srgb, var(--destructive) 15%, transparent);
+  color: var(--destructive);
+}
+
+/* Cards already stack; this keeps the label/value rows from colliding on narrow phones. */
+@media (max-width: 480px) {
+  .subscription-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .subscription-row > span:last-child {
+    text-align: left;
+  }
+}

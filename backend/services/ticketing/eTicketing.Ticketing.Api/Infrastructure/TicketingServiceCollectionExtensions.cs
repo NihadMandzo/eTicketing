@@ -18,6 +18,7 @@ using eTicketing.Ticketing.Business.Reports;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.Subscriptions;
 using eTicketing.Ticketing.Business.TicketPrint;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Business.Time;
@@ -127,6 +128,8 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddHostedService<TicketPrintRenderWorker>();
         builder.Services.AddHostedService<TicketingRabbitMqConsumerService>();
         builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+        builder.Services.AddScoped<ISubscriptionRenewalService, SubscriptionRenewalService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ISectorService).Assembly);
         // Mapster's IRegister configs (SectorMappingConfig, ...) are scanned into
         // TypeAdapterConfig.GlobalSettings by a [ModuleInitializer] in eTicketing.Ticketing.Business
@@ -153,7 +156,11 @@ public static class TicketingServiceCollectionExtensions
                     FailureRatio = 1.0,
                     BreakDuration = TimeSpan.FromSeconds(15),
                 });
-                pb.AddTimeout(TimeSpan.FromSeconds(5));
+                // 10s, not the 5s the other pipelines use: this call is no longer a local mock. With
+                // Payment:Provider=Stripe it makes a real round trip to the payment provider, and a
+                // 5s budget would trip the circuit on ordinary provider latency rather than on a
+                // genuine outage -- turning a slow payment into a false "plaćanje nije dostupno".
+                pb.AddTimeout(TimeSpan.FromSeconds(10));
             });
 
         builder.AddAnalyticsInfrastructure();

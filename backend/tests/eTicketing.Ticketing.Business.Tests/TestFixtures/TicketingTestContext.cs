@@ -14,6 +14,7 @@ using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.TicketPrint;
+using eTicketing.Ticketing.Business.Subscriptions;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data;
@@ -144,6 +145,15 @@ public sealed class TicketingTestContext : IDisposable
 
     public ITicketService CreateTicketService() =>
         new TicketService(TicketRepository, ResponseFactory);
+
+    public ISubscriptionService CreateSubscriptionService() =>
+        new SubscriptionService(
+            SubscriptionRepository, PaymentClient.Object, UnitOfWork, NullLogger<SubscriptionService>.Instance);
+
+    public ISubscriptionRenewalService CreateSubscriptionRenewalService() =>
+        new SubscriptionRenewalService(
+            SubscriptionRepository, TicketRepository, SectorRepository, CapacityLock.Object,
+            EventPublisher.Object, UnitOfWork, QrCodec, NullLogger<SubscriptionRenewalService>.Instance);
 
     public ITicketValidationService CreateTicketValidationService() =>
         new TicketValidationService(

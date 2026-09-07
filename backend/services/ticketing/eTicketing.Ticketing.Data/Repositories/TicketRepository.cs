@@ -273,4 +273,7 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Where(t => organizationId == null || t.Sector!.OrganizationId == organizationId)
             .Where(t => t.CreatedAt >= fromUtc && t.CreatedAt < toUtcExclusive)
             .Where(t => t.Status != TicketStatus.Processing);
+
+    public Task<bool> ExistsForSubscriptionPeriodAsync(Guid subscriptionId, DateOnly periodStart, CancellationToken ct = default)
+        => DbSet.AnyAsync(t => t.SubscriptionId == subscriptionId && t.ValidFrom == periodStart, ct);
 }

@@ -37,6 +37,7 @@ app.MapSectorEndpoints();
 app.MapTicketTypeEndpoints();
 app.MapPurchaseEndpoints();
 app.MapTicketEndpoints();
+app.MapSubscriptionEndpoints();
 app.MapTicketPrintEndpoints();
 app.MapReportEndpoints();
 app.MapAnalyticsEndpoints();

@@ -365,3 +365,11 @@
     flex-direction: column;
   }
 }
+
+/* Host for Stripe's card field. It renders an iframe that sizes itself, so this only needs to
+   reserve vertical room while it loads — a zero-height container makes the field appear to be
+   missing on slow connections. */
+.payment-element {
+  min-height: 220px;
+  margin-top: 4px;
+}

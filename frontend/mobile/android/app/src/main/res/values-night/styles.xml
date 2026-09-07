@@ -11,8 +11,11 @@
          Flutter UI initializes, as well as behind your Flutter UI while its
          running.
 
-         This Theme is only used starting with V2 of Flutter's Android embedding. -->
-    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+         Parent is Theme.MaterialComponents (an AppCompat descendant) rather than the platform
+         Theme.Black.NoTitleBar because Stripe's Android SDK inflates its payment sheet against
+         AppCompat attributes and throws at runtime under a plain platform theme. Must stay in
+         lockstep with values/styles.xml. -->
+    <style name="NormalTheme" parent="Theme.MaterialComponents.NoActionBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>

@@ -18,9 +18,8 @@ public class PurchaseRequestValidatorTests
     {
         HoldId = "hold-1",
         LineItems = [new PurchaseLineItemRequest { TicketTypeId = null, Quantity = 2 }],
-        CardNumber = "4242424242424242",
-        CardExpiry = "12/29",
-        CardCvv = "123",
+        OrderId = Guid.NewGuid(),
+        PaymentIntentId = "pi_test_123",
     };
 
     [Fact]
@@ -96,9 +95,9 @@ public class PurchaseRequestValidatorTests
     }
 
     [Fact]
-    public async Task Validate_WithMalformedCardNumber_Fails()
+    public async Task Validate_WithEmptyOrderId_Fails()
     {
-        var request = ValidRequest() with { CardNumber = "not-a-card" };
+        var request = ValidRequest() with { OrderId = Guid.Empty };
 
         var result = await _validator.ValidateAsync(request);
 
@@ -106,19 +105,46 @@ public class PurchaseRequestValidatorTests
     }
 
     [Fact]
-    public async Task Validate_WithMalformedCardExpiry_Fails()
+    public async Task Validate_WithEmptyPaymentIntentId_Fails()
     {
-        var request = ValidRequest() with { CardExpiry = "13/29" };
+        var request = ValidRequest() with { PaymentIntentId = "" };
 
         var result = await _validator.ValidateAsync(request);
 
         result.IsValid.Should().BeFalse();
     }
 
+    /// <summary>The Stripe provider never sends SimulatedLast4, so absent must be valid -- otherwise
+    /// every real purchase would fail validation before reaching the service.</summary>
     [Fact]
-    public async Task Validate_WithMalformedCardCvv_Fails()
+    public async Task Validate_WithoutSimulatedLast4_Passes()
     {
-        var request = ValidRequest() with { CardCvv = "12" };
+        var request = ValidRequest() with { SimulatedLast4 = null };
+
+        var result = await _validator.ValidateAsync(request);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WithValidSimulatedLast4_Passes()
+    {
+        var request = ValidRequest() with { SimulatedLast4 = "0000" };
+
+        var result = await _validator.ValidateAsync(request);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    /// <summary>Present but malformed is still rejected: a Mock-mode client sending nonsense should
+    /// fail fast rather than reach the gateway.</summary>
+    [Theory]
+    [InlineData("12")]
+    [InlineData("12345")]
+    [InlineData("abcd")]
+    public async Task Validate_WithMalformedSimulatedLast4_Fails(string last4)
+    {
+        var request = ValidRequest() with { SimulatedLast4 = last4 };
 
         var result = await _validator.ValidateAsync(request);
 

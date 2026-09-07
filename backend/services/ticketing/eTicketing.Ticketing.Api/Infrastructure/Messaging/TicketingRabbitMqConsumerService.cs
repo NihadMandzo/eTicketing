@@ -1,5 +1,6 @@
 using System.Text.Json;
 using eTicketing.Contracts.Events;
+using eTicketing.Ticketing.Business.Subscriptions;
 using eTicketing.Ticketing.Business.Integration;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -31,7 +32,16 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
     private const string RedeliveredHeader = "x-ticketing-redelivered";
 
     private static readonly string[] RoutingKeys =
-        [EventNames.TicketPdfReady, EventNames.ProductUpdated, EventNames.ProductDeleted];
+    [
+        EventNames.TicketPdfReady,
+        EventNames.ProductUpdated,
+        EventNames.ProductDeleted,
+        // From eTicketing.Payment, driven by the payment provider's own webhooks: a recurring
+        // reservation is renewed, falls behind, or ends. See SubscriptionRenewalService.
+        EventNames.SubscriptionRenewed,
+        EventNames.SubscriptionPaymentFailed,
+        EventNames.SubscriptionCancelled,
+    ];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
@@ -144,6 +154,21 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
             case EventNames.ProductDeleted:
                 var productDeleted = Deserialize<ProductDeleted>(body, routingKey);
                 await scope.ServiceProvider.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(productDeleted, ct);
+                break;
+
+            case EventNames.SubscriptionRenewed:
+                var renewed = Deserialize<SubscriptionRenewed>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().RenewAsync(renewed, ct);
+                break;
+
+            case EventNames.SubscriptionPaymentFailed:
+                var paymentFailed = Deserialize<SubscriptionPaymentFailed>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().MarkPastDueAsync(paymentFailed, ct);
+                break;
+
+            case EventNames.SubscriptionCancelled:
+                var cancelled = Deserialize<SubscriptionCancelled>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().CancelAsync(cancelled, ct);
                 break;
 
             default:

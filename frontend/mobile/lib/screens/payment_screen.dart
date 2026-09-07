@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+// `hide Card`: flutter_stripe exports a Card model that collides with Material's Card widget,
+// which this screen uses for its order-summary panels.
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 
+import '../core/stripe_bootstrap.dart';
+import '../models/requests/create_payment_intent_request.dart';
 import '../models/requests/purchase_request.dart';
+import '../models/responses/payment_intent_response.dart';
 import '../services/api_exception.dart';
 import '../services/cart.dart';
 import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_controller.dart';
+import '../utils/validators.dart';
 import '../widgets/labeled_field.dart';
 import '../widgets/responsive_page.dart';
 import 'login_screen.dart';
@@ -39,7 +47,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   _PaymentMethod _method = _PaymentMethod.card;
   bool _isSubmitting = false;
+  bool _isPreparing = true;
   String? _submitError;
+
+  /// The payment object for the hold currently being paid for. Null until [_prepare] answers, which
+  /// is also what tells this screen which provider is configured.
+  PaymentIntentResponse? _intent;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetched up front rather than on submit so the correct payment UI is rendered from the start,
+    // instead of flashing the mock card form and then replacing it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+  }
 
   @override
   void dispose() {
@@ -47,6 +68,45 @@ class _PaymentScreenState extends State<PaymentScreen> {
     _expiryCtrl.dispose();
     _cvvCtrl.dispose();
     super.dispose();
+  }
+
+  /// Asks the backend to price the current hold and create the payment object for it. Also tells
+  /// this screen which provider is configured, which is what decides between Stripe's payment sheet
+  /// and the offline mock card form below.
+  Future<void> _prepare() async {
+    final cart = Cart.state.value;
+    if (cart == null || cart.holds.isEmpty) return;
+
+    setState(() {
+      _isPreparing = true;
+      _submitError = null;
+    });
+
+    try {
+      final hold = cart.holds.first;
+      final intent = await _purchaseService.createPaymentIntent(CreatePaymentIntentRequest(
+        holdId: hold.holdId,
+        lineItems: hold.lineItems
+            .map((item) => PurchaseLineItemRequest(ticketTypeId: item.ticketTypeId, quantity: item.quantity))
+            .toList(),
+      ));
+      if (!mounted) return;
+      setState(() => _intent = intent);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 401) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+        return;
+      }
+      setState(() => _submitError = e.apiError.displayMessage);
+    } catch (_) {
+      if (mounted) setState(() => _submitError = 'Priprema plaćanja nije uspjela. Pokušajte ponovo.');
+    } finally {
+      if (mounted) setState(() => _isPreparing = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -60,36 +120,45 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
 
-    if (!_formKey.currentState!.validate()) return;
+    final intent = _intent;
+    if (intent == null || _isSubmitting) return;
+
+    if (intent.isMock && !_formKey.currentState!.validate()) return;
 
     setState(() {
       _isSubmitting = true;
       _submitError = null;
     });
 
-    final cardNumber = _cardNumberCtrl.text.replaceAll(RegExp(r'\s'), '');
     final totalHolds = cart.holds.length;
     var remaining = List<CartHoldGroup>.from(cart.holds);
     var succeededCount = 0;
+    var current = intent;
 
     try {
       while (remaining.isNotEmpty) {
         final hold = remaining.first;
+
+        if (!current.isMock) {
+          final authorized = await _payWithStripe(current);
+          if (!authorized) return;
+        }
+
         await _purchaseService.purchase(PurchaseRequest(
           holdId: hold.holdId,
           lineItems: hold.lineItems
               .map((item) => PurchaseLineItemRequest(ticketTypeId: item.ticketTypeId, quantity: item.quantity))
               .toList(),
-          cardNumber: cardNumber,
-          cardExpiry: _expiryCtrl.text.trim(),
-          cardCvv: _cvvCtrl.text.trim(),
+          orderId: current.orderId,
+          paymentIntentId: current.intentId,
+          // Only the offline gateway reads this; with Stripe the card never reaches this app.
+          simulatedLast4: current.isMock ? _simulatedLast4() : null,
         ));
 
         succeededCount++;
         remaining = remaining.sublist(1);
-        // Drop the just-purchased hold immediately — the whole point is that a later hold in this
-        // same run failing (or the buyer retrying after such a failure) must never resubmit a hold
-        // that already purchased successfully.
+        // Drop the just-purchased hold immediately, so a failure partway through a multi-sector
+        // basket never resubmits one that is already paid for.
         Cart.set(CartState(
           productId: cart.productId,
           productName: cart.productName,
@@ -97,6 +166,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
           date: cart.date,
           holds: remaining,
         ));
+
+        if (remaining.isEmpty) break;
+
+        // Each hold is its own order and its own payment: with manual capture that keeps every
+        // authorization independently cancellable, which one basket-wide charge could not be.
+        final next = await _purchaseService.createPaymentIntent(CreatePaymentIntentRequest(
+          holdId: remaining.first.holdId,
+          lineItems: remaining.first.lineItems
+              .map((item) => PurchaseLineItemRequest(ticketTypeId: item.ticketTypeId, quantity: item.quantity))
+              .toList(),
+        ));
+        current = next;
+        if (mounted) setState(() => _intent = next);
       }
 
       Cart.clear();
@@ -111,13 +193,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 401) {
-        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
         return;
       }
-      // payment.declined / purchase.hold_expired / purchase.quantity_mismatch → 400,
-      // client-fixable, shown inline. payment.unavailable → 503, a genuine
-      // outage — shown as a toast instead (see PurchaseService.PurchaseAsync's
-      // 400-vs-503 distinction in eTicketing.Ticketing.Business).
+      // payment.declined / purchase.hold_expired / purchase.quantity_mismatch -> 400,
+      // client-fixable, shown inline. payment.unavailable -> 503, a genuine outage, shown as a
+      // toast instead (see PurchaseService.PurchaseAsync's 400-vs-503 distinction).
       final message = _buildFailureMessage(e.apiError.displayMessage, succeededCount, totalHolds);
       if (e.statusCode == 503) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,11 +212,54 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _submitError = _buildFailureMessage('Plaćanje nije uspjelo. Pokušajte ponovo.', succeededCount, totalHolds));
+        setState(() => _submitError =
+            _buildFailureMessage('Plaćanje nije uspjelo. Pokušajte ponovo.', succeededCount, totalHolds));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  /// Opens Stripe's native payment sheet, which handles 3-D Secure itself.
+  ///
+  /// Returns false when the buyer backed out or the card was declined — in both cases the hold is
+  /// deliberately left alive so they can simply try again with another card.
+  Future<bool> _payWithStripe(PaymentIntentResponse intent) async {
+    final key = intent.publishableKey;
+    final secret = intent.clientSecret;
+    if (key == null || secret == null) {
+      setState(() => _submitError = 'Plaćanje nije spremno. Pokušajte ponovo.');
+      return false;
+    }
+
+    await StripeBootstrap.ensureInitialized(key);
+
+    await Stripe.instance.initPaymentSheet(
+      paymentSheetParameters: SetupPaymentSheetParameters(
+        paymentIntentClientSecret: secret,
+        merchantDisplayName: 'eKarta',
+        // Follows the app's own dark-mode toggle rather than the OS, matching every other screen.
+        style: ThemeController.mode.value == ThemeMode.dark ? ThemeMode.dark : ThemeMode.light,
+      ),
+    );
+
+    try {
+      await Stripe.instance.presentPaymentSheet();
+      return true;
+    } on StripeException catch (e) {
+      // Backing out of the sheet is not an error and must not show one.
+      if (e.error.code == FailureCode.Canceled) return false;
+
+      setState(() => _submitError = e.error.localizedMessage ?? 'Plaćanje nije uspjelo. Pokušajte ponovo.');
+      return false;
+    }
+  }
+
+  /// Last four digits of whatever was typed into the mock card field. Only the offline gateway
+  /// reads it, and only to decide whether to simulate a decline ("0000").
+  String _simulatedLast4() {
+    final digits = _cardNumberCtrl.text.replaceAll(RegExp(r'\s'), '');
+    return digits.length <= 4 ? digits : digits.substring(digits.length - 4);
   }
 
   String _buildFailureMessage(String base, int succeededCount, int totalHolds) {
@@ -252,48 +379,58 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         ),
                         if (_method == _PaymentMethod.card) ...[
                           const SizedBox(height: 20),
-                          LabeledField(
-                            label: 'Broj kartice',
-                            controller: _cardNumberCtrl,
-                            hintText: '4242 4242 4242 4242',
-                            keyboardType: TextInputType.number,
-                            validator: (v) {
-                              final digits = (v ?? '').replaceAll(RegExp(r'\s'), '');
-                              return RegExp(r'^\d{12,19}$').hasMatch(digits) ? null : 'Unesite ispravan broj kartice (12-19 cifara)';
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: LabeledField(
-                                  label: 'Datum isteka',
-                                  controller: _expiryCtrl,
-                                  hintText: 'MM/GG',
-                                  keyboardType: TextInputType.number,
-                                  validator: (v) => RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$').hasMatch(v ?? '')
-                                      ? null
-                                      : 'Format MM/GG',
+                          if (_isPreparing)
+                            Text('Priprema plaćanja...', style: TextStyle(fontSize: 13, color: tertiaryText))
+                          else if (_intent?.isMock ?? false) ...[
+                            // PAYMENT_PROVIDER=Mock: the offline gateway, so there is no payment SDK
+                            // and the card is typed here. Kept working on purpose -- it is the
+                            // documented fallback (arhitektura-migracija-mikroservisi-eda.md s9).
+                            LabeledField(
+                              label: 'Broj kartice',
+                              controller: _cardNumberCtrl,
+                              hintText: '4242 4242 4242 4242',
+                              keyboardType: TextInputType.number,
+                              validator: Validators.cardNumber,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: LabeledField(
+                                    label: 'Datum isteka',
+                                    controller: _expiryCtrl,
+                                    hintText: 'MM/GG',
+                                    keyboardType: TextInputType.number,
+                                    validator: Validators.cardExpiry,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: LabeledField(
-                                  label: 'CVV',
-                                  controller: _cvvCtrl,
-                                  hintText: '123',
-                                  obscureText: true,
-                                  keyboardType: TextInputType.number,
-                                  validator: (v) => RegExp(r'^\d{3,4}$').hasMatch(v ?? '') ? null : '3-4 cifre',
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: LabeledField(
+                                    label: 'CVV',
+                                    controller: _cvvCtrl,
+                                    hintText: '123',
+                                    obscureText: true,
+                                    keyboardType: TextInputType.number,
+                                    validator: Validators.cardCvv,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Test kartica: bilo koji broj koji ne završava sa 0000 se prihvata.',
-                            style: TextStyle(fontSize: 12, color: tertiaryText),
-                          ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Test kartica: bilo koji broj koji ne završava sa 0000 se prihvata.',
+                              style: TextStyle(fontSize: 12, color: tertiaryText),
+                            ),
+                          ] else ...[
+                            // Stripe collects the card in its own native payment sheet, which opens
+                            // when "Plati" is pressed. Nothing card-shaped exists in this app.
+                            Text(
+                              'Podaci o kartici se unose u sigurnu Stripe formu koja se otvara na sljedećem koraku.',
+                              style: TextStyle(fontSize: 13, color: tertiaryText),
+                            ),
+                          ],
                         ],
                         if (_submitError != null) ...[
                           const SizedBox(height: 16),
@@ -313,7 +450,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: FilledButton(
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                onPressed: _isSubmitting ? null : _submit,
+                onPressed: (_isSubmitting || _isPreparing || _intent == null) ? null : _submit,
                 child: _isSubmitting
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : Text('Plati ${cart.grandTotal.toStringAsFixed(0)} KM'),

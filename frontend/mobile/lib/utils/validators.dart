@@ -41,4 +41,20 @@ class Validators {
     }
     return null;
   }
+
+  /// Mirrors PurchaseRequestValidator's SimulatedLast4 rule on the backend, applied after stripping
+  /// the spaces the field is typed with. Mock provider only: with Stripe the card is typed into
+  /// Stripe's own payment sheet and never reaches a form in this app.
+  static String? cardNumber(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'\s'), '');
+    return RegExp(r'^\d{12,19}$').hasMatch(digits)
+        ? null
+        : 'Unesite ispravan broj kartice (12-19 cifara)';
+  }
+
+  static String? cardExpiry(String? value) =>
+      RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$').hasMatch(value ?? '') ? null : 'Format MM/GG';
+
+  static String? cardCvv(String? value) =>
+      RegExp(r'^\d{3,4}$').hasMatch(value ?? '') ? null : '3-4 cifre';
 }

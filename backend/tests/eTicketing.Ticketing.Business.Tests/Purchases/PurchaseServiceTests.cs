@@ -76,25 +76,62 @@ public class PurchaseServiceTests : IDisposable
     private void MockHold(HeldReservation? reservation) =>
         _fixture.CapacityLock.Setup(l => l.PeekAsync("hold-1", It.IsAny<CancellationToken>())).ReturnsAsync(reservation);
 
-    private void MockSuccessfulCharge() =>
+    /// <summary>Both purchase paths in one helper: a SingleOccurrence/DailyEntry sector captures a
+    /// one-time authorization, a RecurringReservation sector confirms a subscription instead. Tests
+    /// set up both so they do not have to care which mode the sector under test uses.</summary>
+    private void MockSuccessfulCharge()
+    {
         _fixture.PaymentClient
-            .Setup(p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((decimal amount, string orderRef, string _, CancellationToken _) =>
-                new PaymentChargeResponse(Guid.NewGuid(), amount, PaymentChargeStatus.Succeeded, orderRef));
+            .Setup(p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string orderRef, Guid _, decimal amount, string? _, CancellationToken _) =>
+                new PaymentChargeResponse(Guid.NewGuid(), amount, PaymentChargeStatus.Succeeded, orderRef, "eur", null));
 
-    private void MockDeclinedCharge() =>
         _fixture.PaymentClient
-            .Setup(p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((decimal amount, string orderRef, string _, CancellationToken _) =>
-                new PaymentChargeResponse(Guid.NewGuid(), amount, PaymentChargeStatus.Failed, orderRef));
+            .Setup(p => p.ConfirmSubscriptionAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string reference, string orderRef, Guid _, decimal amount, string? _, CancellationToken _) =>
+                new SubscriptionChargeResponse(
+                    Guid.NewGuid(), amount, PaymentChargeStatus.Succeeded, orderRef, "eur", null,
+                    reference, SubscriptionPeriodStart, SubscriptionPeriodEnd));
+    }
 
+    private void MockDeclinedCharge()
+    {
+        _fixture.PaymentClient
+            .Setup(p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string orderRef, Guid _, decimal amount, string? _, CancellationToken _) =>
+                new PaymentChargeResponse(Guid.NewGuid(), amount, PaymentChargeStatus.Failed, orderRef, "eur", "card_declined"));
+
+        _fixture.PaymentClient
+            .Setup(p => p.ConfirmSubscriptionAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string reference, string orderRef, Guid _, decimal amount, string? _, CancellationToken _) =>
+                new SubscriptionChargeResponse(
+                    Guid.NewGuid(), amount, PaymentChargeStatus.Failed, orderRef, "eur", "card_declined",
+                    reference, SubscriptionPeriodStart, SubscriptionPeriodEnd));
+    }
+
+    /// <summary>The billing period the mocked provider reports. Deliberately NOT the fixture clock's
+    /// month, so a test can tell the difference between "stamped from the provider" (correct) and
+    /// "computed locally from the clock" (the pre-Stripe behavior).</summary>
+    private static readonly DateOnly SubscriptionPeriodStart = new(2026, 9, 1);
+    private static readonly DateOnly SubscriptionPeriodEnd = new(2026, 9, 30);
+
+    /// <summary>The shape POST /purchases receives after the buyer has confirmed payment in their
+    /// browser: no card data at all, just the order and intent POST /purchases/payment-intent
+    /// minted. SimulatedLast4 is left null, i.e. the Stripe provider's shape.</summary>
     private static PurchaseRequest BuildRequest(params PurchaseLineItemRequest[] lineItems) => new()
     {
         HoldId = "hold-1",
         LineItems = lineItems,
-        CardNumber = "4111111111111111",
-        CardExpiry = "09/28",
-        CardCvv = "123",
+        OrderId = Guid.NewGuid(),
+        PaymentIntentId = "pi_test_123",
     };
 
     [Fact]
@@ -266,7 +303,9 @@ public class PurchaseServiceTests : IDisposable
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
         MockHold(new HeldReservation(sector.Id, null, 1));
         _fixture.PaymentClient
-            .Setup(p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new PaymentUnavailableException("down", new InvalidOperationException()));
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
@@ -329,7 +368,9 @@ public class PurchaseServiceTests : IDisposable
         second.IsFailure.Should().BeTrue();
         second.Error.Code.Should().Be("purchase.hold_expired");
         _fixture.PaymentClient.Verify(
-            p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -354,7 +395,9 @@ public class PurchaseServiceTests : IDisposable
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("sector.not_found");
         _fixture.PaymentClient.Verify(
-            p => p.ChargeAsync(It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

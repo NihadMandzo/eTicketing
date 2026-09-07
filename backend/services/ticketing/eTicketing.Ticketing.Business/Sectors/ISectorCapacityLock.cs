@@ -31,10 +31,25 @@ public interface ISectorCapacityLock
     /// the hold already expired.</summary>
     Task ConfirmAsync(string holdId, CancellationToken ct = default);
 
-    /// <summary>Returns the held quantity back to available capacity — used both for an
-    /// abandoned-cart TTL expiry (handled automatically by Redis) and for an explicit business
-    /// release (e.g. a cancelled RecurringReservation subscription freeing its space).</summary>
+    /// <summary>Returns the held quantity back to available capacity. Works only while the hold is
+    /// still pending: it finds the counter through the holdinfo pointer, which
+    /// <see cref="ConfirmAsync"/> deletes. To release capacity that was already confirmed, use
+    /// <see cref="ReleaseConfirmedAsync"/>.</summary>
     Task ReleaseAsync(string holdId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Frees capacity that <see cref="ConfirmAsync"/> already made permanent — today, a cancelled
+    /// RecurringReservation subscription giving its parking space back.
+    ///
+    /// Separate from <see cref="ReleaseAsync"/> because it cannot go through the holdinfo pointer:
+    /// ConfirmAsync deletes that on purpose, so a replayed purchase cannot resolve the same hold
+    /// twice. The sector and date therefore have to be supplied by the caller, and the hold id comes
+    /// from Subscription.CapacityHoldId, which exists precisely so this call is possible months after
+    /// the purchase.
+    ///
+    /// Idempotent: releasing an unknown or already-released hold does nothing.
+    /// </summary>
+    Task ReleaseConfirmedAsync(Guid sectorId, DateOnly? date, string holdId, CancellationToken ct = default);
 
     /// <summary>How many admissions are still available on this counter, without reserving any of
     /// them. Read-only and therefore inherently a snapshot: a concurrent buyer can take the last

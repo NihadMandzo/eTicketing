@@ -180,6 +180,30 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
     }
 
+    /// <summary>
+    /// Frees capacity a confirmed hold is still occupying. See ISectorCapacityLock for why this
+    /// cannot reuse ReleaseAsync: ConfirmAsync deletes the holdinfo pointer that maps a hold id back
+    /// to its counter, so the counter has to be rebuilt from the sector and date instead.
+    ///
+    /// HashDelete is naturally idempotent -- deleting a field that is not there is a no-op -- so a
+    /// duplicate cancellation webhook cannot hand the same space back twice.
+    /// </summary>
+    public async Task ReleaseConfirmedAsync(Guid sectorId, DateOnly? date, string holdId, CancellationToken ct = default)
+    {
+        var counterKey = BuildCounterKey(sectorId, date);
+
+        var removed = await Db.HashDeleteAsync(counterKey, holdId);
+
+        if (removed)
+        {
+            _logger.LogInformation(
+                "Oslobađa se potvrđeni hold {HoldId} na sektoru {SectorId}.", holdId, sectorId);
+        }
+
+        // Also drop any lingering pointer, so the hold id cannot resolve again from either direction.
+        await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
+    }
+
     public async Task ReleaseAsync(string holdId, CancellationToken ct = default)
     {
         var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
