@@ -11,7 +11,6 @@ import '../services/api_exception.dart';
 import '../services/cart.dart';
 import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
-import '../theme/system_ui.dart';
 import '../theme/theme_controller.dart';
 import '../utils/validators.dart';
 import '../widgets/labeled_field.dart';
@@ -463,32 +462,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               ),
             ),
-            // One bar, one action. Previously this was a bordered box wrapping a white strip
-            // wrapping a stadium-shaped pill — three nested shapes for a single button. The bar is
-            // now the surface, the button fills it, and its corner radius matches the cards above
-            // it instead of introducing a fourth shape language.
-            SystemBarBackdrop(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                  border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-                ),
-                child: SizedBox(
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: (_isSubmitting || _isPreparing || _intent == null) ? null : _submit,
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(
-                            'Plati ${cart.grandTotal.toStringAsFixed(0)} KM',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                  ),
+            // Just the button. It used to sit in a bordered strip inside a coloured bar inside a
+            // safe-area box — three containers around one action, and the innermost was a stadium
+            // pill, so the eye had four shapes to resolve before reaching the word "Plati". The
+            // page background carries it now; the only thing drawn is the thing you press.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: (_isSubmitting || _isPreparing || _intent == null) ? null : _submit,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          'Plati ${cart.grandTotal.toStringAsFixed(0)} KM',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
                 ),
               ),
             ),

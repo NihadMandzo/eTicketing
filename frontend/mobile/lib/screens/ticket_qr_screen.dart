@@ -10,6 +10,7 @@ import '../models/responses/ticket_response.dart';
 import '../services/api_exception.dart';
 import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/ticket_validity.dart';
 import '../widgets/responsive_page.dart';
 
 /// Mockup screen 6 — the QR "ticket stub" card.
@@ -23,18 +24,38 @@ class TicketQrScreen extends StatelessWidget {
   final TicketResponse ticket;
   final String productName;
 
+  /// When the thing this ticket admits you to actually happens. A one-off event ticket carries no
+  /// date of its own — the showing date lives on `Product.Date` — so the caller supplies it.
+  final DateTime? eventDate;
+
+  /// The last date the ticket is good for, which is the same as [eventDate] except for a
+  /// subscription, where it is the end of the period rather than its start. Feeds
+  /// [resolveTicketValidity].
+  final DateTime? expiresAfter;
+
   const TicketQrScreen({
     super.key,
     required this.ticket,
     required this.productName,
+    this.eventDate,
+    this.expiresAfter,
   });
 
-  String get _validityLine {
+  TicketValidity get _validity =>
+      resolveTicketValidity(status: ticket.status, expiresAfter: expiresAfter ?? eventDate);
+
+  /// When this ticket is for. Never when it was bought.
+  ///
+  /// This used to fall back to `_formatDateTime(ticket.createdAt)`, so a ticket to a concert next
+  /// month announced the afternoon the card was charged, in the most prominent line on the screen
+  /// — directly under the event name, where a reader takes it for the event's own date. Now the
+  /// line is simply omitted when there is no real date to state.
+  String? get _whenLine {
     if (ticket.validDate != null) return _formatDate(ticket.validDate!);
     if (ticket.validFrom != null && ticket.validTo != null) {
       return '${_formatDate(ticket.validFrom!)} – ${_formatDate(ticket.validTo!)}';
     }
-    return _formatDateTime(ticket.createdAt);
+    return eventDate == null ? null : _formatDateTime(eventDate!);
   }
 
   static String _formatDate(DateTime date) {
@@ -80,6 +101,8 @@ class TicketQrScreen extends StatelessWidget {
     final tertiaryText = isDark
         ? AppColors.darkTextTertiary
         : AppColors.lightTextTertiary;
+    final validity = _validity;
+    final isUsable = validity.isUsable;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ulaznica')),
@@ -97,32 +120,47 @@ class TicketQrScreen extends StatelessWidget {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(24),
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [AppColors.primary, AppColors.secondary],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                        // The brand gradient is reserved for a ticket that still works. A spent or
+                        // cancelled one gets flat grey, so the difference is visible before a
+                        // single word is read — the same rule the list's date blocks follow.
+                        decoration: BoxDecoration(
+                          gradient: isUsable
+                              ? const LinearGradient(
+                                  colors: [AppColors.primary, AppColors.secondary],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: isUsable
+                              ? null
+                              : (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
                         ),
                         child: Column(
                           children: [
                             Text(
                               productName,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: isUsable
+                                    ? Colors.white
+                                    : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _validityLine,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.white70,
+                            const SizedBox(height: 10),
+                            TicketValidityBadge(validity: validity, prominent: true),
+                            if (_whenLine != null) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                _whenLine!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isUsable ? Colors.white70 : tertiaryText,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
@@ -131,10 +169,11 @@ class TicketQrScreen extends StatelessWidget {
                         padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                         child: Column(
                           children: [
-                            _QrPanel(bytes: _qrBytes, isDark: isDark),
+                            _QrPanel(bytes: _qrBytes, isDark: isDark, isUsable: isUsable),
                             const SizedBox(height: 8),
                             Text(
-                              'Skenirajte na ulazu',
+                              isUsable ? 'Skenirajte na ulazu' : 'Ovaj kod više ne vrijedi za ulaz',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 11,
                                 color: tertiaryText,
@@ -177,6 +216,8 @@ class TicketQrScreen extends StatelessWidget {
                               label: 'Status',
                               value: _statusLabel(ticket.status),
                             ),
+                            if (eventDate != null && ticket.validDate == null && ticket.validFrom == null)
+                              _InfoLine(label: 'Datum događaja', value: _formatDateTime(eventDate!)),
                           ],
                         ),
                       ),
@@ -187,9 +228,13 @@ class TicketQrScreen extends StatelessWidget {
                 _DownloadPdfButton(ticket: ticket),
                 const SizedBox(height: 12),
                 Text(
-                  ticket.status == 'Used'
-                      ? 'Ova ulaznica je već iskorištena i više ne vrijedi za ulaz.'
-                      : 'PDF ulaznica je također poslana na vaš email.',
+                  switch (validity) {
+                    TicketValidity.used => 'Ova ulaznica je već iskorištena i više ne vrijedi za ulaz.',
+                    TicketValidity.cancelled => 'Ova ulaznica je otkazana i ne vrijedi za ulaz.',
+                    TicketValidity.expired => 'Termin je prošao, pa ova ulaznica više ne vrijedi za ulaz.',
+                    TicketValidity.pending => 'Plaćanje se još obrađuje. Ulaznica vrijedi tek kad bude potvrđena.',
+                    TicketValidity.valid => 'PDF ulaznica je također poslana na vaš email.',
+                  },
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: tertiaryText),
                 ),
@@ -219,7 +264,15 @@ class _QrPanel extends StatelessWidget {
   final Uint8List? bytes;
   final bool isDark;
 
-  const _QrPanel({required this.bytes, required this.isDark});
+  /// A spent, cancelled or expired code is faded and struck with its state.
+  ///
+  /// The plate stays white and the modules stay untouched underneath — this is a scrim over the
+  /// top, not a redraw — because the code is still the real signed payload and an organizer may
+  /// well want to scan it precisely to see why it was refused. What the fade prevents is a holder
+  /// walking up to a gate believing this one will open it.
+  final bool isUsable;
+
+  const _QrPanel({required this.bytes, required this.isDark, this.isUsable = true});
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +287,9 @@ class _QrPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          color: isUsable
+              ? (isDark ? AppColors.darkBorder : AppColors.lightBorder)
+              : AppColors.lightTextDisabled,
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -246,14 +301,44 @@ class _QrPanel extends StatelessWidget {
                 style: TextStyle(fontSize: 11, color: tertiaryText),
               ),
             )
-          : Image.memory(
-              bytes!,
-              // The QR is drawn at a fixed module size server-side; nearest-
-              // neighbour keeps the modules crisp when scaled up instead of
-              // blurring their edges the way the default filtering does.
-              filterQuality: FilterQuality.none,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                Opacity(
+                  opacity: isUsable ? 1 : 0.18,
+                  child: Image.memory(
+                    bytes!,
+                    // The QR is drawn at a fixed module size server-side; nearest-
+                    // neighbour keeps the modules crisp when scaled up instead of
+                    // blurring their edges the way the default filtering does.
+                    filterQuality: FilterQuality.none,
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                  ),
+                ),
+                if (!isUsable)
+                  Center(
+                    child: Transform.rotate(
+                      angle: -0.18,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.lightTextTertiary, width: 2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'NE VRIJEDI',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                            color: AppColors.lightTextTertiary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
     );
   }

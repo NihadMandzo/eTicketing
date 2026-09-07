@@ -23,13 +23,16 @@ import 'parking_spot_screen.dart';
 /// `product.ticketingMode` (not category name) into the right details
 /// screen, same rule as `frontend/web`'s products page.
 ///
-/// **One scroll, one sticky control bar.** The whole page is a single
-/// [CustomScrollView]: the brand row [header] and the recommendation strip
-/// scroll away with everything else, and only the search field plus the two
-/// filter dropdowns stay pinned to the top. That split is the point — search
-/// and filters are how you steer the list, so they have to stay reachable no
-/// matter how far down you are, while "Popularno" is browsing content and
-/// pinning it would just eat a third of the screen forever.
+/// **One scroll, two bars that stack as you reach them.** The whole page is a
+/// single [CustomScrollView]. The brand row [header] and the recommendation
+/// strip scroll away; the search field and the filter row are separate pinned
+/// slivers, so they come to rest one under the other as the page passes them.
+///
+/// The filters sit *below* the recommendation strip, not above it, because they
+/// belong to the results list they govern — putting them between the strip and
+/// the list keeps "steer the results" and "here are the results" adjacent, and
+/// leaves the strip as the browsing content it is. Both bars still end up
+/// reachable at any scroll depth, which is the reason they are pinned at all.
 class EventsScreen extends StatefulWidget {
   /// Rendered as the first thing in the scroll view, above the pinned control
   /// bar, and scrolls away with the content. [MainShell] passes its brand row
@@ -195,14 +198,9 @@ class _EventsScreenState extends State<EventsScreen> {
             if (widget.header != null) SliverToBoxAdapter(child: widget.header),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _ControlBarDelegate(
-                searchController: _searchCtrl,
-                onSearchChanged: _onSearchChanged,
-                categories: _categories,
-                selectedCategoryId: _selectedCategoryId,
-                onCategoryChanged: _selectCategory,
-                selectedCity: _selectedCity,
-                onCityChanged: _selectCity,
+              delegate: _SearchBarDelegate(
+                controller: _searchCtrl,
+                onChanged: _onSearchChanged,
                 isDark: isDark,
               ),
             ),
@@ -218,10 +216,21 @@ class _EventsScreenState extends State<EventsScreen> {
                   ),
                 ),
               ),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _FilterBarDelegate(
+                categories: _categories,
+                selectedCategoryId: _selectedCategoryId,
+                onCategoryChanged: _selectCategory,
+                selectedCity: _selectedCity,
+                onCityChanged: _selectCity,
+                isDark: isDark,
+              ),
+            ),
             if (!_isLoading && _errorMessage == null)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
                   child: Text(
                     '$_totalCount događaja',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tertiaryText),
@@ -309,35 +318,20 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 }
 
-/// The one part of this screen that stays put: search + the two filters.
+/// The search field, pinned to the very top of the list.
 ///
-/// Fixed height (no collapse-on-scroll): the bar is already only as tall as its two controls, and
-/// shrinking a text field mid-scroll makes the caret jump. It paints an opaque background at all
-/// times — a translucent one would let cards scroll visibly through the text field — and grows a
-/// hairline bottom border only once there is content passing underneath, so the separation appears
-/// exactly when it means something.
-class _ControlBarDelegate extends SliverPersistentHeaderDelegate {
-  final TextEditingController searchController;
-  final ValueChanged<String> onSearchChanged;
-  final List<CategoryResponse> categories;
-  final int? selectedCategoryId;
-  final ValueChanged<int?> onCategoryChanged;
-  final City? selectedCity;
-  final ValueChanged<City?> onCityChanged;
+/// Fixed height (no collapse-on-scroll): the bar is only as tall as the field itself, and shrinking
+/// a text field mid-scroll makes the caret jump. It paints an opaque background at all times — a
+/// translucent one would let cards scroll visibly through the text — and grows a hairline only once
+/// there is content passing beneath it, so the separation appears exactly when it means something.
+class _SearchBarDelegate extends SliverPersistentHeaderDelegate {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
   final bool isDark;
 
-  const _ControlBarDelegate({
-    required this.searchController,
-    required this.onSearchChanged,
-    required this.categories,
-    required this.selectedCategoryId,
-    required this.onCategoryChanged,
-    required this.selectedCity,
-    required this.onCityChanged,
-    required this.isDark,
-  });
+  const _SearchBarDelegate({required this.controller, required this.onChanged, required this.isDark});
 
-  static const double _height = 116;
+  static const double _height = 58;
 
   @override
   double get minExtent => _height;
@@ -347,66 +341,90 @@ class _ControlBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final fieldFill = isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted;
-
-    return Container(
+    return _PinnedBar(
+      isDark: isDark,
       height: _height,
-      color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      foregroundDecoration: overlapsContent
-          ? BoxDecoration(
-              border: Border(bottom: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-            )
-          : null,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      showDivider: overlapsContent,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Pretraži događaje',
+          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+          filled: true,
+          fillColor: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _SearchBarDelegate old) => old.isDark != isDark;
+}
+
+/// The category and location dropdowns, pinned directly under the search field once the
+/// recommendation strip between them has scrolled past.
+class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
+  final List<CategoryResponse> categories;
+  final int? selectedCategoryId;
+  final ValueChanged<int?> onCategoryChanged;
+  final City? selectedCity;
+  final ValueChanged<City?> onCityChanged;
+  final bool isDark;
+
+  const _FilterBarDelegate({
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.onCategoryChanged,
+    required this.selectedCity,
+    required this.onCityChanged,
+    required this.isDark,
+  });
+
+  static const double _height = 52;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return _PinnedBar(
+      isDark: isDark,
+      height: _height,
+      showDivider: overlapsContent,
+      child: Row(
         children: [
-          SizedBox(
-            height: 46,
-            child: TextField(
-              controller: searchController,
-              onChanged: onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Pretraži događaje',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                filled: true,
-                fillColor: fieldFill,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: EdgeInsets.zero,
-              ),
+          Expanded(
+            child: _FilterDropdown<int?>(
+              hint: 'Sve kategorije',
+              value: selectedCategoryId,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Sve kategorije')),
+                for (final category in categories)
+                  DropdownMenuItem(value: category.id, child: Text(category.name, overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: onCategoryChanged,
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _FilterDropdown<int?>(
-                  hint: 'Sve kategorije',
-                  value: selectedCategoryId,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Sve kategorije')),
-                    for (final category in categories)
-                      DropdownMenuItem(value: category.id, child: Text(category.name, overflow: TextOverflow.ellipsis)),
-                  ],
-                  onChanged: onCategoryChanged,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _FilterDropdown<City?>(
-                  hint: 'Sve lokacije',
-                  value: selectedCity,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Sve lokacije')),
-                    for (final city in City.values)
-                      DropdownMenuItem(value: city, child: Text(cityLabel(city), overflow: TextOverflow.ellipsis)),
-                  ],
-                  onChanged: onCityChanged,
-                ),
-              ),
-            ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: _FilterDropdown<City?>(
+              hint: 'Sve lokacije',
+              value: selectedCity,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Sve lokacije')),
+                for (final city in City.values)
+                  DropdownMenuItem(value: city, child: Text(cityLabel(city), overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: onCityChanged,
+            ),
           ),
         ],
       ),
@@ -414,11 +432,42 @@ class _ControlBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant _ControlBarDelegate old) =>
+  bool shouldRebuild(covariant _FilterBarDelegate old) =>
       old.categories.length != categories.length ||
       old.selectedCategoryId != selectedCategoryId ||
       old.selectedCity != selectedCity ||
       old.isDark != isDark;
+}
+
+/// Shared chrome for both pinned bars, so the two cannot drift apart in background, padding or
+/// divider treatment while sitting directly on top of each other.
+class _PinnedBar extends StatelessWidget {
+  final bool isDark;
+  final double height;
+  final bool showDivider;
+  final Widget child;
+
+  const _PinnedBar({
+    required this.isDark,
+    required this.height,
+    required this.showDivider,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      foregroundDecoration: showDivider
+          ? BoxDecoration(
+              border: Border(bottom: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+            )
+          : null,
+      child: child,
+    );
+  }
 }
 
 /// Category/location filter dropdown — replaces the old pill-chip row (single-select only fit a

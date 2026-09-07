@@ -11,18 +11,17 @@ import 'app_colors.dart';
 ///    have to be told which way to go. Dark icons over our light surfaces, light icons over the
 ///    dark theme. Getting this wrong makes the bars look empty rather than wrong, which is why it
 ///    goes unnoticed.
-/// 2. **The app drawing behind the navigation bar.** From Android 15 (API 35) the system bars are
-///    force-transparent and `systemNavigationBarColor` is ignored outright — an app cannot ask the
-///    OS for an opaque bar any more. The only thing that still works on every version is to paint
-///    that strip ourselves, which is what [SystemBarBackdrop] is for. The colour set here is the
-///    fallback that older Androids (and the brief moment before first frame) still honour, so the
-///    two paths agree instead of flashing a different colour at each other.
+/// 2. **The app drawing behind the navigation bar.** From Android 15 (API 35) every app is
+///    edge-to-edge and `systemNavigationBarColor` is ignored outright — the OS will not give an
+///    app an opaque bar any more, so the app's own pixels end up under a transparent strip that
+///    still swallows every touch. Text scrolling under the gesture pill and buttons that look
+///    tappable but aren't both come from that. [SystemBarInset] ends it by taking the strip out of
+///    the app's usable area altogether.
 class SystemUi {
   SystemUi._();
 
   static SystemUiOverlayStyle styleFor(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
     // Brightness.light here means "light icons" — the value names the icons, not the background,
     // which is the single easiest thing to invert in this API.
     final iconBrightness = isDark ? Brightness.light : Brightness.dark;
@@ -31,40 +30,49 @@ class SystemUi {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: iconBrightness,
       statusBarBrightness: brightness,
-      systemNavigationBarColor: surface,
-      systemNavigationBarDividerColor: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+      // Honoured below API 35 and ignored at or above it. Kept so older devices match what
+      // SystemBarInset paints, rather than showing two different colours on two Android versions.
+      systemNavigationBarColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
       systemNavigationBarIconBrightness: iconBrightness,
     );
   }
 }
 
-/// Paints an opaque strip of [color] behind the system navigation bar and puts the same inset
-/// back as padding, so [child] never lands underneath it.
+/// Ends the app's layout above the Android navigation bar, and paints the strip it leaves behind
+/// in a solid colour.
 ///
-/// Used instead of a plain `SafeArea` by every bar that sits at the bottom of the screen: a
-/// `SafeArea` pads *around* its child, which leaves the strip behind the navigation bar showing
-/// whatever is beneath — the scaffold, or worse, a list scrolling past. This paints first and pads
-/// second, so the bar reads as one solid surface that ends where the phone's own bar begins.
-class SystemBarBackdrop extends StatelessWidget {
+/// Wrapped once around the whole app in `main.dart`, never per screen. The [ColoredBox] covers the
+/// full window — including the navigation bar strip — while the [SafeArea] inside it pushes every
+/// screen up clear of that strip. So the bar reads as one solid colour, and nothing the app draws
+/// can land underneath it.
+///
+/// Doing this globally rather than bar-by-bar is deliberate. The previous attempt padded each
+/// bottom bar individually, which left every screen *without* one (a scrolling list, a QR code, a
+/// form) still running its content under the navigation bar. There is no screen where drawing
+/// under it is wanted, so the inset belongs above all of them.
+///
+/// `SafeArea` consumes the bottom padding from the `MediaQuery` it passes down, so any `SafeArea`
+/// further down the tree becomes a no-op instead of insetting a second time. The keyboard is
+/// unaffected: its inset arrives as `viewInsets`, which this does not touch.
+class SystemBarInset extends StatelessWidget {
   final Widget child;
 
-  /// Defaults to the theme's surface — pass a colour only when the bar it backs is not on surface.
-  final Color? color;
-
-  const SystemBarBackdrop({super.key, required this.child, this.color});
+  const SystemBarInset({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // viewPadding, not padding: `padding` is already zeroed out by an enclosing SafeArea/MediaQuery
-    // consumer, and reading it would silently stop reserving the inset the moment this widget is
-    // nested inside one.
-    final inset = MediaQuery.viewPaddingOf(context).bottom;
 
-    return Container(
-      color: color ?? (isDark ? AppColors.darkSurface : AppColors.lightSurface),
-      padding: EdgeInsets.only(bottom: inset),
-      child: child,
+    return ColoredBox(
+      color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      // Bottom only. The status bar stays edge-to-edge — screens with a hero image deliberately
+      // run it up under the clock, and they handle their own top inset.
+      child: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        child: child,
+      ),
     );
   }
 }

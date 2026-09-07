@@ -27,8 +27,13 @@ class RecommendationRow extends StatelessWidget {
 
   /// Cards are fixed-width here rather than filling the viewport as they do in the vertical list —
   /// a horizontal strip has to show the edge of the next card to read as scrollable.
-  static const double _cardWidth = 260;
-  static const double _rowHeight = 275;
+  static const double _cardWidth = 240;
+
+  /// Sized to the card's text block plus a hero image, not padded out beyond it. Every card in a
+  /// horizontal list must share one height, and any excess used to land as dead space between
+  /// "Pogledaj detalje" and the card's bottom border; [ProductCard.fillHeight] now routes it into
+  /// the image instead, so this number is free to sit just above what the text actually needs.
+  static const double _rowHeight = 232;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +75,7 @@ class RecommendationRow extends StatelessWidget {
                 child: ProductCard(
                   product: products[index],
                   onTap: () => onProductTap(products[index]),
+                  fillHeight: true,
                 ),
               ),
             ),

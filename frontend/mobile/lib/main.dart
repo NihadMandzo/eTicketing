@@ -53,7 +53,9 @@ class MyApp extends StatelessWidget {
           // SystemUi for the Android 15 caveat this pairs with.
           builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
             value: SystemUi.styleFor(Theme.of(context).brightness),
-            child: child ?? const SizedBox.shrink(),
+            // Wraps every route at once, so no screen — bottom bar or not — can draw under the
+            // Android navigation bar. See SystemBarInset for why it is not done per screen.
+            child: SystemBarInset(child: child ?? const SizedBox.shrink()),
           ),
           // Login-gated app (see LoginScreen) — no guest-browsable landing
           // page. A restored session skips straight to the app shell.

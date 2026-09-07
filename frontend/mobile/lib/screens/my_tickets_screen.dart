@@ -6,6 +6,7 @@ import '../services/api_exception.dart';
 import '../services/catalog_service.dart';
 import '../services/purchase_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/ticket_validity.dart';
 import '../widgets/responsive_page.dart';
 import 'ticket_qr_screen.dart';
 
@@ -178,11 +179,32 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
     _loadPage(_page + 1);
   }
 
+  /// The last date this ticket is good for — a subscription's period end, a day pass's day, or
+  /// the event's own date. Drives both the upcoming/past split and [resolveTicketValidity].
   DateTime? _effectiveDate(TicketResponse ticket) {
     if (ticket.validTo != null) return ticket.validTo;
     if (ticket.validDate != null) return ticket.validDate;
     return _productsById[ticket.productId]?.date;
   }
+
+  /// The date to *show* on a ticket, which is the date of the thing it admits you to and nothing
+  /// else. For a subscription that is the start of its period, not the end [_effectiveDate]
+  /// returns.
+  ///
+  /// Deliberately no `createdAt` fallback. `createdAt` is when the ticket was **bought**, and a
+  /// purchase date on a ticket stub is not something a holder ever needs — it answered "when did I
+  /// pay" on a card whose whole job is answering "when do I turn up", and on a one-off event
+  /// ticket (which carries no date of its own) it was the *only* date shown, so the card
+  /// confidently displayed the wrong day. No date at all is the honest answer when the product
+  /// lookup hasn't landed.
+  DateTime? _displayDate(TicketResponse ticket) {
+    if (ticket.validDate != null) return ticket.validDate;
+    if (ticket.validFrom != null) return ticket.validFrom;
+    return _productsById[ticket.productId]?.date;
+  }
+
+  TicketValidity _validityOf(TicketResponse ticket) =>
+      resolveTicketValidity(status: ticket.status, expiresAfter: _effectiveDate(ticket));
 
   bool _isUpcoming(TicketResponse ticket) {
     final date = _effectiveDate(ticket);
@@ -207,6 +229,9 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
       byProduct.putIfAbsent(ticket.productId, () => []).add(ticket);
     }
 
+    // The createdAt fallbacks in the two sorts below are tie-breakers only, never rendered — a
+    // dateless ticket still needs a stable position, and purchase order is the sanest one to give
+    // it. Nothing here reaches the card; see _displayDate for what does.
     final groups = byProduct.entries.map((entry) {
       final tickets = entry.value
         ..sort((a, b) => (_effectiveDate(a) ?? a.createdAt).compareTo(_effectiveDate(b) ?? b.createdAt));
@@ -370,12 +395,20 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
               ),
             );
           }
+          final group = groups[index];
           return _EventGroup(
-            group: groups[index],
+            group: group,
             isLast: index == groups.length - 1,
+            displayDate: _displayDate,
+            validityOf: _validityOf,
             onTicketTap: (ticket) => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => TicketQrScreen(ticket: ticket, productName: groups[index].title),
+                builder: (_) => TicketQrScreen(
+                  ticket: ticket,
+                  productName: group.title,
+                  eventDate: _displayDate(ticket),
+                  expiresAfter: _effectiveDate(ticket),
+                ),
               ),
             ),
           );
@@ -404,9 +437,17 @@ class _ProductLookup {
 class _EventGroup extends StatelessWidget {
   final _TicketGroup group;
   final bool isLast;
+  final DateTime? Function(TicketResponse ticket) displayDate;
+  final TicketValidity Function(TicketResponse ticket) validityOf;
   final void Function(TicketResponse ticket) onTicketTap;
 
-  const _EventGroup({required this.group, required this.isLast, required this.onTicketTap});
+  const _EventGroup({
+    required this.group,
+    required this.isLast,
+    required this.displayDate,
+    required this.validityOf,
+    required this.onTicketTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -451,7 +492,12 @@ class _EventGroup extends StatelessWidget {
           for (final ticket in group.tickets)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _TicketStubCard(ticket: ticket, onTap: () => onTicketTap(ticket)),
+              child: _TicketStubCard(
+                ticket: ticket,
+                date: displayDate(ticket),
+                validity: validityOf(ticket),
+                onTap: () => onTicketTap(ticket),
+              ),
             ),
         ],
       ),
@@ -532,22 +578,38 @@ class _TabLabel extends StatelessWidget {
 ///
 /// Deliberately no event name on the card — the heading above already said it, and repeating it on
 /// every stub is what made the old flat list read as a wall of identical rows. What is left is
-/// exactly what separates this ticket from its siblings: its date block, its sector and type.
+/// exactly what separates this ticket from its siblings: its date block, its sector and type, and
+/// whether it still works.
+///
+/// **A spent ticket has to be readable as spent from across the row**, not by reading a word. The
+/// date block carries the brand gradient while the ticket is usable and drops to flat grey the
+/// moment it is not, so the difference is the loudest thing on the card; the text tone follows it
+/// down, and the badge names the reason. Three signals for one fact, because the one case that
+/// must never be misread is someone at a gate believing a used ticket will let them in.
 class _TicketStubCard extends StatelessWidget {
   final TicketResponse ticket;
+
+  /// The date of the thing this admits you to. Null when the product hasn't resolved — the block
+  /// then shows a ticket glyph instead of inventing a day.
+  final DateTime? date;
+
+  final TicketValidity validity;
   final VoidCallback onTap;
 
-  const _TicketStubCard({required this.ticket, required this.onTap});
-
-  DateTime get _headlineDate => ticket.validDate ?? ticket.validFrom ?? ticket.createdAt;
+  const _TicketStubCard({
+    required this.ticket,
+    required this.date,
+    required this.validity,
+    required this.onTap,
+  });
 
   static const _months = [
     'JAN', 'FEB', 'MAR', 'APR', 'MAJ', 'JUN',
     'JUL', 'AVG', 'SEP', 'OKT', 'NOV', 'DEC',
   ];
 
-  /// A subscription covers a period, not a day, so it says so instead of showing a single date
-  /// that means nothing on its own.
+  /// A subscription covers a period, not a day, so it says so instead of leaving the reader to
+  /// infer it from a single date.
   String? get _periodLabel {
     final from = ticket.validFrom;
     final to = ticket.validTo;
@@ -559,7 +621,8 @@ class _TicketStubCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final date = _headlineDate;
+    final disabledText = isDark ? AppColors.darkTextDisabled : AppColors.lightTextDisabled;
+    final isUsable = validity.isUsable;
     final period = _periodLabel;
 
     return InkWell(
@@ -568,29 +631,56 @@ class _TicketStubCard extends StatelessWidget {
       child: Card(
         clipBehavior: Clip.antiAlias,
         margin: EdgeInsets.zero,
-        child: SizedBox(
-          height: 84,
+        child: IntrinsicHeight(
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
                 width: 72,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [AppColors.primary, AppColors.secondary]),
+                decoration: BoxDecoration(
+                  gradient: isUsable
+                      ? const LinearGradient(colors: [AppColors.primary, AppColors.secondary])
+                      : null,
+                  color: isUsable ? null : (isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted),
+                  border: isUsable
+                      ? null
+                      : Border(
+                          right: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                        ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_months[date.month - 1], style: const TextStyle(fontSize: 10, color: Colors.white70)),
-                    Text(
-                      '${date.day}',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
-                    ),
+                    if (date == null)
+                      Icon(
+                        Icons.confirmation_number_outlined,
+                        size: 22,
+                        color: isUsable ? Colors.white : disabledText,
+                      )
+                    else ...[
+                      Text(
+                        _months[date!.month - 1],
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: isUsable ? Colors.white70 : disabledText,
+                        ),
+                      ),
+                      Text(
+                        '${date!.day}',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: isUsable ? Colors.white : disabledText,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -600,17 +690,25 @@ class _TicketStubCard extends StatelessWidget {
                         ticket.ticketTypeName != null
                             ? '${ticket.sectorName} · ${ticket.ticketTypeName}'
                             : ticket.sectorName,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isUsable ? null : disabledText,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        period ?? 'Prikaži QR kod',
-                        style: TextStyle(fontSize: 12, color: tertiaryText),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      if (period != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          period,
+                          style: TextStyle(fontSize: 12, color: isUsable ? tertiaryText : disabledText),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 7),
+                      TicketValidityBadge(validity: validity),
                     ],
                   ),
                 ),

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../core/session.dart';
 import '../models/responses/user_response.dart';
 import '../theme/app_colors.dart';
-import '../theme/system_ui.dart';
 import '../widgets/initials_avatar.dart';
 import 'events_screen.dart';
 import 'my_tickets_screen.dart';
@@ -122,40 +121,38 @@ class _KudaBottomNav extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     final inactive = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    // Fully opaque, not the old .withValues(alpha: 0.92): a translucent bar let the list scroll
-    // visibly underneath, which is exactly the "app is going behind the navigation bar" effect.
+    // Fully opaque, not the old .withValues(alpha: 0.92). A translucent bar let the list show
+    // through it, and it is also the colour SystemBarInset paints the strip below with — the two
+    // have to be the same value or the seam between them shows.
     final background = isDark ? AppColors.darkSurface : AppColors.lightSurface;
 
     final items = [..._baseItems, if (showValidation) _validationItem];
 
-    // SystemBarBackdrop, not SafeArea: a SafeArea pads *around* this bar and leaves the strip
-    // behind Android's own navigation bar showing the scaffold beneath. This paints that strip in
-    // the bar's own colour and then insets the row, so the two read as one solid surface.
-    return SystemBarBackdrop(
-      color: background,
-      child: Container(
-        height: 66,
-        decoration: BoxDecoration(
-          color: background,
-          border: Border(top: BorderSide(color: border)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              // Expanded so four labels share the width evenly instead of the
-              // longest ("Moje ulaznice") pushing the row into an overflow at
-              // ~320px, which is the narrowest width this app must render at.
-              Expanded(
-                child: _NavItem(
-                  icon: i == index ? items[i].activeIcon : items[i].icon,
-                  label: items[i].label,
-                  color: i == index ? primary : inactive,
-                  onTap: () => onChanged(i),
-                ),
+    // No SafeArea and no manual inset: SystemBarInset (applied once around the whole app in
+    // main.dart) already ends the layout above the Android navigation bar, so this bar's own
+    // height is all of it and the row sits exactly where it is drawn.
+    return Container(
+      height: 66,
+      decoration: BoxDecoration(
+        color: background,
+        border: Border(top: BorderSide(color: border)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          for (var i = 0; i < items.length; i++)
+            // Expanded so four labels share the width evenly instead of the
+            // longest ("Moje ulaznice") pushing the row into an overflow at
+            // ~320px, which is the narrowest width this app must render at.
+            Expanded(
+              child: _NavItem(
+                icon: i == index ? items[i].activeIcon : items[i].icon,
+                label: items[i].label,
+                color: i == index ? primary : inactive,
+                onTap: () => onChanged(i),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

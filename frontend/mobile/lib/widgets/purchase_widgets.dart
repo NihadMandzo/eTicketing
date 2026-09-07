@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/responses/organization_response.dart';
 import '../theme/app_colors.dart';
-import '../theme/system_ui.dart';
 
 /// Small circular back-chevron button overlaid on a hero image — shared by
 /// EventDetails/MuseumTicket/ParkingSpot (mockup screens 4/9/10).
@@ -216,36 +215,32 @@ class PurchaseBottomBar extends StatelessWidget {
     final tertiaryText = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final primary = Theme.of(context).colorScheme.primary;
 
-    // SystemBarBackdrop rather than SafeArea, for the same reason as the app shell's bottom nav:
-    // SafeArea pads around the bar and leaves the strip behind Android's navigation bar showing
-    // the page scrolling underneath.
-    return SystemBarBackdrop(
-      color: background,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-        decoration: BoxDecoration(color: background, border: Border(top: BorderSide(color: border))),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(totalLabel, style: TextStyle(fontSize: 11, color: tertiaryText)),
-                Text('${total.toStringAsFixed(0)} KM', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: primary)),
-              ],
+    // No inset of its own — SystemBarInset in main.dart already ends the app above the Android
+    // navigation bar, so this bar's padding is the padding a reader actually sees.
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: BoxDecoration(color: background, border: Border(top: BorderSide(color: border))),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(totalLabel, style: TextStyle(fontSize: 11, color: tertiaryText)),
+              Text('${total.toStringAsFixed(0)} KM', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: primary)),
+            ],
+          ),
+          SizedBox(
+            height: 48,
+            child: FilledButton(
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 26)),
+              onPressed: enabled ? onPressed : null,
+              child: isLoading
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(buttonLabel),
             ),
-            SizedBox(
-              height: 48,
-              child: FilledButton(
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 26)),
-                onPressed: enabled ? onPressed : null,
-                child: isLoading
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Text(buttonLabel),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
