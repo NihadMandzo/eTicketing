@@ -60,6 +60,7 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
   late DateTime _visibleMonth;
   DateTime? _selectedDate;
   final Map<String, int> _quantities = {};
+  bool _isCheckingAvailability = false;
   bool _isSubmitting = false;
   String? _submitError;
 
@@ -104,6 +105,9 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
   Future<void> _load() async {
     try {
       final product = await _catalogService.getProductById(widget.productId);
+      // Dateless on purpose: which day is even selectable is derived from the sectors' periods, so
+      // there is no date to ask availability for yet. _refreshAvailability below immediately asks
+      // again for the day this picks, which is the one the buyer is looking at.
       final sectors = await _sectorService.getSectors(widget.productId);
       OrganizationResponse? org;
       try {
@@ -119,6 +123,7 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
         _visibleMonth = DateTime(firstDate.year, firstDate.month);
         _isLoading = false;
       });
+      unawaited(_refreshAvailability(firstDate));
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -155,6 +160,50 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
     return [_TicketTypeRow(sector: sector, price: sector.price)];
   }).toList();
 
+  /// Per-order ceiling, unchanged from before availability existed.
+  static const _maxPerOrder = 10;
+
+  /// Every sector covering the selected day is exhausted — the museum is full that day, which is
+  /// a different message from "this museum sells nothing".
+  bool get _isSelectedDateSoldOut =>
+      _sectorsForSelectedDate.isNotEmpty && _sectorsForSelectedDate.every((s) => s.isSoldOut);
+
+  /// How many more admissions this sector can take on the selected day, after the rest of the
+  /// selection. Ticket types share one per-day pool, so the budget is counted per sector, not per
+  /// row. Null capacity means the backend didn't state one, and an unknown must not cap anything.
+  int _remainingForSector(SectorResponse sector) {
+    final capacity = sector.remainingCapacity;
+    if (capacity == null) return _maxPerOrder;
+
+    final selected = _rows
+        .where((row) => row.sector.id == sector.id)
+        .fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0));
+    return (capacity - selected).clamp(0, _maxPerOrder);
+  }
+
+  /// Trims any quantity that no longer fits after `_sectors` picks up a new day's real capacity.
+  /// `_quantities` is keyed date-independently (`sector.id::ticketTypeId`), so switching to a
+  /// different day within the same month otherwise leaves a quantity chosen against the old day's
+  /// capacity in place against the new one, silently exceeding it. Ticket types share one per-day
+  /// pool per sector, so this walks each sector's rows in order and trims from the tail once the
+  /// running total exceeds what's left — clearing every selection instead would also discard picks
+  /// on sectors the date switch didn't affect.
+  void _clampQuantitiesToCapacity() {
+    for (final sector in _sectors) {
+      final capacity = sector.remainingCapacity;
+      if (capacity == null) continue; // unknown must not cap anything, see _remainingForSector
+
+      var budget = capacity;
+      for (final row in _rows.where((r) => r.sector.id == sector.id)) {
+        final selected = _quantities[row.key] ?? 0;
+        if (selected == 0) continue;
+        final allowed = selected.clamp(0, budget);
+        if (allowed != selected) _quantities[row.key] = allowed;
+        budget -= allowed;
+      }
+    }
+  }
+
   double get _total => _rows.fold(
     0,
     (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price,
@@ -183,6 +232,36 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
         _submitError = null;
       }
     });
+    // A DailyEntry sector's capacity is counted per (Sector, date), so every day has its own
+    // answer — the 14th can be full while the 15th is wide open. Availability is re-read on every
+    // pick rather than once per month for exactly that reason.
+    unawaited(_refreshAvailability(date));
+  }
+
+  /// Re-reads the sectors for [date] so `remainingCapacity` describes the day on screen.
+  ///
+  /// Failure leaves the previous numbers in place instead of surfacing an error: the hold endpoint
+  /// is still the authority on capacity, so the worst case is a buyer picking a quantity and being
+  /// told at hold time — exactly the behaviour before availability existed.
+  Future<void> _refreshAvailability(DateTime date) async {
+    setState(() => _isCheckingAvailability = true);
+    try {
+      final sectors = await _sectorService.getSectors(widget.productId, date: date);
+      if (!mounted) return;
+      // Ignore a response that landed after the buyer moved on to a different day.
+      final current = _selectedDate;
+      if (current == null || current.year != date.year || current.month != date.month || current.day != date.day) {
+        return;
+      }
+      setState(() {
+        _sectors = sectors.items;
+        _clampQuantitiesToCapacity();
+      });
+    } catch (_) {
+      // Deliberately silent — see above.
+    } finally {
+      if (mounted) setState(() => _isCheckingAvailability = false);
+    }
   }
 
   Future<void> _proceedToCheckout() async {
@@ -452,6 +531,27 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          if (_isSelectedDateSoldOut) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkSurfaceMuted
+                                    : AppColors.lightSurfaceMuted,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Za ovaj datum je sve rasprodano. Odaberite drugi dan.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: tertiaryText,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
                           if (_rows.isEmpty)
                             Text(
                               _sectors.isEmpty
@@ -465,21 +565,29 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
                                 for (final row in _rows)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 14),
-                                    child: QuantityRow(
-                                      title:
-                                          row.ticketTypeName ?? row.sector.name,
-                                      price: row.price,
-                                      quantity: _quantities[row.key] ?? 0,
-                                      onDecrement: () => setState(
-                                        () => _quantities[row.key] =
-                                            ((_quantities[row.key] ?? 0) - 1)
-                                                .clamp(0, 10),
-                                      ),
-                                      onIncrement: () => setState(
-                                        () => _quantities[row.key] =
-                                            ((_quantities[row.key] ?? 0) + 1)
-                                                .clamp(0, 10),
-                                      ),
+                                    child: Builder(
+                                      builder: (context) {
+                                        final quantity = _quantities[row.key] ?? 0;
+                                        final max = quantity + _remainingForSector(row.sector);
+                                        return QuantityRow(
+                                          title: row.ticketTypeName ?? row.sector.name,
+                                          price: row.price,
+                                          quantity: quantity,
+                                          maxQuantity: max.clamp(0, _maxPerOrder),
+                                          isSoldOut: row.sector.isSoldOut,
+                                          note: row.sector.isLowStock
+                                              ? 'Još ${row.sector.remainingCapacity} za ovaj dan'
+                                              : null,
+                                          onDecrement: () => setState(
+                                            () => _quantities[row.key] =
+                                                (quantity - 1).clamp(0, _maxPerOrder),
+                                          ),
+                                          onIncrement: () => setState(
+                                            () => _quantities[row.key] =
+                                                (quantity + 1).clamp(0, _maxPerOrder),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                               ],
@@ -512,9 +620,11 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
                     ? _formatDate(_selectedDate!)
                     : 'Odaberite datum',
                 total: _total,
-                buttonLabel: 'Kupi ulaznice',
-                enabled:
-                    _hasSelection && _selectedDate != null && !_isSubmitting,
+                buttonLabel: _isSelectedDateSoldOut ? 'Rasprodano' : 'Kupi ulaznice',
+                enabled: _hasSelection &&
+                    _selectedDate != null &&
+                    !_isSubmitting &&
+                    !_isCheckingAvailability,
                 isLoading: _isSubmitting,
                 onPressed: _proceedToCheckout,
               ),

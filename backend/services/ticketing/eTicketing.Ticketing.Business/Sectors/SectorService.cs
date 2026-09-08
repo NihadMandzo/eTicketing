@@ -145,7 +145,43 @@ public class SectorService : ISectorService
         // Status — an organizer is expected to only publish sectors for products they intend to
         // make public. Revisit once the Purchase flow needs a stricter guarantee.
         var paged = await _sectorRepository.SearchAsync(query, query.ProductId, null, PublishStatus.Published, ct);
-        return ToPagedResult(paged);
+
+        // The buyer path is the only one that reads the live counter: a client has to know a
+        // sector is exhausted *before* offering it, otherwise the first the buyer hears of it is a
+        // 409 from HoldAsync after they have already picked a quantity. Fetched in parallel rather
+        // than sequentially -- this is the public, unauthenticated browse path, and PageSize goes
+        // up to 100, so a sequential foreach could chain up to 100 Redis round-trips per request.
+        var remaining = await Task.WhenAll(paged.Items.Select(sector => GetRemainingAsync(sector, query.Date, ct)));
+        var items = paged.Items.Zip(remaining, (sector, cap) => ToResponse(sector) with { RemainingCapacity = cap }).ToList();
+
+        return Result<PagedResult<SectorResponse>>.Success(new PagedResult<SectorResponse>
+        {
+            Items = items,
+            TotalCount = paged.TotalCount,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+        });
+    }
+
+    /// <summary>Live remaining capacity for one sector, or null when it cannot be stated: a
+    /// DailyEntry sector counts per (Sector, date), so without a date there is no single number
+    /// to give, and a date outside the sector's own period would report some other month's
+    /// counter. Null means "unknown", never "sold out" — the clients treat the two differently.
+    /// </summary>
+    private async Task<int?> GetRemainingAsync(Sector sector, DateOnly? date, CancellationToken ct)
+    {
+        if (sector.TicketingMode == TicketingMode.DailyEntry)
+        {
+            if (date is null)
+                return null;
+
+            if (date.Value.Year != sector.PeriodYear || date.Value.Month != sector.PeriodMonth)
+                return null;
+
+            return await _capacityLock.GetRemainingAsync(sector.Id, sector.Capacity, date, ct);
+        }
+
+        return await _capacityLock.GetRemainingAsync(sector.Id, sector.Capacity, null, ct);
     }
 
     public async Task<Result<PagedResult<SectorResponse>>> GetMineAsync(SectorQuery query, ClaimsPrincipal user, CancellationToken ct = default)

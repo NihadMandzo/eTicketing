@@ -15,7 +15,7 @@ export class SubscriptionService {
   getMine(page = 0, pageSize = 10): Observable<PagedResult<Subscription>> {
     return this.http
       .get<PagedResult<Subscription>>(`${this.baseUrl}/subscriptions/mine`, {
-        params: { page, pageSize },
+        params: { page: String(page), pageSize: String(pageSize) },
       })
       .pipe(
         map((result) => ({

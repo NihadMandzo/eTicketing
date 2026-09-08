@@ -15,6 +15,14 @@ class SectorResponse {
   final DateTime createdAt;
   final List<TicketTypeResponse> ticketTypes;
 
+  /// How many admissions are still on sale, straight off the backend's live Redis counter.
+  ///
+  /// Null means *unknown*, never *sold out* — the organizer/staff sector lists don't compute it,
+  /// and a DailyEntry sector has no single number until a date is chosen. Treating null as zero
+  /// would hide sectors that are perfectly on sale, so [isSoldOut] deliberately answers false for
+  /// it. See SectorResponse.RemainingCapacity on the backend.
+  final int? remainingCapacity;
+
   const SectorResponse({
     required this.id,
     required this.productId,
@@ -27,7 +35,15 @@ class SectorResponse {
     this.periodMonth,
     required this.createdAt,
     required this.ticketTypes,
+    this.remainingCapacity,
   });
+
+  /// True only when availability is known and exhausted.
+  bool get isSoldOut => remainingCapacity == 0;
+
+  /// Enough left to be worth mentioning is boring; a handful left is what makes someone decide.
+  /// Null (unknown) is never "low" — an unverified scarcity claim is worse than none.
+  bool get isLowStock => remainingCapacity != null && remainingCapacity! > 0 && remainingCapacity! <= 5;
 
   factory SectorResponse.fromJson(Map<String, dynamic> json) {
     if (json['id'] == null) throw const FormatException('Missing id in payload');
@@ -48,6 +64,7 @@ class SectorResponse {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       ticketTypes:
           (json['ticketTypes'] as List? ?? []).map((e) => TicketTypeResponse.fromJson(e as Map<String, dynamic>)).toList(),
+      remainingCapacity: json['remainingCapacity'] as int?,
     );
   }
 }

@@ -26,7 +26,19 @@ public class SectorServiceTests : IDisposable
         MockProduct(_singleOccurrenceProductId, _orgA, TicketingMode.SingleOccurrence);
         MockProduct(_dailyEntryProductId, _orgA, TicketingMode.DailyEntry);
         MockProduct(_recurringReservationProductId, _orgA, TicketingMode.RecurringReservation);
+
+        // Nothing sold, so every sector reads back at full capacity. Without this the loose mock
+        // returns 0 and GetPublishedAsync would report every sector as sold out, which is the one
+        // answer that changes what a client renders — the availability tests below override it.
+        MockRemaining((_, capacity) => capacity);
     }
+
+    /// <summary>Points ISectorCapacityLock.GetRemainingAsync at a function of (sectorId, capacity)
+    /// so a test can say "this sector is exhausted" without restating the whole mock.</summary>
+    private void MockRemaining(Func<Guid, int, int> remaining) =>
+        _fixture.CapacityLock
+            .Setup(l => l.GetRemainingAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid sectorId, int capacity, DateOnly? _, CancellationToken _) => remaining(sectorId, capacity));
 
     private void MockProduct(Guid productId, Guid organizationId, TicketingMode mode) =>
         _fixture.CatalogClient
@@ -312,6 +324,170 @@ public class SectorServiceTests : IDisposable
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Items.Should().HaveCount(2); // both land in _orgA per the mocked product's OrganizationId
+    }
+
+    // --- GetPublishedAsync: live availability (RemainingCapacity / IsSoldOut) ---
+
+    [Fact]
+    public async Task GetPublishedAsync_ReportsRemainingCapacityFromTheLiveCounter()
+    {
+        var published = await CreatePublishedSingleOccurrenceAsync();
+        MockRemaining((_, _) => 37);
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _singleOccurrenceProductId });
+
+        var sector = result.Value!.Items.Single(s => s.Id == published);
+        sector.RemainingCapacity.Should().Be(37);
+        sector.IsSoldOut.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_WhenCounterIsExhausted_MarksSectorSoldOut()
+    {
+        var published = await CreatePublishedSingleOccurrenceAsync();
+        MockRemaining((_, _) => 0);
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _singleOccurrenceProductId });
+
+        var sector = result.Value!.Items.Single(s => s.Id == published);
+        sector.RemainingCapacity.Should().Be(0);
+        sector.IsSoldOut.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ReportsPerSectorAvailability_NotOneNumberForAll()
+    {
+        // The whole point of the field: a buyer must be able to see that VIP is gone while Parter
+        // is still on sale, on the same event.
+        var soldOut = await CreatePublishedSingleOccurrenceAsync("VIP");
+        var onSale = await CreatePublishedSingleOccurrenceAsync("Parter");
+        MockRemaining((sectorId, _) => sectorId == soldOut ? 0 : 12);
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _singleOccurrenceProductId });
+
+        result.Value!.Items.Single(s => s.Id == soldOut).IsSoldOut.Should().BeTrue();
+        result.Value.Items.Single(s => s.Id == onSale).IsSoldOut.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ForDailyEntry_WithoutDate_LeavesRemainingCapacityUnknown()
+    {
+        // DailyEntry counts capacity per (Sector, date). Any single number would be a lie, and a
+        // zero would wrongly grey out a sector that has seats on every other day of the month.
+        var published = await CreatePublishedDailyEntryAsync();
+        MockRemaining((_, _) => 0);
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _dailyEntryProductId });
+
+        var sector = result.Value!.Items.Single(s => s.Id == published);
+        sector.RemainingCapacity.Should().BeNull();
+        sector.IsSoldOut.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ForDailyEntry_WithDateInPeriod_ReportsThatDaysRemaining()
+    {
+        var published = await CreatePublishedDailyEntryAsync(); // August 2026
+        var date = new DateOnly(2026, 8, 15);
+        MockRemaining((_, _) => 5);
+
+        var result = await _sut.GetPublishedAsync(
+            new SectorQuery { ProductId = _dailyEntryProductId, Date = date });
+
+        result.Value!.Items.Single(s => s.Id == published).RemainingCapacity.Should().Be(5);
+        _fixture.CapacityLock.Verify(
+            l => l.GetRemainingAsync(published, 300, date, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ForDailyEntry_WithDateOutsidePeriod_LeavesRemainingCapacityUnknown()
+    {
+        // Reading September's counter for an August sector would report some other month's sales
+        // as this one's — better to say nothing than to say something wrong.
+        var published = await CreatePublishedDailyEntryAsync(); // August 2026
+        MockRemaining((_, _) => 0);
+
+        var result = await _sut.GetPublishedAsync(
+            new SectorQuery { ProductId = _dailyEntryProductId, Date = new DateOnly(2026, 9, 1) });
+
+        result.Value!.Items.Single(s => s.Id == published).RemainingCapacity.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ForSingleOccurrence_IgnoresTheDateParameter()
+    {
+        // Date is a DailyEntry concept. Every other mode counts per sector, so the counter must be
+        // read without a date or it would resolve to an empty per-day key and report full capacity.
+        var published = await CreatePublishedSingleOccurrenceAsync();
+
+        await _sut.GetPublishedAsync(
+            new SectorQuery { ProductId = _singleOccurrenceProductId, Date = new DateOnly(2026, 8, 15) });
+
+        _fixture.CapacityLock.Verify(
+            l => l.GetRemainingAsync(published, 100, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ForRecurringReservation_WhenSpaceIsTaken_MarksItSoldOut()
+    {
+        // Capacity is always 1 for a parking space, so "sold out" here means somebody has it.
+        var created = await _sut.CreateAsync(RecurringReservationRequest(), OrgACaller());
+        await _sut.PublishAsync(created.Value!.Id, OrgACaller());
+        MockRemaining((_, _) => 0);
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _recurringReservationProductId });
+
+        result.Value!.Items.Single(s => s.Id == created.Value.Id).IsSoldOut.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetMineAsync_LeavesRemainingCapacityUnknown()
+    {
+        // The organizer list deliberately doesn't pay a Redis round-trip per row for a number its
+        // screens never render — availability is a buying-side concern.
+        await CreatePublishedSingleOccurrenceAsync();
+
+        var result = await _sut.GetMineAsync(new SectorQuery(), OrgACaller());
+
+        result.Value!.Items.Should().OnlyContain(s => s.RemainingCapacity == null);
+        _fixture.CapacityLock.Verify(
+            l => l.GetRemainingAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_LeavesRemainingCapacityUnknown()
+    {
+        await CreatePublishedSingleOccurrenceAsync();
+
+        var result = await _sut.GetAllAsync(new SectorQuery());
+
+        result.Value!.Items.Should().OnlyContain(s => s.RemainingCapacity == null);
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_DoesNotReportDraftSectorsAvailability()
+    {
+        // A draft sector isn't on sale at all, so it must not appear — sold out or otherwise.
+        var draft = await _sut.CreateAsync(SingleOccurrenceRequest() with { Name = "Nacrt" }, OrgACaller());
+
+        var result = await _sut.GetPublishedAsync(new SectorQuery { ProductId = _singleOccurrenceProductId });
+
+        result.Value!.Items.Should().NotContain(s => s.Id == draft.Value!.Id);
+    }
+
+    private async Task<Guid> CreatePublishedSingleOccurrenceAsync(string name = "VIP")
+    {
+        var created = await _sut.CreateAsync(SingleOccurrenceRequest() with { Name = name }, OrgACaller());
+        await _sut.PublishAsync(created.Value!.Id, OrgACaller());
+        return created.Value.Id;
+    }
+
+    private async Task<Guid> CreatePublishedDailyEntryAsync()
+    {
+        var created = await _sut.CreateAsync(DailyEntryRequest(), OrgACaller());
+        await _sut.PublishAsync(created.Value!.Id, OrgACaller());
+        return created.Value.Id;
     }
 
     // --- HoldAsync ---

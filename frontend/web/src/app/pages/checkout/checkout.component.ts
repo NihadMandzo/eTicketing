@@ -61,6 +61,13 @@ export class CheckoutComponent {
   readonly intent = signal<PaymentIntentResponse | null>(null);
 
   readonly totalHolds = computed(() => this.cart()?.holds.length ?? 0);
+
+  /** How many holds the basket started with — `results().length + totalHolds()`, extracted
+   * because it's used both here and in `buildFailureMessage`. The sum is invariant for the whole
+   * checkout: `advanceToNextHold` only ever removes a hold from the cart in the same tick that
+   * `completePurchase` pushes its result, and a failed purchase leaves the hold alone, so nothing
+   * needs "start" semantics beyond naming the expression once. */
+  readonly totalHoldsAtStart = computed(() => this.results().length + this.totalHolds());
   readonly isMockProvider = computed(() => this.intent()?.provider === 'Mock');
 
   private readonly paymentElementHost = viewChild<ElementRef<HTMLDivElement>>('paymentElement');
@@ -291,7 +298,6 @@ export class CheckoutComponent {
     const succeeded = this.results().length;
     if (succeeded === 0) return base;
 
-    const total = succeeded + this.totalHolds();
-    return `${base} (${succeeded} od ${total} narudžbi je uspješno obrađeno. Preostale možete pokušati ponovo.)`;
+    return `${base} (${succeeded} od ${this.totalHoldsAtStart()} narudžbi je uspješno obrađeno. Preostale možete pokušati ponovo.)`;
   }
 }

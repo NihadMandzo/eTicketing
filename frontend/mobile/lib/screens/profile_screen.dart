@@ -13,15 +13,21 @@ import 'contact_screen.dart';
 import 'edit_profile_screen.dart';
 import 'help_screen.dart';
 import 'login_screen.dart';
-import 'my_tickets_screen.dart';
 import 'subscriptions_screen.dart';
 import 'privacy_screen.dart';
 import 'terms_screen.dart';
 
 /// The "Profil" tab body inside [MainShell] — account summary + personal
-/// info/change-password/order-history entry points, the light/dark toggle,
-/// and logout. No `Scaffold`/`AppBar` of its own: [MainShell] supplies both
-/// so the bottom nav bar and app bar stay consistent across tabs.
+/// info/change-password entry points, the light/dark toggle, and logout. No
+/// `Scaffold`/`AppBar` of its own: [MainShell] supplies both so the bottom
+/// nav bar and app bar stay consistent across tabs.
+///
+/// There is no "Historija narudžbi" row. It pushed [MyTicketsScreen] — the
+/// exact screen the "Moje ulaznice" tab already shows, one tap away in the
+/// bottom nav — so the same list had two names and two routes into it, and
+/// the app bar it was pushed under was the only thing that made them look
+/// like different features. "Moje pretplate" below is genuinely different:
+/// it manages `Subscription` records (status, cancellation), not tickets.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
@@ -79,19 +85,6 @@ class ProfileScreen extends StatelessWidget {
                         label: 'Promijeni lozinku',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      _ProfileRow(
-                        icon: Icons.receipt_long_outlined,
-                        label: 'Historija narudžbi',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => Scaffold(
-                              appBar: AppBar(title: const Text('Historija narudžbi')),
-                              body: const SafeArea(child: MyTicketsScreen()),
-                            ),
-                          ),
                         ),
                       ),
                       const Divider(height: 1),

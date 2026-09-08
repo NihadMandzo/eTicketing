@@ -179,6 +179,9 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
     final tertiaryText = isDark
         ? AppColors.darkTextTertiary
         : AppColors.lightTextTertiary;
+    final disabledText = isDark
+        ? AppColors.darkTextDisabled
+        : AppColors.lightTextDisabled;
     final selectedSector = _sectors
         .where((s) => s.id == _selectedSectorId)
         .cast<SectorResponse?>()
@@ -300,9 +303,14 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
                               itemCount: _sectors.length,
                               itemBuilder: (context, index) {
                                 final sector = _sectors[index];
-                                final isTaken = _takenSectorIds.contains(
-                                  sector.id,
-                                );
+                                // Two ways a space is gone: the backend already said so
+                                // (remainingCapacity 0 — capacity here is always 1, so zero left
+                                // means somebody has it), or this session just collected a 409
+                                // racing another buyer for it. Before availability existed only
+                                // the second was known, so every taken space looked free until
+                                // someone tapped it.
+                                final isTaken =
+                                    sector.isSoldOut || _takenSectorIds.contains(sector.id);
                                 final isSelected =
                                     sector.id == _selectedSectorId;
                                 return InkWell(
@@ -316,8 +324,15 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
                                           ? AppColors.primary
                                           : (isDark
                                                 ? AppColors.darkSurfaceMuted
-                                                : const Color(0xFFF5F5F5)),
+                                                : AppColors.lightSurfaceMuted),
                                       borderRadius: BorderRadius.circular(8),
+                                      border: isTaken
+                                          ? Border.all(
+                                              color: isDark
+                                                  ? AppColors.darkBorder
+                                                  : AppColors.lightBorder,
+                                            )
+                                          : null,
                                     ),
                                     alignment: Alignment.center,
                                     child: Text(
@@ -327,11 +342,14 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
                                         fontWeight: FontWeight.w700,
                                         color: isSelected
                                             ? Colors.white
-                                            : (isTaken
-                                                  ? tertiaryText.withValues(
-                                                      alpha: 0.6,
-                                                    )
-                                                  : null),
+                                            : (isTaken ? disabledText : null),
+                                        // Struck through as well as greyed: colour alone is not
+                                        // enough to read as unavailable at this tile size, and not
+                                        // at all for anyone who cannot separate the two greys.
+                                        decoration: isTaken
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        decorationColor: disabledText,
                                       ),
                                     ),
                                   ),
@@ -344,13 +362,21 @@ class _ParkingSpotScreenState extends State<ParkingSpotScreen> {
                               _LegendDot(
                                 color: isDark
                                     ? AppColors.darkSurfaceMuted
-                                    : const Color(0xFFF5F5F5),
+                                    : AppColors.lightSurfaceMuted,
                                 label: 'Slobodno',
                               ),
                               const SizedBox(width: 14),
                               const _LegendDot(
                                 color: AppColors.primary,
                                 label: 'Odabrano',
+                              ),
+                              const SizedBox(width: 14),
+                              _LegendDot(
+                                color: isDark
+                                    ? AppColors.darkSurfaceMuted
+                                    : AppColors.lightSurfaceMuted,
+                                label: 'Zauzeto',
+                                struckThrough: true,
                               ),
                             ],
                           ),
@@ -456,7 +482,12 @@ class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
 
-  const _LegendDot({required this.color, required this.label});
+  /// Draws the swatch with the same strike the grid puts on a taken space, so the legend shows
+  /// the actual treatment rather than describing it. "Slobodno" and "Zauzeto" share a fill colour
+  /// — the strike is the whole difference, so it has to appear here too.
+  final bool struckThrough;
+
+  const _LegendDot({required this.color, required this.label, this.struckThrough = false});
 
   @override
   Widget build(BuildContext context) {
@@ -464,6 +495,9 @@ class _LegendDot extends StatelessWidget {
     final tertiaryText = isDark
         ? AppColors.darkTextTertiary
         : AppColors.lightTextTertiary;
+    final disabledText = isDark
+        ? AppColors.darkTextDisabled
+        : AppColors.lightTextDisabled;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -473,7 +507,13 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(3),
+            border: struckThrough
+                ? Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)
+                : null,
           ),
+          child: struckThrough
+              ? Center(child: Container(width: 8, height: 1.2, color: disabledText))
+              : null,
         ),
         const SizedBox(width: 6),
         Text(label, style: TextStyle(fontSize: 12, color: tertiaryText)),

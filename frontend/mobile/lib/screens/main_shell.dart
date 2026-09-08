@@ -121,35 +121,38 @@ class _KudaBottomNav extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     final inactive = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final background = (isDark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.92);
+    // Fully opaque, not the old .withValues(alpha: 0.92). A translucent bar let the list show
+    // through it, and it is also the colour SystemBarInset paints the strip below with — the two
+    // have to be the same value or the seam between them shows.
+    final background = isDark ? AppColors.darkSurface : AppColors.lightSurface;
 
     final items = [..._baseItems, if (showValidation) _validationItem];
 
-    return SafeArea(
-      top: false,
-      child: Container(
-        height: 66,
-        decoration: BoxDecoration(
-          color: background,
-          border: Border(top: BorderSide(color: border)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              // Expanded so four labels share the width evenly instead of the
-              // longest ("Moje ulaznice") pushing the row into an overflow at
-              // ~320px, which is the narrowest width this app must render at.
-              Expanded(
-                child: _NavItem(
-                  icon: i == index ? items[i].activeIcon : items[i].icon,
-                  label: items[i].label,
-                  color: i == index ? primary : inactive,
-                  onTap: () => onChanged(i),
-                ),
+    // No SafeArea and no manual inset: SystemBarInset (applied once around the whole app in
+    // main.dart) already ends the layout above the Android navigation bar, so this bar's own
+    // height is all of it and the row sits exactly where it is drawn.
+    return Container(
+      height: 66,
+      decoration: BoxDecoration(
+        color: background,
+        border: Border(top: BorderSide(color: border)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          for (var i = 0; i < items.length; i++)
+            // Expanded so four labels share the width evenly instead of the
+            // longest ("Moje ulaznice") pushing the row into an overflow at
+            // ~320px, which is the narrowest width this app must render at.
+            Expanded(
+              child: _NavItem(
+                icon: i == index ? items[i].activeIcon : items[i].icon,
+                label: items[i].label,
+                color: i == index ? primary : inactive,
+                onTap: () => onChanged(i),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -198,26 +201,25 @@ class _EventsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Row(
-            children: [
-              Image.asset('assets/logo.png', height: 28),
-              const Spacer(),
-              ValueListenableBuilder<UserResponse?>(
-                valueListenable: Session.currentUser,
-                builder: (context, user, _) {
-                  if (user == null) return const SizedBox.shrink();
-                  return InitialsAvatar(name: user.fullName, radius: 17, onTap: onAvatarTap);
-                },
-              ),
-            ],
-          ),
+    // Passed *into* the scroll view rather than stacked above it: as a sibling it stayed frozen on
+    // screen and cost 56px of every scroll position for a logo nobody needs while browsing.
+    return EventsScreen(
+      header: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Row(
+          children: [
+            Image.asset('assets/logo.png', height: 28),
+            const Spacer(),
+            ValueListenableBuilder<UserResponse?>(
+              valueListenable: Session.currentUser,
+              builder: (context, user, _) {
+                if (user == null) return const SizedBox.shrink();
+                return InitialsAvatar(name: user.fullName, radius: 17, onTap: onAvatarTap);
+              },
+            ),
+          ],
         ),
-        const Expanded(child: EventsScreen()),
-      ],
+      ),
     );
   }
 }

@@ -123,7 +123,7 @@
             <h2>Plaćanje</h2>
 
             @if (totalHolds() > 1) {
-              <p class="hint-text">Plaćanje {{ results().length + 1 }} od {{ results().length + totalHolds() }}</p>
+              <p class="hint-text">Plaćanje {{ results().length + 1 }} od {{ totalHoldsAtStart() }}</p>
             }
 
             @if (isPreparing()) {

@@ -63,14 +63,15 @@ public class StripePaymentGateway : IPaymentGateway
             Description = request.Description,
             ReceiptEmail = request.CustomerEmail,
             Metadata = new Dictionary<string, string>(request.Metadata),
-            AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
-            {
-                Enabled = true,
-                // No redirect-based methods. A redirect would send the buyer off-site and back,
-                // which routinely outlasts the five-minute hold; keeping only in-page methods means
-                // 3-D Secure resolves in Stripe's own modal and the buyer never leaves checkout.
-                AllowRedirects = "never",
-            },
+            // Cards only, stated explicitly rather than left to automatic_payment_methods. Automatic
+            // hands the dashboard the decision, so enabling a wallet there (Link, Klarna, Amazon Pay,
+            // Satispay...) would silently add it to every checkout in all three clients. Two of those
+            // are also flatly incompatible with how this platform charges: manual capture below, and
+            // the saved-card monthly renewal in CreateSubscriptionAsync, are card mechanics. Pinning
+            // the list here makes the payment sheet card-only wherever it opens, with no dashboard
+            // toggle able to change it. 3-D Secure still resolves in Stripe's own modal, so the buyer
+            // never leaves checkout — the reason redirects were disallowed before.
+            PaymentMethodTypes = ["card"],
         };
 
         // OrderRef is already unique per order (it is the Payments table's unique index), so reusing
@@ -211,6 +212,9 @@ public class StripePaymentGateway : IPaymentGateway
                 // Without this there is no card on file to charge next month, and every renewal
                 // fails immediately.
                 SaveDefaultPaymentMethod = "on_subscription",
+                // Same card-only pin as the one-time intent above — and load-bearing here, because
+                // an off-session monthly renewal can only be charged against a stored card.
+                PaymentMethodTypes = ["card"],
             },
             Metadata = new Dictionary<string, string>(request.Metadata),
             Expand = ["latest_invoice.confirmation_secret"],

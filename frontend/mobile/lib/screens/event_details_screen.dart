@@ -156,6 +156,29 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
   bool get _hasSelection => _quantities.values.any((q) => q > 0);
 
+  /// Every sector on sale is exhausted. The bottom bar says so rather than offering a "Kupi
+  /// ulaznice" button that can only ever fail.
+  bool get _isEverythingSoldOut => _sectors.isNotEmpty && _sectors.every((s) => s.isSoldOut);
+
+  /// How many more admissions this sector can still take, given what is already in the selection.
+  ///
+  /// Ticket types share one pool: a sector with 4 left and both "Odrasli" and "Djeca" rows must
+  /// not let someone pick 3 + 3. Counting the whole sector's selection here is what keeps the two
+  /// rows honest about a budget neither of them owns alone. Null capacity means the backend didn't
+  /// state one, and an unknown must not cap anything.
+  int _remainingForSector(SectorResponse sector) {
+    final capacity = sector.remainingCapacity;
+    if (capacity == null) return _maxPerOrder;
+
+    final selected = _rows
+        .where((row) => row.sector.id == sector.id)
+        .fold(0, (sum, row) => sum + (_quantities[row.key] ?? 0));
+    return (capacity - selected).clamp(0, _maxPerOrder);
+  }
+
+  /// Per-order ceiling, unchanged from before availability existed.
+  static const _maxPerOrder = 10;
+
   Future<void> _proceedToCheckout() async {
     final product = _product;
     if (product == null || _isSubmitting) return;
@@ -415,6 +438,27 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          if (_isEverythingSoldOut) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkSurfaceMuted
+                                    : AppColors.lightSurfaceMuted,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Sve ulaznice za ovaj događaj su rasprodane.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: tertiaryText,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
                           if (_rows.isEmpty)
                             Text(
                               'Nema dostupnih sektora za ovaj događaj.',
@@ -426,21 +470,32 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                 for (final row in _rows)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 14),
-                                    child: QuantityRow(
-                                      title:
-                                          row.ticketTypeName ?? row.sector.name,
-                                      price: row.price,
-                                      quantity: _quantities[row.key] ?? 0,
-                                      onDecrement: () => setState(
-                                        () => _quantities[row.key] =
-                                            ((_quantities[row.key] ?? 0) - 1)
-                                                .clamp(0, 10),
-                                      ),
-                                      onIncrement: () => setState(
-                                        () => _quantities[row.key] =
-                                            ((_quantities[row.key] ?? 0) + 1)
-                                                .clamp(0, 10),
-                                      ),
+                                    child: Builder(
+                                      builder: (context) {
+                                        final quantity = _quantities[row.key] ?? 0;
+                                        // The row can always go as high as it already is, plus
+                                        // whatever the sector has left after the rest of the
+                                        // selection is accounted for.
+                                        final max = quantity + _remainingForSector(row.sector);
+                                        return QuantityRow(
+                                          title: row.ticketTypeName ?? row.sector.name,
+                                          price: row.price,
+                                          quantity: quantity,
+                                          maxQuantity: max.clamp(0, _maxPerOrder),
+                                          isSoldOut: row.sector.isSoldOut,
+                                          note: row.sector.isLowStock
+                                              ? 'Još ${row.sector.remainingCapacity}'
+                                              : null,
+                                          onDecrement: () => setState(
+                                            () => _quantities[row.key] =
+                                                (quantity - 1).clamp(0, _maxPerOrder),
+                                          ),
+                                          onIncrement: () => setState(
+                                            () => _quantities[row.key] =
+                                                (quantity + 1).clamp(0, _maxPerOrder),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                               ],
@@ -480,7 +535,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               child: PurchaseBottomBar(
                 totalLabel: 'Ukupno',
                 total: _total,
-                buttonLabel: 'Kupi ulaznice',
+                buttonLabel: _isEverythingSoldOut ? 'Rasprodano' : 'Kupi ulaznice',
                 enabled: _hasSelection && !_isSubmitting,
                 isLoading: _isSubmitting,
                 onPressed: _proceedToCheckout,
