@@ -21,11 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.IDENTITYSERVICE_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.IDENTITYSERVICE_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.IDENTITYSERVICE_AZURE_SUBSCRIPTION_ID }}
 
       - name: Build and push image
         run: az acr build -r eticketingacr -t web:${{ github.sha }} --build-arg NG_APP_API_BASE_URL=https://gateway.thankfulplant-ceb4a7f8.westeurope.azurecontainerapps.io/api --build-arg NG_APP_GOOGLE_MAPS_API_KEY=${{ secrets.NG_APP_GOOGLE_MAPS_API_KEY }} frontend/web
