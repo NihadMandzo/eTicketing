@@ -8,8 +8,29 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Server
   },
   {
+    // These three fetch live data unconditionally from their constructors
+    // (HomeComponent: categories/recommendations, ProductsComponent:
+    // categories/products, ProfileComponent: loadTicketsPage) — the same
+    // reason dogadjaji/:id is excluded above: they can't be prerendered
+    // against data that isn't known (or even reachable) at build time.
+    // Prerendering them made the whole build depend on the live API being
+    // reachable from the build container; when it wasn't, one route's
+    // worker timed out and killed every other route's prerender along
+    // with it.
+    path: '',
+    renderMode: RenderMode.Server
+  },
+  {
+    path: 'dogadjaji',
+    renderMode: RenderMode.Server
+  },
+  {
+    path: 'profil',
+    renderMode: RenderMode.Server
+  },
+  {
     // Sweeps up every other concrete, parameter-free page this app's Angular Router config
-    // resolves to (home, /pomoc, /prijava, /profil, ...) and prerenders it at build time.
+    // resolves to (/pomoc, /prijava, /profil, ...) and prerenders it at build time.
     //
     // Deliberately NOT the whole story for `'**'` specifically: a bare Prerender route like this
     // has no request-time fallback (Angular's own types forbid `fallback` unless `getPrerenderParams`
