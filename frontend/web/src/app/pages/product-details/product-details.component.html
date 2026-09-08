@@ -45,14 +45,27 @@
           @if (product.description) {
             <div class="description">
               <h2>O ponudi</h2>
-              <p>{{ product.description }}</p>
+              <!-- Clamped by default (see .description-text in the stylesheet, which also breaks
+                   long unbroken strings so a pasted URL can't push the card wider than its column).
+                   The toggle is rendered unconditionally rather than only when the text overflows:
+                   knowing that needs a measured element, and a toggle that appears a frame late is
+                   worse than one that is occasionally redundant. -->
+              <p class="description-text" [class.expanded]="isDescriptionExpanded()">{{ product.description }}</p>
+              <button type="button" class="description-toggle" (click)="toggleDescription()" [attr.aria-expanded]="isDescriptionExpanded()">
+                {{ isDescriptionExpanded() ? 'Prikaži manje' : 'Prikaži više' }}
+              </button>
             </div>
           }
 
           <div class="location-section">
             <h2>Lokacija</h2>
             <p class="location-city">{{ cityLabels[product.city] }}</p>
-            @if (mapsReady() && mapCenter(); as center) {
+            @if (!hasMapsKey) {
+              <!-- No GOOGLE_MAPS_API_KEY in .env. Loading the API keyless only buys Google's
+                   watermarked grey tile, which reads as a broken map; the city above is still the
+                   real answer to "where is this". -->
+              <div class="location-map location-map-placeholder">Mapa trenutno nije dostupna.</div>
+            } @else if (mapsReady() && mapCenter(); as center) {
               <google-map
                 class="location-map"
                 height="320px"
@@ -125,20 +138,32 @@
               @if (rows().length === 0) {
                 <p class="empty-text">Trenutno nema dostupnih sektora.</p>
               } @else {
+                @if (allSoldOut()) {
+                  <p class="sold-out-banner" role="status">Sve ulaznice su rasprodane.</p>
+                }
                 <div class="rows">
                   @for (row of rows(); track row.sectorId + (row.ticketTypeId ?? '')) {
-                    <div class="row">
+                    <div class="row" [class.row-sold-out]="row.soldOut">
                       <div>
                         <p class="row-name">{{ row.ticketTypeName ?? row.sectorName }}</p>
                         @if (row.ticketTypeName) {
                           <p class="row-sub">{{ row.sectorName }}</p>
                         }
                         <p class="row-price">{{ row.price }} KM</p>
+                        <!-- Three distinct states, never collapsed into two: a known count, a known
+                             zero, and "the backend did not say" — which must not read as sold out. -->
+                        @if (row.soldOut) {
+                          <p class="row-availability sold-out">Rasprodano</p>
+                        } @else if (row.remaining !== null) {
+                          <p class="row-availability" [class.scarce]="row.remaining <= 10">
+                            Dostupno: {{ row.remaining }}
+                          </p>
+                        }
                       </div>
                       <div class="stepper">
-                        <button type="button" (click)="decQuantity(row)">−</button>
+                        <button type="button" [disabled]="row.soldOut || quantityFor(row) === 0" (click)="decQuantity(row)" aria-label="Smanji količinu">−</button>
                         <span>{{ quantityFor(row) }}</span>
-                        <button type="button" (click)="incQuantity(row)">+</button>
+                        <button type="button" [disabled]="row.soldOut || !canIncrement(row)" (click)="incQuantity(row)" aria-label="Povećaj količinu">+</button>
                       </div>
                     </div>
                   }
@@ -150,7 +175,7 @@
                 @if (submitError()) {
                   <p class="error-text">{{ submitError() }}</p>
                 }
-                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting()" (click)="proceedToCheckout()">
+                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting() || allSoldOut()" (click)="proceedToCheckout()">
                   {{ isSubmitting() ? 'Molimo sačekajte...' : 'Kupi ulaznicu' }}
                 </button>
               }
@@ -175,17 +200,32 @@
                       : 'Za odabrani datum nema dostupnih ulaznica. Odaberite drugi datum.' }}
                 </p>
               } @else {
+                @if (allSoldOut()) {
+                  <p class="sold-out-banner" role="status">Za odabrani datum je sve rasprodano. Odaberite drugi datum.</p>
+                }
                 <div class="rows">
                   @for (row of rows(); track row.sectorId + (row.ticketTypeId ?? '')) {
-                    <div class="row row-bordered">
+                    <div class="row row-bordered" [class.row-sold-out]="row.soldOut">
                       <div>
                         <p class="row-name">{{ row.ticketTypeName ?? row.sectorName }}</p>
                         <p class="row-price">{{ row.price }} KM</p>
+                        <!-- Availability here is per (sector, DATE), so it is re-read on every date
+                             change — hence the explicit "checking" state rather than briefly showing
+                             the previous day's number as if it were this day's. -->
+                        @if (isReloadingAvailability()) {
+                          <p class="row-availability">Provjera dostupnosti…</p>
+                        } @else if (row.soldOut) {
+                          <p class="row-availability sold-out">Rasprodano za ovaj datum</p>
+                        } @else if (row.remaining !== null) {
+                          <p class="row-availability" [class.scarce]="row.remaining <= 10">
+                            Dostupno: {{ row.remaining }}
+                          </p>
+                        }
                       </div>
                       <div class="stepper">
-                        <button type="button" (click)="decQuantity(row)">−</button>
+                        <button type="button" [disabled]="row.soldOut || quantityFor(row) === 0" (click)="decQuantity(row)" aria-label="Smanji količinu">−</button>
                         <span>{{ quantityFor(row) }}</span>
-                        <button type="button" (click)="incQuantity(row)">+</button>
+                        <button type="button" [disabled]="row.soldOut || !canIncrement(row)" (click)="incQuantity(row)" aria-label="Povećaj količinu">+</button>
                       </div>
                     </div>
                   }
@@ -197,7 +237,7 @@
                 @if (submitError()) {
                   <p class="error-text">{{ submitError() }}</p>
                 }
-                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting()" (click)="proceedToCheckout()">
+                <button type="button" class="btn btn-primary btn-lg full-width" [disabled]="!hasAnySelection() || isSubmitting() || allSoldOut()" (click)="proceedToCheckout()">
                   {{ isSubmitting() ? 'Molimo sačekajte...' : 'Kupi ulaznicu' }}
                 </button>
                 <p class="hint-text">Otkazivanje besplatno do 24h prije posjete</p>
@@ -209,14 +249,23 @@
                 <p class="empty-text">Trenutno nema dostupnih mjesta.</p>
               } @else {
                 <p class="field-label">Odaberite mjesto</p>
+                <!-- Stated up front, because a grid of 60 identical tiles doesn't answer "is there
+                     anything left here" at a glance — and if there isn't, that is the one thing the
+                     buyer needs to know before scanning all 60. -->
+                <p class="spot-summary" [class.sold-out]="availableSpotCount() === 0">
+                  {{ availableSpotCount() === 0
+                      ? 'Sva mjesta su trenutno zauzeta.'
+                      : 'Slobodno: ' + availableSpotCount() + ' / ' + sectors().length }}
+                </p>
                 <div class="spot-grid">
                   @for (sector of sectors(); track sector.id) {
                     <button
                       type="button"
                       class="spot"
-                      [class.taken]="takenSpotIds().has(sector.id)"
+                      [class.taken]="spotUnavailable(sector)"
                       [class.selected]="selectedSpotSectorId() === sector.id"
-                      [disabled]="takenSpotIds().has(sector.id) || isSubmitting()"
+                      [disabled]="spotUnavailable(sector) || isSubmitting()"
+                      [attr.aria-label]="sector.name + (spotUnavailable(sector) ? ' — zauzeto' : ' — slobodno')"
                       (click)="selectSpot(sector)"
                     >
                       {{ sector.name }}

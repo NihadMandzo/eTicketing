@@ -30,7 +30,8 @@ public sealed class TicketResponseFactory
             ticket.TicketTypeId, ticketTypeName,
             ticket.Status, ticket.PricePaid, ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo, ticket.CreatedAt,
             payload,
-            TicketQrImage.ToDataUri(payload));
+            TicketQrImage.ToDataUri(payload),
+            ticket.IsInside);
     }
 
     /// <summary>Convenience overload for the common case where the navigations are already loaded.</summary>

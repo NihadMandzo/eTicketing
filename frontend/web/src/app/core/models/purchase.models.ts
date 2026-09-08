@@ -79,6 +79,12 @@ export interface Ticket {
    * share one QR implementation and neither needs a QR library of its own.
    */
   qrImage: string;
+  /**
+   * RecurringReservation only: whether the holder is currently inside, per the gate entry/exit
+   * toggle (see TicketValidationService). Always false for the one-shot modes, which are spent by
+   * their single scan rather than tracked in and out.
+   */
+  isInside: boolean;
 }
 
 export interface PurchaseResponse {

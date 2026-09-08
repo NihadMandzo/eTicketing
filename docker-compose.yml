@@ -280,7 +280,11 @@ services:
     build:
       context: ./frontend/web
       args:
-        WEB_API_BASE_URL: "${WEB_API_BASE_URL:-http://localhost:5000/api}"
+        # The root .env is not part of the web build context, so @ngx-env/builder cannot read it
+        # from inside the image — these ARGs are how the same two values reach the build there.
+        # (It merges process.env with whatever .env it finds, so both paths work unchanged.)
+        NG_APP_API_BASE_URL: "${NG_APP_API_BASE_URL:-http://localhost:5000/api}"
+        NG_APP_GOOGLE_MAPS_API_KEY: "${NG_APP_GOOGLE_MAPS_API_KEY:-}"
     container_name: eticketing-web
     environment:
       PORT: "4000"

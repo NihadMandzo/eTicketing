@@ -99,6 +99,26 @@ public class Ticket : BaseEntity
     // column additionally says which door they were admitted through.
     public Guid? ValidatedByDeviceId { get; private set; }
 
+    // ── RecurringReservation admission state ────────────────────────────────────────────────────
+    //
+    // A monthly parking space is not a one-shot admission: the holder drives in and out all month
+    // on the same ticket, so MarkValidated's terminal Status=Used would lock them out after their
+    // very first entry. These three columns carry the alternative — an entry/exit toggle over the
+    // ticket's ValidFrom..ValidTo window — and are only ever written for RecurringReservation
+    // tickets. Every other mode leaves them at their defaults and keeps burning on first scan.
+
+    /// <summary>True between a recorded entry and the matching exit. The invariant the whole
+    /// feature exists for: an entry scan is only admitted while this is false, so the same ticket
+    /// can never be used to enter twice without an exit in between.</summary>
+    public bool IsInside { get; private set; }
+
+    public DateTime? LastEntryAt { get; private set; }
+    public DateTime? LastExitAt { get; private set; }
+
+    /// <summary>How many times this ticket has been admitted over its whole period. Never reset —
+    /// it is the audit trail for a ticket that is deliberately not consumed by being used.</summary>
+    public int EntryCount { get; private set; }
+
     // Parameterless constructor stays available (private, not public) for EF Core materialization
     // and the object-initializer syntax the factories below use — nothing outside this class can
     // call `new Ticket { ... }` any more, so ValidDate/ValidFrom/ValidTo/SubscriptionId can only
@@ -187,10 +207,40 @@ public class Ticket : BaseEntity
     /// <summary>Admits this ticket at the gate: records who scanned it and when, and moves it to
     /// the terminal <see cref="TicketStatus.Used"/> so a second scan of the same QR is rejected.
     /// Callers must already hold the per-ticket Redis validation lock and must already have
-    /// checked the ticket is currently admittable — this method does not re-check, it commits.</summary>
+    /// checked the ticket is currently admittable — this method does not re-check, it commits.
+    ///
+    /// SingleOccurrence and DailyEntry only. A RecurringReservation ticket must go through
+    /// <see cref="RegisterEntry"/>/<see cref="RegisterExit"/> instead — burning it would end a
+    /// month-long parking subscription on its first morning.</summary>
     public void MarkValidated(Guid byUserId, DateTime at, Guid? byDeviceId = null)
     {
         Status = TicketStatus.Used;
+        ValidatedAt = at;
+        ValidatedByUserId = byUserId;
+        ValidatedByDeviceId = byDeviceId;
+    }
+
+    /// <summary>Admits a RecurringReservation ticket through the gate without consuming it: Status
+    /// stays <see cref="TicketStatus.Confirmed"/> for the rest of the period and only
+    /// <see cref="IsInside"/> flips. Same preconditions as <see cref="MarkValidated"/> — the caller
+    /// holds the validation lock and has already decided this scan is admissible.</summary>
+    public void RegisterEntry(Guid byUserId, DateTime at, Guid? byDeviceId = null)
+    {
+        IsInside = true;
+        LastEntryAt = at;
+        EntryCount++;
+        ValidatedAt = at;
+        ValidatedByUserId = byUserId;
+        ValidatedByDeviceId = byDeviceId;
+    }
+
+    /// <summary>Records the holder leaving, which is what re-arms the ticket for its next entry.
+    /// ValidatedAt/ValidatedByUserId are updated too so "last seen at this gate" stays truthful —
+    /// an exit is as much a scan as an entry.</summary>
+    public void RegisterExit(Guid byUserId, DateTime at, Guid? byDeviceId = null)
+    {
+        IsInside = false;
+        LastExitAt = at;
         ValidatedAt = at;
         ValidatedByUserId = byUserId;
         ValidatedByDeviceId = byDeviceId;

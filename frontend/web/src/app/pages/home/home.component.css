@@ -124,10 +124,25 @@
   padding: 40px 0;
 }
 
+/* Three cards per row at most, always the same size, always centred.
+ *
+ * The old `repeat(auto-fit, minmax(320px, 1fr))` did neither: `1fr` let every track absorb the
+ * leftover width, so one product rendered as a single card stretched across the whole page and two
+ * rendered as two half-page cards — the same product looked like a different component depending on
+ * how many of its siblings happened to be published. Capping the track at a fixed 340px keeps the
+ * card one size everywhere, `max-width` caps the row at three of them, and `justify-content: center`
+ * puts whatever is actually there in the middle. `auto-fit` (not `auto-fill`) is what makes the
+ * one- and two-card cases centre rather than sitting left with empty tracks beside them: it
+ * collapses the tracks nothing was placed in. */
 .events-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 340px));
+  justify-content: center;
   gap: 32px;
+  /* 3 * 340 card + 2 * 32 gap. */
+  max-width: 1084px;
+  margin-left: auto;
+  margin-right: auto;
   margin-bottom: 48px;
 }
 
@@ -230,8 +245,11 @@
     font-size: 1rem;
   }
 
+  /* Below the 300px track minimum there is only ever one card per row anyway; stating it keeps the
+     card from being pinned to 300px on a 360px phone. */
   .events-grid {
     grid-template-columns: 1fr;
+    max-width: 340px;
   }
   
 }

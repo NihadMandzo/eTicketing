@@ -1,5 +1,6 @@
 import { DatePipe, isPlatformBrowser } from '@angular/common';
-import { ChangeDetectionStrategy, Component, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GoogleMap, MapMarker } from '@angular/google-maps';
 import { forkJoin, of } from 'rxjs';
@@ -11,11 +12,15 @@ import { SectorService } from '../../core/services/sector.service';
 import { OrganizationService } from '../../core/services/organization.service';
 import { CartHoldGroup, CartService } from '../../core/services/cart.service';
 import { CITY_LABELS, Product } from '../../core/models/catalog.models';
-import { Sector } from '../../core/models/sector.models';
+import { Sector, isSoldOut } from '../../core/models/sector.models';
 import { Organization } from '../../core/models/organization.models';
 import { RecommendationService } from '../../core/services/recommendation.service';
 import { AuthService } from '../../core/services/auth.service';
 import { RecommendationRowComponent } from '../../components/recommendation-row/recommendation-row.component';
+
+/** Hard cap per row regardless of how much capacity is left — a storefront limit, not a
+ * capacity one, so a single buyer can't take a whole small sector in one click. */
+const MAX_PER_ORDER = 10;
 
 /** One purchasable row on the SingleOccurrence/DailyEntry purchase card — one
  * per Sector.TicketType, or one per Sector itself when it has no TicketTypes
@@ -26,6 +31,11 @@ interface PurchaseRow {
   ticketTypeId: string | null;
   ticketTypeName: string | null;
   price: number;
+  /** Live remaining capacity of the row's *sector*, not of the row: named ticket types share one
+   * pool, so three tiers of a 40-seat sector each show 40, and buying any of them draws that down
+   * for all three. Null means the backend could not state it — never render null as sold out. */
+  remaining: number | null;
+  soldOut: boolean;
 }
 
 function rowKey(sectorId: string, ticketTypeId: string | null): string {
@@ -58,6 +68,7 @@ function toIsoDate(date: Date): string {
 export class ProductDetailsComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly catalogService = inject(CatalogService);
   private readonly sectorService = inject(SectorService);
   private readonly organizationService = inject(OrganizationService);
@@ -79,11 +90,14 @@ export class ProductDetailsComponent {
       .join('');
   }
 
-
   // The Maps JS API is loaded lazily, browser-only (SSR has no `window`/`document` to inject a
   // <script> tag into, and there's nothing to render server-side anyway) — <google-map> only
   // renders once this flips true, see loadGoogleMapsScript().
   readonly mapsReady = signal(false);
+  /** No key configured in `.env` → the script is never requested at all. Loading it keyless just
+   * buys Google's watermarked grey tile, which reads as a broken map rather than an unconfigured
+   * one; the template shows a plain "map unavailable" panel instead. */
+  readonly hasMapsKey = environment.googleMapsApiKey.trim().length > 0;
   readonly mapZoom = 15;
   readonly mapOptions: google.maps.MapOptions = { disableDefaultUI: true, zoomControl: true, clickableIcons: false };
 
@@ -98,10 +112,18 @@ export class ProductDetailsComponent {
 
   readonly activeImageIndex = signal(0);
 
+  /** "O ponudi" starts clamped. A description can be several screens long, and at full height it
+   * pushes the location, organizer and everything below it off the page — so it opens as a fixed
+   * block with a "Prikaži više" toggle rather than running on. */
+  readonly isDescriptionExpanded = signal(false);
+
   // SingleOccurrence/DailyEntry: quantities keyed by rowKey().
   readonly quantities = signal<Record<string, number>>({});
   // DailyEntry only.
   readonly selectedDate = signal<string>(this.tomorrowIso());
+  /** DailyEntry re-requests its sectors whenever the date changes, because availability is per
+   * `(sector, date)` — this covers that in-flight window so the card doesn't flash "sold out". */
+  readonly isReloadingAvailability = signal(false);
   // RecurringReservation only.
   readonly selectedSpotSectorId = signal<string | null>(null);
   readonly takenSpotIds = signal<Set<string>>(new Set());
@@ -130,18 +152,33 @@ export class ProductDetailsComponent {
   });
 
   readonly rows = computed<PurchaseRow[]>(() =>
-    this.sectorsForSelectedDate().flatMap((sector): PurchaseRow[] =>
-      sector.ticketTypes.length > 0
+    this.sectorsForSelectedDate().flatMap((sector): PurchaseRow[] => {
+      const availability = { remaining: sector.remainingCapacity, soldOut: isSoldOut(sector) };
+      return sector.ticketTypes.length > 0
         ? sector.ticketTypes.map((tt) => ({
             sectorId: sector.id,
             sectorName: sector.name,
             ticketTypeId: tt.id,
             ticketTypeName: tt.name,
             price: tt.price,
+            ...availability,
           }))
-        : [{ sectorId: sector.id, sectorName: sector.name, ticketTypeId: null, ticketTypeName: null, price: sector.price }],
-    ),
+        : [
+            {
+              sectorId: sector.id,
+              sectorName: sector.name,
+              ticketTypeId: null,
+              ticketTypeName: null,
+              price: sector.price,
+              ...availability,
+            },
+          ];
+    }),
   );
+
+  /** Every row is exhausted — the card says so once, up top, instead of repeating "Rasprodano" on
+   * each line and still showing a live "Kupi" button underneath. */
+  readonly allSoldOut = computed(() => this.rows().length > 0 && this.rows().every((row) => row.soldOut));
 
   readonly total = computed(() => {
     const quantities = this.quantities();
@@ -159,6 +196,14 @@ export class ProductDetailsComponent {
     return this.sectors().find((s) => s.id === spotId)?.price ?? null;
   });
 
+  /** A parking space is unavailable either because the live counter says so or because a hold
+   * attempt just lost the race — one predicate so the grid and the click handler can't disagree. */
+  spotUnavailable(sector: Sector): boolean {
+    return isSoldOut(sector) || this.takenSpotIds().has(sector.id);
+  }
+
+  readonly availableSpotCount = computed(() => this.sectors().filter((s) => !this.spotUnavailable(s)).length);
+
   readonly mapCenter = computed<google.maps.LatLngLiteral | null>(() => {
     const product = this.product();
     if (!product) return null;
@@ -166,26 +211,62 @@ export class ProductDetailsComponent {
   });
 
   constructor() {
-    if (this.isBrowser) this.loadGoogleMapsScript();
+    if (this.isBrowser && this.hasMapsKey) this.loadGoogleMapsScript();
 
-    const id = this.route.snapshot.paramMap.get('id');
-    if (!id) {
-      this.loadError.set('Proizvod nije pronađen.');
-      this.isLoading.set(false);
-      return;
-    }
+    // Subscribed, not read once off `snapshot`. The router reuses this component for every
+    // `/dogadjaji/:id` navigation, so following a "Slično ovome" card from one product to another
+    // changes only the parameter — with a snapshot read in the constructor the URL changed and the
+    // page kept showing the previous product, which is the "clicking a product doesn't load it" bug.
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const id = params.get('id');
+      if (!id) {
+        this.loadError.set('Proizvod nije pronađen.');
+        this.isLoading.set(false);
+        return;
+      }
+      this.load(id);
+    });
+  }
+
+  /** Everything the previous product left behind, cleared before the next one's requests land —
+   * otherwise a reused component carries over its gallery index, cart quantities and held spot. */
+  private resetForNewProduct(): void {
+    this.product.set(null);
+    this.sectors.set([]);
+    this.organization.set(null);
+    this.similarProducts.set([]);
+    this.activeImageIndex.set(0);
+    this.isDescriptionExpanded.set(false);
+    this.quantities.set({});
+    this.selectedDate.set(this.tomorrowIso());
+    this.selectedSpotSectorId.set(null);
+    this.selectedSpotHoldId = null;
+    this.takenSpotIds.set(new Set());
+    this.submitError.set(null);
+    this.loadError.set(null);
+    this.isSubmitting.set(false);
+    this.isLoading.set(true);
+    this.isLoadingSimilar.set(true);
+  }
+
+  private load(id: string): void {
+    this.resetForNewProduct();
 
     forkJoin({
       product: this.catalogService.getProductById(id),
+      // No date on this first request: the mode isn't known until the product lands, and for
+      // DailyEntry the initial date is itself derived from the sectors that come back. The
+      // follow-up request in loadSectorsForDate() is what fills availability in for that mode.
       sectors: this.sectorService.getSectors(id),
     }).subscribe({
       next: ({ product, sectors }) => {
         this.product.set(product);
         this.sectors.set(sectors.items);
+        this.isLoading.set(false);
         if (product.ticketingMode === 'DailyEntry') {
           this.selectedDate.set(this.firstSelectableDate(sectors.items));
+          this.loadSectorsForDate();
         }
-        this.isLoading.set(false);
         this.loadOrganization(product.organizationId);
         this.trackView(product.id);
         this.loadSimilar(product.id);
@@ -195,6 +276,25 @@ export class ProductDetailsComponent {
         this.isLoading.set(false);
       },
     });
+  }
+
+  /** Re-reads the sector list for the currently-selected date so `remainingCapacity` refers to that
+   * specific day. DailyEntry only — every other mode's availability is date-independent and was
+   * already answered by the initial request. */
+  private loadSectorsForDate(): void {
+    const product = this.product();
+    if (!product || product.ticketingMode !== 'DailyEntry') return;
+
+    this.isReloadingAvailability.set(true);
+    this.sectorService
+      .getSectors(product.id, this.selectedDate())
+      .pipe(catchError(() => of(null)))
+      .subscribe((result) => {
+        // A failed refresh keeps whatever was on screen rather than blanking the card — the buyer
+        // can still try the hold, and the backend is the authority on capacity regardless.
+        if (result) this.sectors.set(result.items);
+        this.isReloadingAvailability.set(false);
+      });
   }
 
   /** Organizer name is a nice-to-have — it must never block or fail the
@@ -244,10 +344,9 @@ export class ProductDetailsComponent {
   /** Loads the Google Maps JS API script exactly once per page (shared across every
    * product-details view a buyer navigates to in one session), then flips mapsReady so the
    * @if in the template renders <google-map>. Dynamic <script> injection, rather than a static
-   * tag in index.html, because the API key comes from environment.ts — a compile-time constant,
-   * not read from the Dockerfile's GOOGLE_MAPS_API_KEY build arg (that arg is reserved for future
-   * wiring, same "no-op today" status as WEB_API_BASE_URL) — and index.html has no template step
-   * to read it from either way. */
+   * tag in index.html, because the API key comes from the repo-root `.env` through environment.ts
+   * (baked in at build time by @ngx-env/builder) and index.html has no template step to read it
+   * from. Only ever called when a key is actually configured — see hasMapsKey. */
   private loadGoogleMapsScript(): void {
     if (typeof google !== 'undefined' && google.maps) {
       this.mapsReady.set(true);
@@ -298,18 +397,40 @@ export class ProductDetailsComponent {
     return toIsoDate(new Date(last.periodYear!, last.periodMonth!, 0));
   });
 
-
   selectImage(index: number): void {
     this.activeImageIndex.set(index);
+  }
+
+  toggleDescription(): void {
+    this.isDescriptionExpanded.update((expanded) => !expanded);
   }
 
   quantityFor(row: PurchaseRow): number {
     return this.quantities()[rowKey(row.sectorId, row.ticketTypeId)] ?? 0;
   }
 
+  /** Total already picked across every row of one sector. Named ticket types draw on one shared
+   * capacity pool, so the ceiling has to be checked per sector, not per row — otherwise three
+   * tiers of a 5-seat sector would each happily go to 5 and the hold would fail at checkout. */
+  private selectedInSector(sectorId: string): number {
+    const quantities = this.quantities();
+    return this.rows()
+      .filter((row) => row.sectorId === sectorId)
+      .reduce((sum, row) => sum + (quantities[rowKey(row.sectorId, row.ticketTypeId)] ?? 0), 0);
+  }
+
+  /** Whether "+" should still be live for this row. Null remaining means the backend couldn't say,
+   * so only the storefront cap applies — an unknown must not lock the stepper. */
+  canIncrement(row: PurchaseRow): boolean {
+    if (this.quantityFor(row) >= MAX_PER_ORDER) return false;
+    if (row.remaining === null) return true;
+    return this.selectedInSector(row.sectorId) < row.remaining;
+  }
+
   incQuantity(row: PurchaseRow): void {
+    if (!this.canIncrement(row)) return;
     const key = rowKey(row.sectorId, row.ticketTypeId);
-    this.quantities.update((q) => ({ ...q, [key]: Math.min(10, (q[key] ?? 0) + 1) }));
+    this.quantities.update((q) => ({ ...q, [key]: (q[key] ?? 0) + 1 }));
   }
 
   decQuantity(row: PurchaseRow): void {
@@ -327,6 +448,8 @@ export class ProductDetailsComponent {
       this.quantities.set({});
       this.submitError.set(null);
     }
+    // Availability is per (sector, date) in this mode, so even a same-month change needs a refresh.
+    this.loadSectorsForDate();
   }
 
   /** SingleOccurrence/DailyEntry — places one hold per Sector that has any
@@ -377,6 +500,10 @@ export class ProductDetailsComponent {
           return;
         }
         this.submitError.set(this.extractErrorMessage(failed.error));
+        // Someone else took the capacity between page load and this click, so what is on screen is
+        // now stale in exactly the way that matters. Re-read it rather than leaving a "5 dostupno"
+        // label standing next to the message saying there weren't 5.
+        if (this.isConflict(failed.error)) this.refreshAvailability();
         return;
       }
 
@@ -405,11 +532,29 @@ export class ProductDetailsComponent {
     });
   }
 
+  /** Re-reads the live counters for whatever this product's mode keys on. */
+  private refreshAvailability(): void {
+    const product = this.product();
+    if (!product) return;
+
+    if (product.ticketingMode === 'DailyEntry') {
+      this.loadSectorsForDate();
+      return;
+    }
+
+    this.sectorService
+      .getSectors(product.id)
+      .pipe(catchError(() => of(null)))
+      .subscribe((result) => {
+        if (result) this.sectors.set(result.items);
+      });
+  }
+
   /** RecurringReservation — clicking a space attempts a live 1-quantity hold
    * immediately (D3: no fabricated spatial layout, taken/free is a real
    * hold attempt against the same mechanism every purchase path uses). */
   selectSpot(sector: Sector): void {
-    if (this.isSubmitting() || this.takenSpotIds().has(sector.id)) return;
+    if (this.isSubmitting() || this.spotUnavailable(sector)) return;
 
     this.isSubmitting.set(true);
     this.submitError.set(null);

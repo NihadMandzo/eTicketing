@@ -54,6 +54,14 @@ internal readonly record struct ValidationScope(
 /// 3. <b>The device never states its own scope.</b> <see cref="ValidateForDeviceAsync"/> takes the
 ///    GateDevice row, not a product id off the wire, so tampered firmware cannot widen what its
 ///    door admits.
+/// 4. <b>Not every ticket is spent by being used.</b> SingleOccurrence and DailyEntry tickets are
+///    one admission each and get burnt to <see cref="TicketStatus.Used"/> on their only scan.
+///    A RecurringReservation ticket is a month of parking, not one drive-in - burning it would
+///    lock its holder out from the second day onwards. Those scans toggle
+///    <see cref="Ticket.IsInside"/> instead: a scan while outside is an entry, a scan while inside
+///    is an exit, and the ticket stays Confirmed for its whole ValidFrom..ValidTo window. Because
+///    that toggle is the only way in, the same ticket can never be used to enter twice without an
+///    exit in between - which is exactly the rule this mode needs.
 /// </summary>
 public class TicketValidationService : ITicketValidationService
 {
@@ -219,6 +227,20 @@ public class TicketValidationService : ITicketValidationService
         if (validityError is not null)
             return Invalid(validityError.Value.Code, validityError.Value.Message, ticket);
 
+        return IsMultiPassage(ticket)
+            ? await AdmitMultiPassageAsync(ticket, scope, ct)
+            : await AdmitSinglePassageAsync(ticket, scope, ct);
+    }
+
+    /// <summary>A RecurringReservation ticket, told apart by the period columns only that mode
+    /// populates. Deliberately read off the ticket rather than off Sector.TicketingMode: the two
+    /// cannot disagree (Ticket's factories enforce it) and this needs no navigation loaded.</summary>
+    private static bool IsMultiPassage(Ticket ticket) => ticket.ValidFrom is not null && ticket.ValidTo is not null;
+
+    /// <summary>SingleOccurrence and DailyEntry: one admission, then the ticket is spent.</summary>
+    private async Task<Result<TicketValidationResponse>> AdmitSinglePassageAsync(
+        Ticket ticket, ValidationScope scope, CancellationToken ct)
+    {
         ticket.MarkValidated(scope.ValidatedByUserId, _clock.UtcNow, scope.ValidatedByDeviceId);
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -226,15 +248,37 @@ public class TicketValidationService : ITicketValidationService
             "Ulaznica {TicketId} za proizvod {ProductId} validirana od strane {UserId} (uređaj: {DeviceId}).",
             ticket.Id, ticket.ProductId, scope.ValidatedByUserId, scope.ValidatedByDeviceId);
 
-        return Result<TicketValidationResponse>.Success(new TicketValidationResponse(
-            IsValid: true,
-            Code: "ticket.valid",
-            Message: "Ulaznica je validna. Ulaz odobren.",
-            TicketId: ticket.Id,
-            SectorName: ticket.Sector?.Name,
-            TicketTypeName: ticket.TicketType?.Name,
-            HolderEmail: ticket.UserEmail,
-            ValidatedAt: ticket.ValidatedAt));
+        return Valid("ticket.valid", "Ulaznica je validna. Ulaz odobren.", ticket, GatePassageDirection.Entry);
+    }
+
+    /// <summary>
+    /// RecurringReservation: the ticket is a period, not a single admission, so a scan moves the
+    /// holder through the gate in whichever direction they are not currently in.
+    ///
+    /// Reading the direction off stored state rather than taking it from the scanner is what makes
+    /// the "no two entries without an exit" rule hold at all: there is no request field a caller
+    /// could set to enter twice, and a second consecutive scan is the exit it actually is.
+    /// </summary>
+    private async Task<Result<TicketValidationResponse>> AdmitMultiPassageAsync(
+        Ticket ticket, ValidationScope scope, CancellationToken ct)
+    {
+        var now = _clock.UtcNow;
+        var isExit = ticket.IsInside;
+
+        if (isExit)
+            ticket.RegisterExit(scope.ValidatedByUserId, now, scope.ValidatedByDeviceId);
+        else
+            ticket.RegisterEntry(scope.ValidatedByUserId, now, scope.ValidatedByDeviceId);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Pretplatnička ulaznica {TicketId} za proizvod {ProductId}: {Direction} zabilježen od strane {UserId} (uređaj: {DeviceId}).",
+            ticket.Id, ticket.ProductId, isExit ? "izlaz" : "ulaz", scope.ValidatedByUserId, scope.ValidatedByDeviceId);
+
+        return isExit
+            ? Valid("ticket.exit_recorded", "Izlaz zabilježen. Ulaznica je ponovo spremna za ulaz.", ticket, GatePassageDirection.Exit)
+            : Valid("ticket.valid", "Ulaznica je validna. Ulaz odobren.", ticket, GatePassageDirection.Entry);
     }
 
     /// <summary>Mode-aware "is today inside this ticket's window". DailyEntry and
@@ -273,6 +317,20 @@ public class TicketValidationService : ITicketValidationService
     /// a UTC-derived "today" rejects valid tickets for the first hour or two after local midnight.</summary>
     private DateOnly Today() => _clock.Today();
 
+    private static Result<TicketValidationResponse> Valid(
+        string code, string message, Ticket ticket, GatePassageDirection direction) =>
+        Result<TicketValidationResponse>.Success(new TicketValidationResponse(
+            IsValid: true,
+            Code: code,
+            Message: message,
+            TicketId: ticket.Id,
+            SectorName: ticket.Sector?.Name,
+            TicketTypeName: ticket.TicketType?.Name,
+            HolderEmail: ticket.UserEmail,
+            ValidatedAt: ticket.ValidatedAt,
+            Direction: direction,
+            IsInside: ticket.IsInside));
+
     private static Result<TicketValidationResponse> Invalid(string code, string message, Ticket? ticket = null) =>
         Result<TicketValidationResponse>.Success(new TicketValidationResponse(
             IsValid: false,
@@ -282,5 +340,7 @@ public class TicketValidationService : ITicketValidationService
             SectorName: ticket?.Sector?.Name,
             TicketTypeName: ticket?.TicketType?.Name,
             HolderEmail: ticket?.UserEmail,
-            ValidatedAt: ticket?.ValidatedAt));
+            ValidatedAt: ticket?.ValidatedAt,
+            Direction: GatePassageDirection.None,
+            IsInside: ticket?.IsInside ?? false));
 }

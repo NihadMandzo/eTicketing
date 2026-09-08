@@ -15,8 +15,12 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@angular/build:application",
+          "builder": "@ngx-env/builder:application",
           "options": {
+            "ngxEnv": {
+              "root": "../..",
+              "prefix": "^NG_APP_"
+            },
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "assets": [
@@ -44,8 +48,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
                 }
               ],
               "outputHashing": "all"
@@ -65,7 +69,7 @@
           "defaultConfiguration": "production"
         },
         "serve": {
-          "builder": "@angular/build:dev-server",
+          "builder": "@ngx-env/builder:dev-server",
           "configurations": {
             "production": {
               "buildTarget": "web:build:production"
@@ -77,7 +81,7 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@ngx-env/builder:unit-test"
         }
       }
     }

@@ -90,4 +90,8 @@ public record TicketResponse(
     DateOnly? ValidTo,
     DateTime CreatedAt,
     string QrPayload,
-    string QrImage);
+    string QrImage,
+    /// <summary>RecurringReservation only: whether the holder is currently inside, per the gate's
+    /// entry/exit toggle (see TicketValidationService). Always false for the one-shot modes, which
+    /// are spent by their single scan rather than tracked in and out.</summary>
+    bool IsInside = false);

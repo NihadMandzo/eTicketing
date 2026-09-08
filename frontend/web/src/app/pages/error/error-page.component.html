@@ -1,0 +1,22 @@
+<div class="error-page">
+  <div class="error-card">
+    <p class="error-code" aria-hidden="true">{{ code() }}</p>
+
+    <!-- The code above is decorative (aria-hidden) and repeated in this heading's accessible text,
+         so a screen reader hears "Greška 404. Stranica nije pronađena." once, not the digits twice. -->
+    <h1 class="error-title"><span class="visually-hidden">Greška {{ code() }}. </span>{{ title() }}</h1>
+    <p class="error-message">{{ message() }}</p>
+
+    <div class="error-actions">
+      <a routerLink="/" class="btn btn-primary">Nazad na početnu</a>
+      <a routerLink="/dogadjaji" class="btn btn-outline">Pregledaj ponudu</a>
+      @if (offerLogin()) {
+        <a routerLink="/prijava" class="btn btn-outline">Prijavite se</a>
+      }
+    </div>
+
+    <p class="error-help">
+      Ako se problem ponavlja, javite nam se preko <a routerLink="/kontakt">kontakt stranice</a>.
+    </p>
+  </div>
+</div>

@@ -1,0 +1,11 @@
+@if (isLoading()) {
+  <!-- aria-live is deliberately absent: this appears on literally every request, and announcing
+       "učitavanje" each time would make a screen reader unusable. `aria-busy` on the region plus
+       the visually-hidden label below is the quieter, more accurate signal. -->
+  <div class="loading-overlay" role="alert" aria-busy="true">
+    <div class="loading-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <span class="loading-text">Učitavanje…</span>
+    </div>
+  </div>
+}

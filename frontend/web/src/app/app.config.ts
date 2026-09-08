@@ -1,5 +1,12 @@
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
-import { ApplicationConfig, inject, provideAppInitializer, provideBrowserGlobalErrorListeners } from '@angular/core';
+import {
+  ApplicationConfig,
+  PLATFORM_ID,
+  inject,
+  provideAppInitializer,
+  provideBrowserGlobalErrorListeners,
+} from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
@@ -13,17 +20,28 @@ import { ThemeService } from './core/services/theme.service';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    // Every navigation lands at the top of the new screen. Without this the
-    // router leaves the scroll offset untouched, so following a footer link
-    // from halfway down a long list opened the next page mid-way down. Back
-    // and forward still restore where the user actually was.
-    provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),
+    // `'top'`, not `'enabled'`. Both send an ordinary link click to the top of the next screen, but
+    // `'enabled'` additionally replays a remembered scroll offset on back/forward — and every page
+    // here renders from an HTTP response that lands *after* the navigation completes. So at the
+    // moment it restored, the document was still a spinner one viewport tall, the offset got clamped
+    // to whatever fitted, and going back landed at an arbitrary point in the page. `'top'` drops the
+    // replay: coming back simply loads that page again, from the top.
+    provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'top', anchorScrolling: 'enabled' })),
     provideClientHydration(withEventReplay()),
     provideHttpClient(withFetch(), withInterceptors([credentialsInterceptor, authRefreshInterceptor])),
-    // Restores auth state from the session cookie on every page load/refresh,
-    // so a logged-in user doesn't appear signed out after an F5.
-    provideAppInitializer(() => firstValueFrom(inject(AuthService).loadCurrentUser())),
+    // Restores auth state from the session cookie on every page load/refresh, so a logged-in user
+    // doesn't appear signed out after an F5.
+    //
+    // Browser-only. On the server there is no session cookie to read — prerendering happens at
+    // build time with no backend at all, and the per-request SSR path doesn't forward the visitor's
+    // cookies to HttpClient — so the call could only ever fail there, while still costing a request
+    // per render and risking a "signed out" answer being carried into the client through hydration's
+    // HTTP transfer cache.
+    provideAppInitializer(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+      return firstValueFrom(inject(AuthService).loadCurrentUser());
+    }),
     // Applies the persisted/system light-dark theme before first paint.
     provideAppInitializer(() => inject(ThemeService).init()),
-  ]
+  ],
 };

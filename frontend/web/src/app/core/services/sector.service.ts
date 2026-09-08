@@ -20,10 +20,20 @@ export class SectorService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = environment.apiBaseUrl;
 
-  /** GET /api/sectors?productId= — Published only, public. */
-  getSectors(productId: string): Observable<PagedResult<Sector>> {
+  /**
+   * GET /api/sectors?productId= — Published only, public.
+   *
+   * `date` (`yyyy-MM-dd`) is what makes `remainingCapacity` meaningful for a DailyEntry product:
+   * that mode counts capacity per `(sector, date)`, so the backend returns null rather than guess
+   * when no date is supplied. Ignored by every other mode. Callers showing a date picker should
+   * re-request on each change, since the availability answer changes with it.
+   */
+  getSectors(productId: string, date?: string | null): Observable<PagedResult<Sector>> {
+    const params: Record<string, string> = { productId, pageSize: '100' };
+    if (date) params['date'] = date;
+
     return this.http
-      .get<PagedResult<Sector>>(`${this.baseUrl}/sectors`, { params: { productId, pageSize: '100' } })
+      .get<PagedResult<Sector>>(`${this.baseUrl}/sectors`, { params })
       .pipe(map((result) => ({ ...result, items: result.items.map(normalizeSector) })));
   }
 

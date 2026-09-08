@@ -19,12 +19,18 @@
   padding: 24px 0;
 }
 
-/* Same auto-fit track sizing as the home page's .events-grid, so a recommendation row lines up
-   with the browse grid above it instead of introducing a second card width. */
+/* Same track sizing as the home page's .events-grid, so a recommendation row lines up with the
+   browse grid below it instead of introducing a second card width. See that rule for why the track
+   is a fixed 340px rather than 1fr. */
 .recommendation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 340px));
+  justify-content: center;
   gap: 32px;
+  /* 3 * 340 card + 2 * 32 gap. */
+  max-width: 1084px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 @media (max-width: 768px) {
@@ -32,10 +38,11 @@
     margin-bottom: 32px;
   }
 
-  /* Single column below the 320px card minimum — matching .events-grid's breakpoint keeps the
+  /* Single column below the 300px card minimum — matching .events-grid's breakpoint keeps the
      page from having two different collapse points. */
   .recommendation-grid {
     grid-template-columns: 1fr;
+    max-width: 340px;
     gap: 24px;
   }
 }

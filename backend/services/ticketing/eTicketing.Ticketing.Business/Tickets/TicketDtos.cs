@@ -33,6 +33,23 @@ public sealed record ValidateTicketRequest
     public List<Guid>? SectorIds { get; init; }
 }
 
+/// <summary>Which way through the gate a scan moved the holder.
+///
+/// Persisted nowhere — it is a per-scan answer, not ticket state — but serialized as the integer
+/// ordinal like every other enum on this wire, so append only.</summary>
+public enum GatePassageDirection
+{
+    /// <summary>Nothing moved: a rejected scan, or a one-shot ticket, which has no direction to
+    /// speak of. The default, so existing clients that ignore the field are unaffected.</summary>
+    None,
+
+    /// <summary>The holder was admitted.</summary>
+    Entry,
+
+    /// <summary>A RecurringReservation holder left, re-arming their ticket for the next entry.</summary>
+    Exit
+}
+
 /// <summary>
 /// Deliberately returned as a SUCCESSFUL Result even when <paramref name="IsValid"/> is false. A
 /// ticket that's already been used, belongs to another event, or expired is an expected, displayable
@@ -40,6 +57,12 @@ public sealed record ValidateTicketRequest
 /// swallowed it as a 404. Genuine failures (caller isn't an organizer → 403, lost the Redis lock →
 /// 409) stay Result.Failure.
 /// </summary>
+/// <param name="Direction">What this particular scan did. <see cref="GatePassageDirection.Entry"/>
+/// for every admitted one-shot ticket and for a subscription holder coming in;
+/// <see cref="GatePassageDirection.Exit"/> for a subscription holder going out — a valid scan that
+/// must NOT read as "admitted" on the scanner's green card.</param>
+/// <param name="IsInside">RecurringReservation only: whether the holder is inside after this scan.
+/// Always false for the one-shot modes, which have no such state.</param>
 public sealed record TicketValidationResponse(
     bool IsValid,
     string Code,
@@ -48,4 +71,6 @@ public sealed record TicketValidationResponse(
     string? SectorName,
     string? TicketTypeName,
     string? HolderEmail,
-    DateTime? ValidatedAt);
+    DateTime? ValidatedAt,
+    GatePassageDirection Direction = GatePassageDirection.None,
+    bool IsInside = false);

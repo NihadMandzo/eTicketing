@@ -10,18 +10,56 @@ import { PurchaseService } from '../../core/services/purchase.service';
 import { SubscriptionService } from '../../core/services/subscription.service';
 import { Product } from '../../core/models/catalog.models';
 import { Ticket } from '../../core/models/purchase.models';
-import {
-  SUBSCRIPTION_STATUS_LABELS,
-  Subscription,
-} from '../../core/models/subscription.models';
+import { SUBSCRIPTION_STATUS_LABELS, Subscription } from '../../core/models/subscription.models';
 import { extractErrorMessage } from '../../core/utils/api-error.util';
+import {
+  TICKET_VALIDITY_LABELS,
+  TicketValidity,
+  isUsable,
+  resolveTicketValidity,
+} from '../../core/utils/ticket-validity.util';
 import { TicketDetailModalComponent } from '../../components/ticket-detail-modal/ticket-detail-modal.component';
 import { environment } from '../../../environments/environment';
 import { passwordStrengthValidator } from '../../core/utils/password.validator';
 
 type TicketFilter = 'sve' | 'SingleOccurrence' | 'DailyEntry' | 'RecurringReservation';
+type ProfileTab = 'tickets' | 'subscriptions' | 'settings';
 
 const TICKETS_PAGE_SIZE = 20;
+
+/** One product's worth of tickets, in the order they should be shown. Mirrors mobile's
+ * `_TicketGroup` in my_tickets_screen.dart. */
+interface TicketGroup {
+  productId: string;
+  title: string;
+  subtitle: string;
+  tickets: Ticket[];
+}
+
+/** The same treatment for subscriptions — "grupisati po proizvodu, i sve ostalo isto". */
+interface SubscriptionGroup {
+  productId: string;
+  title: string;
+  subtitle: string;
+  subscriptions: Subscription[];
+}
+
+const MONTH_NAMES = [
+  'januar', 'februar', 'mart', 'april', 'maj', 'juni',
+  'juli', 'august', 'septembar', 'oktobar', 'novembar', 'decembar',
+];
+
+function formatLongDate(date: Date): string {
+  return `${date.getDate()}. ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/** Bosnian count agreement: 1 ulaznica, 2–4 ulaznice, 5+ ulaznica. Same `switch` as mobile's
+ * `_groupSubtitle`, kept identical so the two apps read the same. */
+function pluralize(count: number, one: string, few: string, many: string): string {
+  if (count === 1) return `${count} ${one}`;
+  if (count >= 2 && count <= 4) return `${count} ${few}`;
+  return `${count} ${many}`;
+}
 
 function newPasswordsMatchValidator(control: AbstractControl): ValidationErrors | null {
   const newPassword = control.get('newPassword')?.value;
@@ -52,7 +90,7 @@ export class ProfileComponent {
     return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
   });
 
-  readonly activeTab = signal<'tickets' | 'subscriptions' | 'settings'>('tickets');
+  readonly activeTab = signal<ProfileTab>('tickets');
 
   readonly subscriptions = signal<Subscription[]>([]);
   readonly isLoadingSubscriptions = signal(false);
@@ -60,6 +98,8 @@ export class ProfileComponent {
   readonly subscriptionMessage = signal<string | null>(null);
   readonly cancellingSubscriptionId = signal<string | null>(null);
   readonly statusLabels = SUBSCRIPTION_STATUS_LABELS;
+  readonly validityLabels = TICKET_VALIDITY_LABELS;
+
   readonly tickets = signal<Ticket[]>([]);
   readonly isLoadingTickets = signal(true);
   readonly isLoadingMoreTickets = signal(false);
@@ -76,7 +116,7 @@ export class ProfileComponent {
   // SectorName/ValidDate/ValidFrom/ValidTo) — SingleOccurrence tickets in
   // particular have no per-ticket date at all, since the single showing
   // date lives on Product.Date. Batch-fetched below (small N in practice)
-  // for both a display fallback and the upcoming/past split.
+  // for group headings, a display fallback and the upcoming/past split.
   private readonly productsById = signal<Record<string, Product>>({});
 
   // Ticket doesn't carry TicketingMode directly (denormalized only as far as
@@ -89,8 +129,24 @@ export class ProfileComponent {
     return 'SingleOccurrence';
   }
 
+  /** The last date this ticket is good for — a subscription's period end, a day pass's day, or the
+   * event's own date. Drives both the upcoming/past split and the validity badge. */
   private effectiveDate(ticket: Ticket): Date | null {
     const raw = ticket.validTo ?? ticket.validDate ?? this.productsById()[ticket.productId]?.date ?? null;
+    return raw ? new Date(raw) : null;
+  }
+
+  /**
+   * The date to *show*, which is the date of the thing the ticket admits you to and nothing else.
+   * For a subscription that is the start of its period, not the end `effectiveDate` returns.
+   *
+   * Deliberately no `createdAt` fallback (same reasoning as mobile's `_displayDate`): `createdAt` is
+   * when the ticket was *bought*, which is not a question any holder is asking — and on a
+   * SingleOccurrence ticket, which carries no date of its own, it was the only date shown, so the
+   * card confidently displayed the wrong day.
+   */
+  private displayDate(ticket: Ticket): Date | null {
+    const raw = ticket.validDate ?? ticket.validFrom ?? this.productsById()[ticket.productId]?.date ?? null;
     return raw ? new Date(raw) : null;
   }
 
@@ -102,12 +158,82 @@ export class ProfileComponent {
     return date >= today;
   }
 
-  readonly filteredTickets = computed(() => {
+  validityOf(ticket: Ticket): TicketValidity {
+    return resolveTicketValidity(ticket, this.effectiveDate(ticket));
+  }
+
+  /** Three visual groups, not six — matching mobile's `ticketValidityColors`: usable is the
+   * brand-adjacent green, spent-or-lapsed is neutral grey, and cancelled is the error red, because
+   * a cancelled ticket is something gone wrong the holder may need to act on while a used or
+   * expired one is simply finished. */
+  validityTone(validity: TicketValidity): 'ok' | 'neutral' | 'bad' {
+    if (isUsable(validity)) return 'ok';
+    return validity === 'cancelled' ? 'bad' : 'neutral';
+  }
+
+  private readonly visibleTickets = computed(() => {
     const filter = this.ticketFilter();
     const upcoming = this.showUpcoming();
     return this.tickets()
       .filter((t) => filter === 'sve' || this.modeOf(t) === filter)
       .filter((t) => this.isUpcoming(t) === upcoming);
+  });
+
+  /**
+   * The visible tickets, gathered under the product each belongs to.
+   *
+   * **Grouping is the point.** Four tickets to the same concert are one purchase and one plan for
+   * one evening; as four peer rows in a flat list they read as four separate things to keep track
+   * of. The product name is stated once, as a heading, and the stubs beneath it carry only what
+   * differs between them (sector, ticket type, validity).
+   *
+   * Groups are ordered by their soonest ticket, and tickets within a group by date too, so the next
+   * thing the buyer has to turn up to is always at the top. The `createdAt` fallbacks in both sorts
+   * are tie-breakers only and never rendered — a dateless ticket still needs a stable position, and
+   * purchase order is the sanest one to give it.
+   */
+  readonly ticketGroups = computed<TicketGroup[]>(() => {
+    const byProduct = new Map<string, Ticket[]>();
+    for (const ticket of this.visibleTickets()) {
+      byProduct.set(ticket.productId, [...(byProduct.get(ticket.productId) ?? []), ticket]);
+    }
+
+    const sortKey = (ticket: Ticket) => (this.effectiveDate(ticket) ?? new Date(ticket.createdAt)).getTime();
+
+    const groups = [...byProduct.entries()].map(([productId, tickets]): TicketGroup => {
+      const sorted = [...tickets].sort((a, b) => sortKey(a) - sortKey(b));
+      const product = this.productsById()[productId];
+      const date = this.displayDate(sorted[0]);
+      const count = pluralize(sorted.length, 'ulaznica', 'ulaznice', 'ulaznica');
+      return {
+        productId,
+        title: product?.name ?? sorted[0].sectorName,
+        subtitle: date ? `${formatLongDate(date)} · ${count}` : count,
+        tickets: sorted,
+      };
+    });
+
+    return groups.sort((a, b) => sortKey(a.tickets[0]) - sortKey(b.tickets[0]));
+  });
+
+  readonly subscriptionGroups = computed<SubscriptionGroup[]>(() => {
+    const byProduct = new Map<string, Subscription[]>();
+    for (const subscription of this.subscriptions()) {
+      byProduct.set(subscription.productId, [...(byProduct.get(subscription.productId) ?? []), subscription]);
+    }
+
+    return [...byProduct.entries()]
+      .map(([productId, subs]): SubscriptionGroup => {
+        const sorted = [...subs].sort((a, b) => a.sectorName.localeCompare(b.sectorName, 'bs'));
+        const product = this.productsById()[productId];
+        return {
+          productId,
+          title: product?.name ?? sorted[0].sectorName,
+          subtitle: pluralize(sorted.length, 'pretplata', 'pretplate', 'pretplata'),
+          subscriptions: sorted,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, 'bs'));
   });
 
   // Ticket detail overlay (parity with mobile's ticket_qr_screen.dart).
@@ -133,11 +259,14 @@ export class ProfileComponent {
   readonly passwordMessage = signal<string | null>(null);
   readonly passwordError = signal<string | null>(null);
 
+  // Mirrors eTicketing.Identity's UpdateUserRequestValidator — the backend stays authoritative and
+  // re-checks regardless, but every rule it enforces has to be visible here too (see
+  // .claude/rules/00-workflow-and-testing.md).
   readonly profileForm = this.fb.nonNullable.group({
-    firstName: ['', [Validators.required, Validators.minLength(2)]],
-    lastName: ['', [Validators.required, Validators.minLength(2)]],
-    username: ['', [Validators.required, Validators.minLength(3)]],
-    phoneNumber: [''],
+    firstName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
+    lastName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
+    username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
+    phoneNumber: ['', [Validators.maxLength(20)]],
   });
 
   readonly passwordForm = this.fb.nonNullable.group(
@@ -173,6 +302,14 @@ export class ProfileComponent {
     this.loadTicketsPage(0);
   }
 
+  selectTab(tab: ProfileTab): void {
+    if (tab === 'subscriptions') {
+      this.openSubscriptions();
+      return;
+    }
+    this.activeTab.set(tab);
+  }
+
   /** Appends page `page`'s tickets onto whatever's already loaded — `tickets()` is a running list
    * across every page fetched so far, not just the current page, so "Prikaži još" never has to
    * throw away what's already on screen. */
@@ -186,27 +323,36 @@ export class ProfileComponent {
         this.ticketsPage.set(page);
         this.ticketsTotalCount.set(result.totalCount);
         loadingSignal.set(false);
-
-        // Only fetch products this page actually introduced — productsById already carries
-        // whatever earlier pages resolved, so re-fetching those every "Prikaži još" click would be
-        // wasted requests for products already known.
-        const alreadyKnown = this.productsById();
-        const newProductIds = [...new Set(result.items.map((t) => t.productId))].filter((id) => !alreadyKnown[id]);
-        if (newProductIds.length === 0) return;
-        forkJoin(
-          newProductIds.map((id) => this.catalogService.getProductById(id).pipe(catchError(() => of(null)))),
-        ).subscribe((products) => {
-          const byId = { ...this.productsById() };
-          for (const product of products) {
-            if (product) byId[product.id] = product;
-          }
-          this.productsById.set(byId);
-        });
+        this.resolveProducts(result.items.map((t) => t.productId));
       },
       error: () => {
         loadingSignal.set(false);
       },
     });
+  }
+
+  /**
+   * Fills `productsById` for any id it doesn't already hold. Both tickets and subscriptions feed
+   * into it, since both are grouped under the product's name — and whichever tab loads second gets
+   * its headings for free.
+   *
+   * Only the ids actually new to the map are requested: re-fetching known products on every
+   * "Prikaži još" click would be wasted round-trips for names already on screen.
+   */
+  private resolveProducts(productIds: string[]): void {
+    const known = this.productsById();
+    const missing = [...new Set(productIds)].filter((id) => !known[id]);
+    if (missing.length === 0) return;
+
+    forkJoin(missing.map((id) => this.catalogService.getProductById(id).pipe(catchError(() => of(null))))).subscribe(
+      (products) => {
+        const byId = { ...this.productsById() };
+        for (const product of products) {
+          if (product) byId[product.id] = product;
+        }
+        this.productsById.set(byId);
+      },
+    );
   }
 
   loadMoreTickets(): void {
@@ -225,19 +371,12 @@ export class ProfileComponent {
     return `${environment.apiBaseUrl}/tickets/${ticket.id}/pdf`;
   }
 
-  statusLabel(status: Ticket['status']): string {
-    switch (status) {
-      case 'Confirmed':
-        return 'Potvrđena';
-      case 'Processing':
-        return 'U obradi';
-      case 'Ready':
-        return 'Spremna';
-      case 'Cancelled':
-        return 'Otkazana';
-      default:
-        return status;
-    }
+  /** The one line under a ticket's sector: which day it admits you, and for a subscription, the
+   * period it covers. */
+  ticketDateLine(ticket: Ticket): string | null {
+    if (ticket.validDate) return `Datum: ${ticket.validDate}`;
+    if (ticket.validFrom) return `Period: ${ticket.validFrom} – ${ticket.validTo}`;
+    return null;
   }
 
   saveProfile(): void {
@@ -319,6 +458,8 @@ export class ProfileComponent {
       next: (result) => {
         this.subscriptions.set(result.items);
         this.isLoadingSubscriptions.set(false);
+        // Same product names as the ticket groups use, so both tabs head their groups identically.
+        this.resolveProducts(result.items.map((s) => s.productId));
       },
       error: (error: unknown) => {
         this.isLoadingSubscriptions.set(false);

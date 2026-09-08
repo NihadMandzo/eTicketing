@@ -10,6 +10,11 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The bar's height is a fixed budget, and the logo and the vertical padding split it between
+ * them. It used to be 16px padding around a 42px-tall account trigger = 74px; the logo now takes
+ * that space instead (58px + 8px padding = 74px), which is the whole trick to making the mark
+ * noticeably bigger without moving anything below it by a pixel. Change one of the two numbers
+ * and the other has to move the same amount in the opposite direction. */
 .navbar-container {
   display: flex;
   align-items: center;
@@ -17,7 +22,7 @@
   gap: 16px;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 16px 24px;
+  padding: 8px 24px;
 }
 
 .logo {
@@ -32,7 +37,8 @@
 }
 
 .logo-image {
-  height: 40px;
+  /* 58 + 2*8 padding = the same 74px the old 40 + 2*16 came to. See .navbar-container. */
+  height: 58px;
   width: auto;
   display: block;
 }
@@ -240,12 +246,13 @@
 /* ---- Narrow viewports ---- */
 
 @media (max-width: 768px) {
+  /* Same budget arithmetic as desktop, one size down: 50 + 2*8 = the 34 + 2*12 this replaces. */
   .navbar-container {
-    padding: 12px 16px;
+    padding: 8px 16px;
   }
 
   .logo-image {
-    height: 34px;
+    height: 50px;
   }
 
   /* The trigger becomes a square hamburger button: the name would crowd the

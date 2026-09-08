@@ -1,50 +1,174 @@
 @if (currentUser(); as user) {
   <div class="profile-page">
     <section class="page-header">
-      <div class="container">
+      <div class="header-inner">
         <div class="avatar">{{ initials() }}</div>
-        <h1>{{ user.firstName }} {{ user.lastName }}</h1>
-        <p class="page-subtitle">{{ user.email }}</p>
+        <div class="identity">
+          <h1>{{ user.firstName }} {{ user.lastName }}</h1>
+          <p class="page-subtitle">{{ user.email }}</p>
+        </div>
       </div>
     </section>
 
     <section class="content-section">
-      <div class="container">
-        <div class="tab-switcher" role="tablist">
+      <div class="profile-shell">
+        <!-- Left rail. Below 900px it becomes a horizontal scroller rather than stacking three
+             full-width buttons, which would push the panel a screen down on a phone. -->
+        <nav class="side-nav" role="tablist" aria-label="Sekcije profila">
           <button
             type="button"
             role="tab"
-            class="tab-btn"
+            class="side-nav-item"
             [class.active]="activeTab() === 'tickets'"
             [attr.aria-selected]="activeTab() === 'tickets'"
-            (click)="activeTab.set('tickets')"
+            (click)="selectTab('tickets')"
           >
-            Moje ulaznice
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 9a3 3 0 1 0 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 1 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+            </svg>
+            <span>Moje ulaznice</span>
           </button>
           <button
             type="button"
             role="tab"
-            class="tab-btn"
+            class="side-nav-item"
             [class.active]="activeTab() === 'subscriptions'"
             [attr.aria-selected]="activeTab() === 'subscriptions'"
-            (click)="openSubscriptions()"
+            (click)="selectTab('subscriptions')"
           >
-            Moje pretplate
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" />
+            </svg>
+            <span>Moje pretplate</span>
           </button>
           <button
             type="button"
             role="tab"
-            class="tab-btn"
+            class="side-nav-item"
             [class.active]="activeTab() === 'settings'"
             [attr.aria-selected]="activeTab() === 'settings'"
-            (click)="activeTab.set('settings')"
+            (click)="selectTab('settings')"
           >
-            Postavke
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+            </svg>
+            <span>Postavke</span>
           </button>
-        </div>
+        </nav>
 
-        @if (activeTab() === 'subscriptions') {
-          <div class="subscriptions-panel">
+        <div class="panel">
+          <!-- ------------------------------------------------------ Moje ulaznice -->
+          @if (activeTab() === 'tickets') {
+            <h2 class="panel-title">Moje ulaznice</h2>
+
+            <div class="tab-switcher" role="tablist" aria-label="Vremenski period">
+              <button
+                type="button"
+                role="tab"
+                class="tab-btn"
+                [class.active]="showUpcoming()"
+                [attr.aria-selected]="showUpcoming()"
+                (click)="showUpcoming.set(true)"
+              >
+                Nadolazeće
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="tab-btn"
+                [class.active]="!showUpcoming()"
+                [attr.aria-selected]="!showUpcoming()"
+                (click)="showUpcoming.set(false)"
+              >
+                Iskorištene
+              </button>
+            </div>
+
+            <div class="filter-chips">
+              <button type="button" class="chip" [class.active]="ticketFilter() === 'sve'" (click)="ticketFilter.set('sve')">Sve</button>
+              <button type="button" class="chip" [class.active]="ticketFilter() === 'SingleOccurrence'" (click)="ticketFilter.set('SingleOccurrence')">Događaji</button>
+              <button type="button" class="chip" [class.active]="ticketFilter() === 'DailyEntry'" (click)="ticketFilter.set('DailyEntry')">Dnevne ulaznice</button>
+              <button type="button" class="chip" [class.active]="ticketFilter() === 'RecurringReservation'" (click)="ticketFilter.set('RecurringReservation')">Rezervacije</button>
+            </div>
+
+            @if (isLoadingTickets()) {
+              <p class="empty-state">Učitavanje ulaznica…</p>
+            } @else if (ticketGroups().length === 0) {
+              <p class="empty-state">Nemate kupljenih ulaznica u ovoj kategoriji.</p>
+            } @else {
+              <!-- Grouped by product, not a flat list: four tickets to the same concert are one
+                   purchase and one plan for one evening. The product name is stated once as a
+                   heading; each stub below carries only what differs — sector, tier, validity. -->
+              @for (group of ticketGroups(); track group.productId) {
+                <section class="ticket-group">
+                  <header class="group-header">
+                    <h3 class="group-title">{{ group.title }}</h3>
+                    <p class="group-subtitle">{{ group.subtitle }}</p>
+                  </header>
+
+                  <div class="ticket-list">
+                    @for (ticket of group.tickets; track ticket.id) {
+                      <div
+                        class="ticket-card"
+                        role="button"
+                        tabindex="0"
+                        (click)="openTicketDetail(ticket)"
+                        (keydown.enter)="openTicketDetail(ticket)"
+                      >
+                        <div class="ticket-main">
+                          <h4 class="ticket-sector">{{ ticket.sectorName }}</h4>
+                          @if (ticket.ticketTypeName) {
+                            <span class="ticket-type">{{ ticket.ticketTypeName }}</span>
+                          }
+                          <div class="ticket-meta">
+                            @if (ticketDateLine(ticket); as dateLine) {
+                              <span>{{ dateLine }}</span>
+                            }
+                            <span>Kupljeno: {{ ticket.createdAt | date: 'dd.MM.yyyy.' }}</span>
+                          </div>
+                        </div>
+                        <div class="ticket-side">
+                          <!-- The one thing a holder is actually asking: can I walk in with this.
+                               A raw TicketStatus could not answer it — a ticket for last month's
+                               concert is still "Confirmed" and still worthless. -->
+                          <span class="validity-badge" [class]="'tone-' + validityTone(validityOf(ticket))">
+                            {{ validityLabels[validityOf(ticket)] }}
+                          </span>
+                          <span class="ticket-price">{{ ticket.pricePaid }} KM</span>
+                          <!-- A plain top-level navigation, not an XHR blob download: that is what
+                               carries the httpOnly session cookie. stopPropagation keeps the click
+                               off the card, which otherwise opens the detail modal. -->
+                          <a
+                            class="ticket-pdf-link"
+                            [href]="pdfUrlFor(ticket)"
+                            target="_blank"
+                            rel="noopener"
+                            (click)="$event.stopPropagation()"
+                            [attr.aria-label]="'Preuzmi PDF ulaznicu za ' + ticket.sectorName"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                            <span>Preuzmi PDF</span>
+                          </a>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </section>
+              }
+
+              @if (hasMoreTickets()) {
+                <button type="button" class="btn btn-outline load-more-btn" [disabled]="isLoadingMoreTickets()" (click)="loadMoreTickets()">
+                  {{ isLoadingMoreTickets() ? 'Učitavanje…' : 'Prikaži još' }}
+                </button>
+              }
+            }
+          }
+
+          <!-- ----------------------------------------------------- Moje pretplate -->
+          @if (activeTab() === 'subscriptions') {
+            <h2 class="panel-title">Moje pretplate</h2>
+
             @if (subscriptionMessage()) {
               <div class="alert alert-success" role="status">{{ subscriptionMessage() }}</div>
             }
@@ -53,255 +177,200 @@
             }
 
             @if (isLoadingSubscriptions()) {
-              <p class="empty-text">Učitavanje pretplata...</p>
-            } @else if (subscriptions().length === 0) {
-              <p class="empty-text">Nemate aktivnih pretplata.</p>
+              <p class="empty-state">Učitavanje pretplata…</p>
+            } @else if (subscriptionGroups().length === 0) {
+              <p class="empty-state">Nemate aktivnih pretplata.</p>
             } @else {
-              @for (subscription of subscriptions(); track subscription.id) {
-                <div class="subscription-card">
-                  <div class="subscription-head">
-                    <span class="subscription-name">{{ subscription.sectorName }}</span>
-                    <span
-                      class="status-chip"
-                      [class.status-active]="subscription.status === 'Active'"
-                      [class.status-cancelled]="subscription.status === 'Cancelled'"
-                      [class.status-pastdue]="subscription.status === 'PastDue'"
-                    >
-                      {{ statusLabels[subscription.status] }}
-                    </span>
-                  </div>
+              <!-- Same grouping treatment as the tickets above: two parking spaces at the same
+                   garage are one arrangement, headed once by the product. -->
+              @for (group of subscriptionGroups(); track group.productId) {
+                <section class="ticket-group">
+                  <header class="group-header">
+                    <h3 class="group-title">{{ group.title }}</h3>
+                    <p class="group-subtitle">{{ group.subtitle }}</p>
+                  </header>
 
-                  <div class="subscription-row">
-                    <span>Tekući period</span>
-                    <span>{{ subscription.currentPeriodStart }} – {{ subscription.currentPeriodEnd }}</span>
-                  </div>
-                  <div class="subscription-row">
-                    <span>Cijena po periodu</span>
-                    <span>{{ subscription.pricePerPeriod }} KM</span>
-                  </div>
-                  @if (subscription.nextRenewalAt && !subscription.cancelAtPeriodEnd) {
-                    <div class="subscription-row">
-                      <span>Sljedeća naplata</span>
-                      <span>{{ subscription.nextRenewalAt | date: 'dd.MM.yyyy.' }}</span>
+                  @for (subscription of group.subscriptions; track subscription.id) {
+                    <div class="subscription-card">
+                      <div class="subscription-head">
+                        <span class="subscription-name">{{ subscription.sectorName }}</span>
+                        <span
+                          class="status-chip"
+                          [class.status-active]="subscription.status === 'Active'"
+                          [class.status-cancelled]="subscription.status === 'Cancelled'"
+                          [class.status-pastdue]="subscription.status === 'PastDue'"
+                        >
+                          {{ statusLabels[subscription.status] }}
+                        </span>
+                      </div>
+
+                      <div class="subscription-row">
+                        <span>Tekući period</span>
+                        <span>{{ subscription.currentPeriodStart }} – {{ subscription.currentPeriodEnd }}</span>
+                      </div>
+                      <div class="subscription-row">
+                        <span>Cijena po periodu</span>
+                        <span>{{ subscription.pricePerPeriod }} KM</span>
+                      </div>
+                      @if (subscription.nextRenewalAt && !subscription.cancelAtPeriodEnd) {
+                        <div class="subscription-row">
+                          <span>Sljedeća naplata</span>
+                          <span>{{ subscription.nextRenewalAt | date: 'dd.MM.yyyy.' }}</span>
+                        </div>
+                      }
+
+                      @if (subscription.cancelAtPeriodEnd && subscription.status === 'Active') {
+                        <!-- Still Active on purpose: they paid for this period and keep it until it ends. -->
+                        <p class="subscription-note">
+                          Otkazano — vrijedi do {{ subscription.currentPeriodEnd }}, nakon toga se ne naplaćuje.
+                        </p>
+                      } @else if (subscription.status === 'PastDue') {
+                        <p class="subscription-note">
+                          Posljednja naplata nije uspjela. Pokušavamo ponovo; ažurirajte karticu kod svoje banke.
+                        </p>
+                      }
+
+                      @if (subscription.status === 'Active' && !subscription.cancelAtPeriodEnd) {
+                        <button
+                          type="button"
+                          class="btn btn-outline"
+                          [disabled]="cancellingSubscriptionId() === subscription.id"
+                          (click)="cancelSubscription(subscription)"
+                        >
+                          {{ cancellingSubscriptionId() === subscription.id ? 'Otkazivanje…' : 'Otkaži pretplatu' }}
+                        </button>
+                      }
                     </div>
                   }
-
-                  @if (subscription.cancelAtPeriodEnd && subscription.status === 'Active') {
-                    <!-- Still Active on purpose: they paid for this period and keep it until it ends. -->
-                    <p class="subscription-note">
-                      Otkazano — vrijedi do {{ subscription.currentPeriodEnd }}, nakon toga se ne naplaćuje.
-                    </p>
-                  } @else if (subscription.status === 'PastDue') {
-                    <p class="subscription-note">
-                      Posljednja naplata nije uspjela. Pokušavamo ponovo; ažurirajte karticu kod svoje banke.
-                    </p>
-                  }
-
-                  @if (subscription.status === 'Active' && !subscription.cancelAtPeriodEnd) {
-                    <button
-                      type="button"
-                      class="btn btn-outline"
-                      [disabled]="cancellingSubscriptionId() === subscription.id"
-                      (click)="cancelSubscription(subscription)"
-                    >
-                      {{ cancellingSubscriptionId() === subscription.id ? 'Otkazivanje...' : 'Otkaži pretplatu' }}
-                    </button>
-                  }
-                </div>
+                </section>
               }
-            }
-          </div>
-        }
-
-        @if (activeTab() === 'tickets') {
-          <div class="tab-switcher ticket-time-switcher" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              class="tab-btn"
-              [class.active]="showUpcoming()"
-              [attr.aria-selected]="showUpcoming()"
-              (click)="showUpcoming.set(true)"
-            >
-              Nadolazeće
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="tab-btn"
-              [class.active]="!showUpcoming()"
-              [attr.aria-selected]="!showUpcoming()"
-              (click)="showUpcoming.set(false)"
-            >
-              Iskorištene
-            </button>
-          </div>
-
-          <div class="filter-chips">
-            <button
-              type="button"
-              class="chip"
-              [class.active]="ticketFilter() === 'sve'"
-              (click)="ticketFilter.set('sve')"
-            >
-              Sve
-            </button>
-            <button
-              type="button"
-              class="chip"
-              [class.active]="ticketFilter() === 'SingleOccurrence'"
-              (click)="ticketFilter.set('SingleOccurrence')"
-            >
-              Događaji
-            </button>
-            <button
-              type="button"
-              class="chip"
-              [class.active]="ticketFilter() === 'DailyEntry'"
-              (click)="ticketFilter.set('DailyEntry')"
-            >
-              Dnevne ulaznice
-            </button>
-            <button
-              type="button"
-              class="chip"
-              [class.active]="ticketFilter() === 'RecurringReservation'"
-              (click)="ticketFilter.set('RecurringReservation')"
-            >
-              Rezervacije
-            </button>
-          </div>
-
-          @if (isLoadingTickets()) {
-            <p class="empty-state">Učitavanje ulaznica…</p>
-          } @else if (filteredTickets().length === 0) {
-            <p class="empty-state">Nemate kupljenih ulaznica u ovoj kategoriji.</p>
-          } @else {
-            <div class="ticket-list">
-              @for (ticket of filteredTickets(); track ticket.id) {
-                <div class="ticket-card" role="button" tabindex="0" (click)="openTicketDetail(ticket)" (keydown.enter)="openTicketDetail(ticket)">
-                  <div class="ticket-main">
-                    <h3 class="ticket-sector">{{ ticket.sectorName }}</h3>
-                    @if (ticket.ticketTypeName) {
-                      <span class="ticket-type">{{ ticket.ticketTypeName }}</span>
-                    }
-                    <div class="ticket-meta">
-                      @if (ticket.validDate) {
-                        <span>Datum: {{ ticket.validDate }}</span>
-                      }
-                      @if (ticket.validFrom) {
-                        <span>Period: {{ ticket.validFrom }} – {{ ticket.validTo }}</span>
-                      }
-                      <span>Kupljeno: {{ ticket.createdAt | date: 'dd.MM.yyyy.' }}</span>
-                    </div>
-                  </div>
-                  <div class="ticket-side">
-                    <span class="ticket-status" [class.confirmed]="ticket.status === 'Confirmed'">{{ statusLabel(ticket.status) }}</span>
-                    <span class="ticket-price">{{ ticket.pricePaid }} KM</span>
-                    <!-- A plain top-level navigation, not an XHR blob download: that is what carries
-                         the httpOnly session cookie. stopPropagation keeps the click off the card,
-                         which otherwise opens the detail modal. -->
-                    <a
-                      class="ticket-pdf-link"
-                      [href]="pdfUrlFor(ticket)"
-                      target="_blank"
-                      rel="noopener"
-                      (click)="$event.stopPropagation()"
-                      [attr.aria-label]="'Preuzmi PDF ulaznicu za ' + ticket.sectorName"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-                      <span>Preuzmi PDF</span>
-                    </a>
-                  </div>
-                </div>
-              }
-            </div>
-            @if (hasMoreTickets()) {
-              <button type="button" class="btn btn-outline load-more-btn" [disabled]="isLoadingMoreTickets()" (click)="loadMoreTickets()">
-                {{ isLoadingMoreTickets() ? 'Učitavanje…' : 'Prikaži još' }}
-              </button>
             }
           }
-        }
 
-        @if (activeTab() === 'settings') {
-          <form class="card" [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
-            <h2>Moj profil</h2>
+          <!-- ---------------------------------------------------------- Postavke -->
+          @if (activeTab() === 'settings') {
+            <h2 class="panel-title">Postavke</h2>
 
-            @if (profileMessage()) {
-              <div class="alert alert-success">{{ profileMessage() }}</div>
-            }
-            @if (profileError()) {
-              <div class="alert alert-error">{{ profileError() }}</div>
-            }
+            <!-- One panel, three titled subsections — previously these were two detached cards plus
+                 a logout button floating on its own below them. -->
+            <div class="settings-stack">
+              <form class="settings-section" [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
+                <h3 class="settings-heading">Lični podaci</h3>
 
-            <div class="field-row">
-              <label class="field">
-                <span class="field-label">Ime</span>
-                <input type="text" formControlName="firstName" class="field-input" />
-              </label>
-              <label class="field">
-                <span class="field-label">Prezime</span>
-                <input type="text" formControlName="lastName" class="field-input" />
-              </label>
+                @if (profileMessage()) {
+                  <div class="alert alert-success" role="status">{{ profileMessage() }}</div>
+                }
+                @if (profileError()) {
+                  <div class="alert alert-error" role="alert">{{ profileError() }}</div>
+                }
+
+                <div class="field-row">
+                  <label class="field">
+                    <span class="field-label">Ime</span>
+                    <input type="text" formControlName="firstName" class="field-input" autocomplete="given-name" />
+                    @if (profileForm.controls.firstName.touched && profileForm.controls.firstName.invalid) {
+                      @if (profileForm.controls.firstName.hasError('required')) {
+                        <span class="field-error">Ime je obavezno.</span>
+                      } @else if (profileForm.controls.firstName.hasError('minlength')) {
+                        <span class="field-error">Ime mora imati najmanje 2 karaktera.</span>
+                      } @else {
+                        <span class="field-error">Ime može imati najviše 50 karaktera.</span>
+                      }
+                    }
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Prezime</span>
+                    <input type="text" formControlName="lastName" class="field-input" autocomplete="family-name" />
+                    @if (profileForm.controls.lastName.touched && profileForm.controls.lastName.invalid) {
+                      @if (profileForm.controls.lastName.hasError('required')) {
+                        <span class="field-error">Prezime je obavezno.</span>
+                      } @else if (profileForm.controls.lastName.hasError('minlength')) {
+                        <span class="field-error">Prezime mora imati najmanje 2 karaktera.</span>
+                      } @else {
+                        <span class="field-error">Prezime može imati najviše 50 karaktera.</span>
+                      }
+                    }
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span class="field-label">Korisničko ime</span>
+                  <input type="text" formControlName="username" class="field-input" autocomplete="username" />
+                  @if (profileForm.controls.username.touched && profileForm.controls.username.invalid) {
+                    @if (profileForm.controls.username.hasError('required')) {
+                      <span class="field-error">Korisničko ime je obavezno.</span>
+                    } @else if (profileForm.controls.username.hasError('minlength')) {
+                      <span class="field-error">Korisničko ime mora imati najmanje 3 karaktera.</span>
+                    } @else {
+                      <span class="field-error">Korisničko ime može imati najviše 50 karaktera.</span>
+                    }
+                  }
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Broj telefona</span>
+                  <input type="tel" formControlName="phoneNumber" class="field-input" autocomplete="tel" />
+                  @if (profileForm.controls.phoneNumber.touched && profileForm.controls.phoneNumber.hasError('maxlength')) {
+                    <span class="field-error">Broj telefona može imati najviše 20 karaktera.</span>
+                  }
+                </label>
+
+                <button type="submit" class="btn btn-primary" [disabled]="isSavingProfile()">
+                  {{ isSavingProfile() ? 'Čuvanje…' : 'Sačuvaj izmjene' }}
+                </button>
+              </form>
+
+              <form class="settings-section" [formGroup]="passwordForm" (ngSubmit)="savePassword()" novalidate>
+                <h3 class="settings-heading">Promjena lozinke</h3>
+
+                @if (passwordMessage()) {
+                  <div class="alert alert-success" role="status">{{ passwordMessage() }}</div>
+                }
+                @if (passwordError()) {
+                  <div class="alert alert-error" role="alert">{{ passwordError() }}</div>
+                }
+
+                <label class="field">
+                  <span class="field-label">Trenutna lozinka</span>
+                  <input type="password" formControlName="currentPassword" class="field-input" autocomplete="current-password" />
+                  @if (passwordForm.controls.currentPassword.touched && passwordForm.controls.currentPassword.hasError('required')) {
+                    <span class="field-error">Trenutna lozinka je obavezna.</span>
+                  }
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Nova lozinka</span>
+                  <input type="password" formControlName="newPassword" class="field-input" autocomplete="new-password" />
+                  @if (passwordForm.controls.newPassword.touched) {
+                    @if (passwordForm.controls.newPassword.hasError('required')) {
+                      <span class="field-error">Lozinka je obavezna.</span>
+                    } @else if (passwordForm.controls.newPassword.hasError('passwordStrength')) {
+                      <span class="field-error">Lozinka mora imati najmanje 8 karaktera i sadržavati veliko slovo, malo slovo, cifru i specijalni znak.</span>
+                    }
+                  }
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Potvrdite novu lozinku</span>
+                  <input type="password" formControlName="confirmPassword" class="field-input" autocomplete="new-password" />
+                  @if (passwordForm.errors?.['passwordMismatch'] && passwordForm.controls.confirmPassword.touched) {
+                    <span class="field-error">Lozinke se ne podudaraju.</span>
+                  }
+                </label>
+
+                <button type="submit" class="btn btn-primary" [disabled]="isSavingPassword()">
+                  {{ isSavingPassword() ? 'Čuvanje…' : 'Promijeni lozinku' }}
+                </button>
+              </form>
+
+              <div class="settings-section">
+                <h3 class="settings-heading">Sesija</h3>
+                <p class="settings-note">Odjava vas vraća na početnu stranicu i zatvara ovu sesiju na svim karticama.</p>
+                <button type="button" class="btn btn-outline" (click)="logout()">Odjavi se</button>
+              </div>
             </div>
-
-            <label class="field">
-              <span class="field-label">Korisničko ime</span>
-              <input type="text" formControlName="username" class="field-input" />
-            </label>
-
-            <label class="field">
-              <span class="field-label">Broj telefona</span>
-              <input type="tel" formControlName="phoneNumber" class="field-input" />
-            </label>
-
-            <button type="submit" class="btn btn-primary" [disabled]="isSavingProfile()">
-              {{ isSavingProfile() ? 'Čuvanje…' : 'Sačuvaj izmjene' }}
-            </button>
-          </form>
-
-          <form class="card" [formGroup]="passwordForm" (ngSubmit)="savePassword()" novalidate>
-            <h2>Promjena lozinke</h2>
-
-            @if (passwordMessage()) {
-              <div class="alert alert-success">{{ passwordMessage() }}</div>
-            }
-            @if (passwordError()) {
-              <div class="alert alert-error">{{ passwordError() }}</div>
-            }
-
-            <label class="field">
-              <span class="field-label">Trenutna lozinka</span>
-              <input type="password" formControlName="currentPassword" class="field-input" autocomplete="current-password" />
-            </label>
-
-            <label class="field">
-              <span class="field-label">Nova lozinka</span>
-@if (passwordForm.controls.newPassword.touched) {
-  @if (passwordForm.controls.newPassword.hasError('required')) {
-    <span class="field-error">Lozinka je obavezna.</span>
-  } @else if (passwordForm.controls.newPassword.hasError('passwordStrength')) {
-    <span class="field-error">Lozinka mora imati najmanje 8 karaktera i sadržavati veliko slovo, malo slovo, cifru i specijalni znak.</span>
-  }
-}
-            </label>
-
-            <label class="field">
-              <span class="field-label">Potvrdite novu lozinku</span>
-              <input type="password" formControlName="confirmPassword" class="field-input" autocomplete="new-password" />
-              @if (passwordForm.errors?.['passwordMismatch'] && passwordForm.controls.confirmPassword.touched) {
-                <span class="field-error">Lozinke se ne podudaraju.</span>
-              }
-            </label>
-
-            <button type="submit" class="btn btn-primary" [disabled]="isSavingPassword()">
-              {{ isSavingPassword() ? 'Čuvanje…' : 'Promijeni lozinku' }}
-            </button>
-          </form>
-
-          <button type="button" class="btn btn-outline logout-btn" (click)="logout()">Odjavi se</button>
-        }
+          }
+        </div>
       </div>
     </section>
   </div>

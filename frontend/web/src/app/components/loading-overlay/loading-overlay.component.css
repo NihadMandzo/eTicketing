@@ -1,0 +1,87 @@
+/* The overlay exists (and blocks) from the first frame of a request, but stays invisible for
+   `--reveal-delay` before fading in.
+
+   That split is the whole design. Most calls here return in well under 100ms, and a scrim that
+   flashes on every one of them reads as a glitch rather than as progress — but a scrim that only
+   *appears* late would let a double-click through in the meantime, which is exactly what a blocking
+   overlay exists to prevent. So: block instantly, reveal late. */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above the fixed navbar (1000) and its open account menu (1001). */
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background-color: color-mix(in srgb, var(--background) 68%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+
+  opacity: 0;
+  animation: overlay-reveal 0.2s ease-out 0.18s forwards;
+}
+
+@keyframes overlay-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+.loading-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  border-radius: var(--radius-lg);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  /* The track is the full ring; the single coloured edge is what reads as rotation. */
+  border: 3px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-top-color: var(--primary);
+  animation: spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+}
+
+/* Reduced motion still needs the *blocking* behaviour and still needs to be visible — only the
+   movement goes. The scrim appears at once rather than fading, and the spinner pulses in place
+   instead of rotating, so there is still a live signal that something is happening. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-overlay {
+    opacity: 1;
+    animation: none;
+  }
+
+  .spinner {
+    animation: spinner-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes spinner-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}

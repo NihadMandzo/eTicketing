@@ -1,0 +1,78 @@
+.error-page {
+  /* 72px clears the fixed navbar (see layout.component.css); the rest keeps a short page from
+     leaving the footer floating half way up an empty screen. */
+  min-height: calc(100vh - 72px - 200px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+}
+
+.error-card {
+  max-width: 620px;
+  text-align: center;
+}
+
+/* Big enough to be the thing you see first, but drawn in a muted brand tint rather than at full
+   contrast — the sentence under it is what the visitor actually needs to read. */
+.error-code {
+  font-size: clamp(5rem, 18vw, 9rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  margin: 0 0 8px;
+  color: color-mix(in srgb, var(--primary) 28%, transparent);
+  letter-spacing: -0.04em;
+}
+
+.error-title {
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  margin-bottom: 14px;
+}
+
+.error-message {
+  font-size: 1.05rem;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+  margin-bottom: 32px;
+  overflow-wrap: anywhere;
+}
+
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.error-help {
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+
+.error-help a {
+  color: var(--primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: underline;
+}
+
+/* Kept off-screen rather than `display: none`, which would take it out of the accessibility tree
+   too and defeat the point. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 768px) {
+  .error-page {
+    padding: 56px 16px;
+    min-height: calc(100vh - 64px - 200px);
+  }
+}

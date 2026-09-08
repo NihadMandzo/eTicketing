@@ -6,8 +6,88 @@
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+  <!--
+    Boot splash. Covers the window from the very first paint until Angular has bootstrapped and the
+    session-restore call in `app.config.ts` has resolved — the window in which the page looks ready
+    but nothing on it works yet.
+
+    Deliberately plain inline HTML/CSS with no dependency on the bundle: it has to be painted by the
+    HTML parser, before any JavaScript has been fetched, which is the entire span it exists to
+    cover. `App`'s own constructor removes it (see app.ts); nothing else may.
+
+    Colours are duplicated from styles.css rather than referenced through custom properties for the
+    same reason — the stylesheet may not have arrived yet, and a splash that renders as black text
+    on a black ground would be worse than none. Both themes are covered via prefers-color-scheme.
+  -->
+  <style>
+    #app-boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #FAFAFA;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      transition: opacity 0.25s ease-out;
+    }
+
+    #app-boot-splash.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #app-boot-splash .boot-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+
+    #app-boot-splash .boot-logo {
+      height: 58px;
+      width: auto;
+    }
+
+    #app-boot-splash .boot-spinner {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 3px solid rgba(29, 91, 58, 0.22);
+      border-top-color: #1D5B3A;
+      animation: boot-spin 0.7s linear infinite;
+    }
+
+    @keyframes boot-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #app-boot-splash {
+        background-color: #0A0F0D;
+      }
+
+      #app-boot-splash .boot-spinner {
+        border-color: rgba(111, 174, 74, 0.22);
+        border-top-color: #6FAE4A;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #app-boot-splash { transition: none; }
+      #app-boot-splash .boot-spinner { animation: none; }
+    }
+  </style>
 </head>
 <body>
+  <div id="app-boot-splash">
+    <div class="boot-inner">
+      <img src="/logo.png" alt="eKarta" class="boot-logo">
+      <div class="boot-spinner" role="status" aria-label="Učitavanje aplikacije"></div>
+    </div>
+  </div>
+
   <app-root></app-root>
 </body>
 </html>
