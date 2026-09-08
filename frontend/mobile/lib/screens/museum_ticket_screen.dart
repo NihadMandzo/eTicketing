@@ -181,6 +181,29 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
     return (capacity - selected).clamp(0, _maxPerOrder);
   }
 
+  /// Trims any quantity that no longer fits after `_sectors` picks up a new day's real capacity.
+  /// `_quantities` is keyed date-independently (`sector.id::ticketTypeId`), so switching to a
+  /// different day within the same month otherwise leaves a quantity chosen against the old day's
+  /// capacity in place against the new one, silently exceeding it. Ticket types share one per-day
+  /// pool per sector, so this walks each sector's rows in order and trims from the tail once the
+  /// running total exceeds what's left — clearing every selection instead would also discard picks
+  /// on sectors the date switch didn't affect.
+  void _clampQuantitiesToCapacity() {
+    for (final sector in _sectors) {
+      final capacity = sector.remainingCapacity;
+      if (capacity == null) continue; // unknown must not cap anything, see _remainingForSector
+
+      var budget = capacity;
+      for (final row in _rows.where((r) => r.sector.id == sector.id)) {
+        final selected = _quantities[row.key] ?? 0;
+        if (selected == 0) continue;
+        final allowed = selected.clamp(0, budget);
+        if (allowed != selected) _quantities[row.key] = allowed;
+        budget -= allowed;
+      }
+    }
+  }
+
   double get _total => _rows.fold(
     0,
     (sum, row) => sum + (_quantities[row.key] ?? 0) * row.price,
@@ -230,7 +253,10 @@ class _MuseumTicketScreenState extends State<MuseumTicketScreen> {
       if (current == null || current.year != date.year || current.month != date.month || current.day != date.day) {
         return;
       }
-      setState(() => _sectors = sectors.items);
+      setState(() {
+        _sectors = sectors.items;
+        _clampQuantitiesToCapacity();
+      });
     } catch (_) {
       // Deliberately silent — see above.
     } finally {

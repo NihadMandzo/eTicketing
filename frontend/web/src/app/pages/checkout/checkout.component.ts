@@ -62,12 +62,11 @@ export class CheckoutComponent {
 
   readonly totalHolds = computed(() => this.cart()?.holds.length ?? 0);
 
-  /** How many holds the basket started with. `totalHolds` counts what is still *unpaid* — a paid
-   * hold is removed from the cart by `advanceToNextHold` — so it shrinks by exactly one each time
-   * `results` grows by one, which makes this sum invariant for the whole checkout. Named rather
-   * than re-derived at each use site: written inline it reads like a running total that drifts
-   * upward, and it is the denominator of the "Plaćanje 1 od 2" counter, so being wrong there is
-   * visible to the buyer. */
+  /** How many holds the basket started with — `results().length + totalHolds()`, extracted
+   * because it's used both here and in `buildFailureMessage`. The sum is invariant for the whole
+   * checkout: `advanceToNextHold` only ever removes a hold from the cart in the same tick that
+   * `completePurchase` pushes its result, and a failed purchase leaves the hold alone, so nothing
+   * needs "start" semantics beyond naming the expression once. */
   readonly totalHoldsAtStart = computed(() => this.results().length + this.totalHolds());
   readonly isMockProvider = computed(() => this.intent()?.provider === 'Mock');
 

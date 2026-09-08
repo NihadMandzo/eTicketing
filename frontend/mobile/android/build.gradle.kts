@@ -12,7 +12,7 @@ allprojects {
 // at 17 so the two toolchains never disagree.
 subprojects {
     plugins.withId("com.android.library") {
-        extensions.configure<com.android.build.gradle.LibraryExtension> {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
@@ -20,7 +20,7 @@ subprojects {
         }
     }
     plugins.withId("com.android.application") {
-        extensions.configure<com.android.build.gradle.AppExtension> {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17

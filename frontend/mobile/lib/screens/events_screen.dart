@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/session.dart';
@@ -433,7 +434,9 @@ class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _FilterBarDelegate old) =>
-      old.categories.length != categories.length ||
+      // CategoryResponse has no value equality, so compare by id: a same-length reload with
+      // different categories (or a different order) must still trigger a rebuild of the dropdown.
+      !listEquals(old.categories.map((c) => c.id).toList(), categories.map((c) => c.id).toList()) ||
       old.selectedCategoryId != selectedCategoryId ||
       old.selectedCity != selectedCity ||
       old.isDark != isDark;

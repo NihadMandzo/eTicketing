@@ -6,9 +6,12 @@ using RabbitMQ.Client;
 
 namespace eTicketing.Payment.Api.Infrastructure;
 
-/// <summary>Mirrors eTicketing.Ticketing.Api/Infrastructure/RabbitMqEventPublisher.cs exactly --
-/// duplicated per-service rather than shared/promoted to Contracts, the convention Identity
-/// established for IEventPublisher.</summary>
+/// <summary>Duplicated per-service rather than shared/promoted to Contracts, the convention
+/// Identity established for IEventPublisher. No longer identical to
+/// eTicketing.Ticketing.Api/Infrastructure/RabbitMqEventPublisher.cs: this one rethrows on a
+/// failed publish (see the catch block below), so a lost subscription.renewed becomes a
+/// retryable 5xx instead of a silently-lost ticket. Ticketing's still swallows and logs --
+/// publishing there must never break an already-committed purchase.</summary>
 public class RabbitMqEventPublisher : IEventPublisher
 {
     private readonly IConfiguration _configuration;

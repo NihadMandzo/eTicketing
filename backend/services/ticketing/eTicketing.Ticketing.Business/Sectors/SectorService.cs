@@ -148,10 +148,11 @@ public class SectorService : ISectorService
 
         // The buyer path is the only one that reads the live counter: a client has to know a
         // sector is exhausted *before* offering it, otherwise the first the buyer hears of it is a
-        // 409 from HoldAsync after they have already picked a quantity.
-        var items = new List<SectorResponse>(paged.Items.Count);
-        foreach (var sector in paged.Items)
-            items.Add(ToResponse(sector) with { RemainingCapacity = await GetRemainingAsync(sector, query.Date, ct) });
+        // 409 from HoldAsync after they have already picked a quantity. Fetched in parallel rather
+        // than sequentially -- this is the public, unauthenticated browse path, and PageSize goes
+        // up to 100, so a sequential foreach could chain up to 100 Redis round-trips per request.
+        var remaining = await Task.WhenAll(paged.Items.Select(sector => GetRemainingAsync(sector, query.Date, ct)));
+        var items = paged.Items.Zip(remaining, (sector, cap) => ToResponse(sector) with { RemainingCapacity = cap }).ToList();
 
         return Result<PagedResult<SectorResponse>>.Success(new PagedResult<SectorResponse>
         {
