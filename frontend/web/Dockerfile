@@ -12,6 +12,11 @@ ENV NG_APP_API_BASE_URL=${NG_APP_API_BASE_URL}
 ARG NG_APP_GOOGLE_MAPS_API_KEY=
 ENV NG_APP_GOOGLE_MAPS_API_KEY=${NG_APP_GOOGLE_MAPS_API_KEY}
 
+# Diagnostic only — makes the value actually baked into this image visible in the build log,
+# since a wrong/missing --build-arg silently falls back to the ARG default above with no other
+# signal. Remove once the CORS-to-localhost issue this was added to chase is confirmed fixed.
+RUN echo "Building with NG_APP_API_BASE_URL=${NG_APP_API_BASE_URL}"
+
 RUN npm run build
 
 # --- Stage 2: Serve the application using Node ---

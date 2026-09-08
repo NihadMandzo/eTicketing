@@ -32,7 +32,10 @@ jobs:
         run: echo "server=$(az acr show -n eticketingacr --query loginServer -o tsv)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
-        run: az acr build -r eticketingacr -t web:${{ github.sha }} --build-arg NG_APP_API_BASE_URL=https://gateway.thankfulplant-ceb4a7f8.westeurope.azurecontainerapps.io/api --build-arg NG_APP_GOOGLE_MAPS_API_KEY=${{ secrets.NG_APP_GOOGLE_MAPS_API_KEY }} frontend/web
+        # --no-cache: rule out ACR Tasks reusing a cached layer built with a different
+        # NG_APP_API_BASE_URL build-arg (suspected cause of a stale localhost URL shipping
+        # to production — see the diagnostic echo in frontend/web/Dockerfile).
+        run: az acr build --no-cache -r eticketingacr -t web:${{ github.sha }} --build-arg NG_APP_API_BASE_URL=https://gateway.thankfulplant-ceb4a7f8.westeurope.azurecontainerapps.io/api --build-arg NG_APP_GOOGLE_MAPS_API_KEY=${{ secrets.NG_APP_GOOGLE_MAPS_API_KEY }} frontend/web
 
       - name: Deploy to Container App
         run: az containerapp update -n web -g eticketing-dev --image ${{ steps.acr.outputs.server }}/web:${{ github.sha }}
