@@ -30,4 +30,4 @@ EXPOSE 4000
 ENV PORT=4000
 
 # Start the compiled Node server instead of looking for static index.html files
-CMD ["node", "dist/web/server/main.mjs"]
+CMD ["node", "dist/web/server/server.mjs"]
