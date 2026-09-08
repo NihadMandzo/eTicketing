@@ -7,13 +7,14 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { provideRouter, withInMemoryScrolling } from '@angular/router';
+import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { routes } from './app.routes';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import { authRefreshInterceptor } from './core/interceptors/auth-refresh.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
+import { loadingInterceptor } from './core/interceptors/loading.interceptor';
 import { AuthService } from './core/services/auth.service';
 import { ThemeService } from './core/services/theme.service';
 
@@ -26,9 +27,19 @@ export const appConfig: ApplicationConfig = {
     // moment it restored, the document was still a spinner one viewport tall, the offset got clamped
     // to whatever fitted, and going back landed at an arbitrary point in the page. `'top'` drops the
     // replay: coming back simply loads that page again, from the top.
-    provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'top', anchorScrolling: 'enabled' })),
+    provideRouter(
+      routes,
+      withInMemoryScrolling({ scrollPositionRestoration: 'top', anchorScrolling: 'enabled' }),
+      // Lets the error-page routes (error.routes.ts) supply their 401/403/404/500 copy through
+      // plain route `data` bound straight onto ErrorPageComponent's inputs, instead of each variant
+      // needing its own thin wrapper component.
+      withComponentInputBinding(),
+    ),
     provideClientHydration(withEventReplay()),
-    provideHttpClient(withFetch(), withInterceptors([credentialsInterceptor, authRefreshInterceptor])),
+    // Order matters: loadingInterceptor must see every request, including ones the refresh
+    // interceptor retries after a 401 — placing it first means the overlay stays up across that
+    // retry instead of flickering off and back on between the failed call and its replay.
+    provideHttpClient(withFetch(), withInterceptors([loadingInterceptor, credentialsInterceptor, authRefreshInterceptor])),
     // Restores auth state from the session cookie on every page load/refresh, so a logged-in user
     // doesn't appear signed out after an F5.
     //
