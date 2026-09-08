@@ -60,7 +60,9 @@
         </button>
 
         <p class="auth-switch">
-          Nemate nalog? <a routerLink="/registracija">Registrujte se</a>
+          <!-- Carries returnUrl forward so switching to registration doesn't drop an interrupted
+               purchase — see ProductDetailsComponent.navigateToLogin. -->
+          Nemate nalog? <a routerLink="/registracija" [queryParams]="returnUrlParams()">Registrujte se</a>
         </p>
       </form>
     </div>

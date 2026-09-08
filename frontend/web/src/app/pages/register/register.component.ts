@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
 import { passwordStrengthValidator } from '../../core/utils/password.validator';
@@ -22,10 +23,24 @@ export class RegisterComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly isLoading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly hidePassword = signal(true);
+
+  private readonly queryParamMap = toSignal(this.route.queryParamMap, {
+    initialValue: this.route.snapshot.queryParamMap,
+  });
+
+  /** `{ returnUrl }` when registration was reached via an interrupted purchase, `{}` otherwise —
+   * bound onto the "Prijavite se" link, and forwarded to /potvrda-emaila on success (see submit()),
+   * so the chain keeps carrying it: register → verify-email → the product page the buyer started
+   * from. */
+  readonly returnUrlParams = computed(() => {
+    const returnUrl = this.queryParamMap().get('returnUrl');
+    return returnUrl ? { returnUrl } : {};
+  });
 
   readonly form = this.fb.nonNullable.group(
     {
@@ -59,7 +74,10 @@ export class RegisterComponent {
     this.authService
       .register({ ...rest, phoneNumber: phoneNumber || null })
       .subscribe({
-        next: () => this.router.navigateByUrl('/potvrda-emaila'),
+        // Registering signs the buyer in, but email verification is still required next — carrying
+        // returnUrl along means that page can send them on to whatever they were trying to buy
+        // instead of always landing on the home page.
+        next: () => this.router.navigate(['/potvrda-emaila'], { queryParams: this.returnUrlParams() }),
         error: (error: unknown) => {
           this.isLoading.set(false);
           this.errorMessage.set(this.extractErrorMessage(error));

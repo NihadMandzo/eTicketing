@@ -16,6 +16,7 @@ import { Sector, isSoldOut } from '../../core/models/sector.models';
 import { Organization } from '../../core/models/organization.models';
 import { RecommendationService } from '../../core/services/recommendation.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PendingPurchase, PurchaseIntentService } from '../../core/services/purchase-intent.service';
 import { RecommendationRowComponent } from '../../components/recommendation-row/recommendation-row.component';
 
 /** Hard cap per row regardless of how much capacity is left — a storefront limit, not a
@@ -75,6 +76,7 @@ export class ProductDetailsComponent {
   private readonly cartService = inject(CartService);
   private readonly recommendationService = inject(RecommendationService);
   private readonly authService = inject(AuthService);
+  private readonly purchaseIntentService = inject(PurchaseIntentService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   readonly cityLabels = CITY_LABELS;
@@ -263,19 +265,57 @@ export class ProductDetailsComponent {
         this.product.set(product);
         this.sectors.set(sectors.items);
         this.isLoading.set(false);
+
+        // Read-once: a purchase interrupted by a sign-in detour left its selection parked here (see
+        // proceedToCheckout/selectSpot below), and picking it up now is what lets login return the
+        // buyer to a resumed checkout instead of an empty product page.
+        const intent = this.purchaseIntentService.take(product.id);
+
         if (product.ticketingMode === 'DailyEntry') {
-          this.selectedDate.set(this.firstSelectableDate(sectors.items));
+          // The intent's own date wins over the usual "earliest bookable day" default — resuming
+          // must land back on the exact date the buyer had picked, not wherever the picker opens by
+          // default.
+          this.selectedDate.set(intent?.date ?? this.firstSelectableDate(sectors.items));
           this.loadSectorsForDate();
         }
         this.loadOrganization(product.organizationId);
         this.trackView(product.id);
         this.loadSimilar(product.id);
+
+        if (intent) this.resumePendingPurchase(intent, sectors.items);
       },
       error: () => {
         this.loadError.set('Proizvod nije pronađen ili više nije dostupan.');
         this.isLoading.set(false);
       },
     });
+  }
+
+  /**
+   * Replays a purchase that was interrupted by a sign-in detour — the counterpart to the
+   * `purchaseIntentService.set()` calls in `proceedToCheckout`/`selectSpot`.
+   *
+   * Called at most once per load: `PurchaseIntentService.take()` already cleared the intent before
+   * this runs, so a re-subscription of the same product (e.g. the `paramMap` firing again) cannot
+   * replay it a second time.
+   */
+  private resumePendingPurchase(intent: PendingPurchase, sectors: Sector[]): void {
+    if (intent.spotSectorId) {
+      const sector = sectors.find((s) => s.id === intent.spotSectorId);
+      if (sector && !this.spotUnavailable(sector)) {
+        this.selectSpot(sector);
+      } else {
+        // Someone else took it during the detour, or it no longer exists — the honest failure mode
+        // is landing back on the page with an explanation, not a silent no-op.
+        this.submitError.set('Odabrano mjesto više nije dostupno. Odaberite drugo.');
+      }
+      return;
+    }
+
+    if (Object.keys(intent.quantities).length === 0) return;
+
+    this.quantities.set(intent.quantities);
+    this.proceedToCheckout();
   }
 
   /** Re-reads the sector list for the currently-selected date so `remainingCapacity` refers to that
@@ -496,7 +536,15 @@ export class ProductDetailsComponent {
         }
         this.isSubmitting.set(false);
         if (this.isUnauthorized(failed.error)) {
-          this.router.navigateByUrl('/prijava');
+          // Parks the exact selection so it can be replayed once the buyer is back — see
+          // resumePendingPurchase — then sends them to sign in and back to this same page.
+          this.purchaseIntentService.set({
+            productId: product.id,
+            quantities: { ...quantities },
+            date: isDailyEntry ? this.selectedDate() : null,
+            spotSectorId: null,
+          });
+          this.navigateToLogin();
           return;
         }
         this.submitError.set(this.extractErrorMessage(failed.error));
@@ -586,7 +634,13 @@ export class ProductDetailsComponent {
       error: (error: unknown) => {
         this.isSubmitting.set(false);
         if (this.isUnauthorized(error)) {
-          this.router.navigateByUrl('/prijava');
+          this.purchaseIntentService.set({
+            productId: sector.productId,
+            quantities: {},
+            date: null,
+            spotSectorId: sector.id,
+          });
+          this.navigateToLogin();
         } else if (this.isConflict(error)) {
           this.takenSpotIds.update((set) => new Set(set).add(sector.id));
           this.submitError.set('Ovo mjesto je upravo zauzeto. Odaberite drugo.');
@@ -599,6 +653,14 @@ export class ProductDetailsComponent {
 
   goToCheckoutWithSpot(): void {
     if (this.selectedSpotSectorId()) this.router.navigateByUrl('/placanje');
+  }
+
+  /** Sends an unauthenticated buyer to sign in and back to this exact product page — paired with a
+   * `purchaseIntentService.set()` call at every call site, so the selection they made survives the
+   * detour. `router.url` (not a hardcoded `/dogadjaji/:id`) so it also carries this navigation's own
+   * query string, if it ever has one. */
+  private navigateToLogin(): void {
+    this.router.navigate(['/prijava'], { queryParams: { returnUrl: this.router.url } });
   }
 
   private isConflict(error: unknown): boolean {

@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { AuthService } from '../../core/services/auth.service';
+import { safeReturnUrl } from '../../core/utils/return-url.util';
 
 @Component({
   selector: 'app-verify-email',
@@ -15,6 +16,7 @@ export class VerifyEmailComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly isLoading = signal(false);
   readonly errorMessage = signal<string | null>(null);
@@ -35,7 +37,10 @@ export class VerifyEmailComponent {
     this.errorMessage.set(null);
 
     this.authService.verifyEmail(this.form.getRawValue()).subscribe({
-      next: () => this.router.navigateByUrl('/'),
+      // Last link in the register → verify-email → returnUrl chain — see
+      // RegisterComponent.returnUrlParams.
+      next: () =>
+        this.router.navigateByUrl(safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'))),
       error: (error: unknown) => {
         this.isLoading.set(false);
         this.errorMessage.set(this.extractErrorMessage(error));

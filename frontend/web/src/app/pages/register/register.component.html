@@ -91,7 +91,8 @@
         </button>
 
         <p class="auth-switch">
-          Već imate nalog? <a routerLink="/prijava">Prijavite se</a>
+          <!-- Carries returnUrl forward — see LoginComponent.returnUrlParams. -->
+          Već imate nalog? <a routerLink="/prijava" [queryParams]="returnUrlParams()">Prijavite se</a>
         </p>
       </form>
     </div>
