@@ -124,19 +124,22 @@
   padding: 40px 0;
 }
 
-/* Three cards per row at most, always the same size, always centred.
+/* Three cards per row at most, always the same size, and every row centred — including a partial
+ * last one.
  *
- * The old `repeat(auto-fit, minmax(320px, 1fr))` did neither: `1fr` let every track absorb the
- * leftover width, so one product rendered as a single card stretched across the whole page and two
- * rendered as two half-page cards — the same product looked like a different component depending on
- * how many of its siblings happened to be published. Capping the track at a fixed 340px keeps the
- * card one size everywhere, `max-width` caps the row at three of them, and `justify-content: center`
- * puts whatever is actually there in the middle. `auto-fit` (not `auto-fill`) is what makes the
- * one- and two-card cases centre rather than sitting left with empty tracks beside them: it
- * collapses the tracks nothing was placed in. */
+ * Two separate problems led here. `repeat(auto-fit, minmax(320px, 1fr))` sized cards by how many
+ * siblings happened to be published: `1fr` let every track absorb the leftover width, so one
+ * product rendered as a single card stretched across the page and two rendered as two half-page
+ * cards. Pinning the track to 340px fixed that, but grid still cannot centre a *partial* row —
+ * with four products over three columns, the fourth is placed in the first track and sits alone on
+ * the left.
+ *
+ * Flex solves the second problem the first could not: it breaks items into lines and applies
+ * `justify-content` to each line independently, so four products render as three centred above one
+ * centred. `max-width: 1084px` still caps the row at three cards. */
 .events-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 340px));
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 32px;
   /* 3 * 340 card + 2 * 32 gap. */
@@ -146,18 +149,41 @@
   margin-bottom: 48px;
 }
 
+/* Grow from a 320px basis, never past 340px — three per row at full width, each exactly 340px.
+ *
+ * The basis is deliberately close to the cap. `flex-grow` shares out the leftover width, so on a
+ * row that is one card short the leftover is larger and that card reaches the cap while the full
+ * rows above it stop short — it renders wider than its siblings, which is the next thing you would
+ * notice after the centring. How much wider is bounded by exactly (cap - basis) at the worst
+ * container width, so keeping that span at 20px holds the difference under ~6% instead of the ~12%
+ * a 300px basis allowed. It cannot be driven to zero without giving up the fluid column count:
+ * a fixed width would drop the row from two cards to one across a whole band of tablet widths. */
+.events-grid > * {
+  flex: 1 1 320px;
+  max-width: 340px;
+  min-width: 0;
+}
+
 /* How it works */
 .how-section {
   padding: 80px 24px;
 }
 
+/* Flex for the same reason as `.events-grid`: four cards that wrap to 3 + 1 must not leave the
+   last one hanging off the left edge. */
 .how-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 28px;
 }
 
 .how-card {
+  /* 280/300 for the reason given on `.events-grid > *`: a 260px basis let a row of three at
+     ~900px settle at 265px while the card wrapped below them reached 300. */
+  flex: 1 1 280px;
+  max-width: 300px;
+  min-width: 0;
   background-color: var(--card);
   padding: 32px;
   border-radius: var(--radius-lg);
@@ -245,10 +271,9 @@
     font-size: 1rem;
   }
 
-  /* Below the 300px track minimum there is only ever one card per row anyway; stating it keeps the
-     card from being pinned to 300px on a 360px phone. */
+  /* Below the 300px flex-basis there is only ever one card per row anyway. Capping the row at a
+     single card's width is what forces the wrap; the card then grows to fill it. */
   .events-grid {
-    grid-template-columns: 1fr;
     max-width: 340px;
   }
   

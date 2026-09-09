@@ -23,8 +23,8 @@
    browse grid below it instead of introducing a second card width. See that rule for why the track
    is a fixed 340px rather than 1fr. */
 .recommendation-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 340px));
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 32px;
   /* 3 * 340 card + 2 * 32 gap. */
@@ -33,15 +33,22 @@
   margin-right: auto;
 }
 
+/* Same basis/cap pair as .events-grid, for the reason documented on that rule. */
+.recommendation-grid > * {
+  flex: 1 1 320px;
+  max-width: 340px;
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
   .recommendation-row {
     margin-bottom: 32px;
   }
 
   /* Single column below the 300px card minimum — matching .events-grid's breakpoint keeps the
-     page from having two different collapse points. */
+     page from having two different collapse points. Capping the row at one card's width is what
+     forces the wrap, so the items themselves need no override. */
   .recommendation-grid {
-    grid-template-columns: 1fr;
     max-width: 340px;
     gap: 24px;
   }

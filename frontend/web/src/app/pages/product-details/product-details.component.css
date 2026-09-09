@@ -64,6 +64,10 @@
   display: flex;
   gap: 10px;
   margin-bottom: 24px;
+  /* Scrolls within itself: a product with a dozen images used to widen the whole grid column. */
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
 }
 
 .thumb {
@@ -255,9 +259,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+/* The text column, which must be free to wrap. Without `min-width: 0` a long sector or tier name
+   holds the flex item at its min-content width and shoves the stepper past the card's edge. */
+.row > div:first-child {
+  min-width: 0;
 }
 
 .row-bordered {
@@ -267,6 +278,7 @@
 .row-name {
   font-weight: var(--font-weight-semibold);
   margin: 0 0 2px;
+  overflow-wrap: anywhere;
 }
 
 .row-sub {
@@ -285,6 +297,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .stepper button {
@@ -383,6 +396,37 @@
 
   .purchase-card {
     position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .product-details-page {
+    padding: 24px 16px 64px;
+  }
+
+  .info-card,
+  .purchase-card {
+    padding: 20px;
+  }
+
+  .info-card h1 {
+    font-size: 1.5rem;
+  }
+
+  .similar-products {
+    margin-top: 40px;
+  }
+
+  .location-map-placeholder {
+    height: 220px;
+  }
+}
+
+@media (max-width: 420px) {
+  /* Two spaces per row instead of three: a parking label like "A-12" plus padding no longer fits a
+     third of the card at this width. */
+  .spot-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

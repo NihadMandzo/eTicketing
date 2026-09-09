@@ -26,10 +26,21 @@
   margin: 0 auto;
 }
 
+/* Flex so a row of three that wraps to 2 + 1 centres the orphan instead of leaving it on the left.
+   400px is what `1fr` already resolved to for three cards in this container. */
 .contact-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 32px;
+}
+
+/* 360/380: a 280px basis left a 100px span between basis and cap, which is how much wider a
+   wrapped card could render than the row above it. */
+.contact-card {
+  flex: 1 1 360px;
+  max-width: 380px;
+  min-width: 0;
 }
 
 .contact-card {
@@ -79,8 +90,8 @@
     padding: 60px 16px;
   }
   
-  .contact-grid {
-    grid-template-columns: 1fr;
+  .contact-card {
+    flex-basis: 100%;
   }
   
   .contact-card {

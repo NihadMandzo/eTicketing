@@ -38,7 +38,7 @@ jobs:
           az acr build \
             -r eticketingacr \
             -t web:${{ github.sha }} \
-            --build-arg NG_APP_API_BASE_URL=https://gateway.thankfulplant-ceb4a7f8.westeurope.azurecontainerapps.io/api \
+            --build-arg NG_APP_API_BASE_URL="${{ secrets.GATEWAY_API_URL }}" \
             --build-arg NG_APP_GOOGLE_MAPS_API_KEY="${{ secrets.NG_APP_GOOGLE_MAPS_API_KEY }}" \
             frontend/web
 
