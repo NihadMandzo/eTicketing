@@ -83,10 +83,25 @@
   padding: 60px 0;
 }
 
+/* Flex, not grid, and a capped card rather than `1fr`: `auto-fill` + `1fr` stretched every card to
+ * fill its track and left a wrapped partial row hugging the left edge — five products rendered as
+ * four across plus one orphan off to the side. Flex applies `justify-content` per line, so the last
+ * row centres under the ones above it. The 300/340 pair keeps desktop sizing where it already was
+ * (four across at full width) and stops a lone card from growing the width of the page. */
 .products-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
+}
+
+/* 320px cap, not 340: four cards plus three 24px gaps is exactly the 1352px this container gets at
+   full width, so every card reaches the cap and a wrapped fifth is the same size as the four above
+   it rather than 20px wider. */
+.products-grid > * {
+  flex: 1 1 300px;
+  max-width: 320px;
+  min-width: 0;
 }
 
 /* DailyEntry layout — one prominent horizontal card per location */
@@ -161,10 +176,23 @@
 
 /* RecurringReservation layout — compact parking-lot-style grid */
 .parking-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
-  max-width: 1000px;
+  /* 3 * 320 card + 2 * 24 gap. Sized to the card rather than rounded to 1000, so a full row of
+     three reaches the 320px cap — at 1000px they landed at 317.3px and a wrapped fourth card below
+     them, with a whole line to grow into, hit 320 and rendered visibly wider. */
+  max-width: 1008px;
+  /* Centre the block itself as well — otherwise a centred last row would be centred inside a
+     left-aligned column, which reads as neither centred nor aligned. */
+  margin-inline: auto;
+}
+
+.parking-grid > * {
+  flex: 1 1 300px;
+  max-width: 320px;
+  min-width: 0;
 }
 
 .parking-card {
@@ -223,8 +251,10 @@
     grid-template-columns: 1fr;
   }
 
-  .products-grid {
-    grid-template-columns: 1fr;
+  /* One card per row: the 300px basis already forces the wrap at this width, so only the cap has
+     to relax for the card to use the full column. */
+  .products-grid > * {
+    max-width: 100%;
   }
 
   .daily-entry-card {

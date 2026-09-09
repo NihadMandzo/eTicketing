@@ -41,6 +41,8 @@
 
 .success-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
   margin-top: 16px;
 }
@@ -222,6 +224,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .method-text small {
@@ -256,6 +259,9 @@
 
 .field-row .field {
   flex: 1;
+  /* An <input>'s automatic minimum size is its intrinsic ~20-character width, so without this the
+     two card fields refuse to shrink and push the step card open. */
+  min-width: 0;
 }
 
 .field {
@@ -324,6 +330,7 @@
 
 .nav-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
 }
 
@@ -363,6 +370,42 @@
 
   .field-row {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .checkout-page {
+    padding: 24px 16px 64px;
+  }
+
+  .step-card {
+    padding: 20px;
+  }
+
+  /* The stepper header has to fit four dots and four labels across the narrowest phone. */
+  .dot {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+
+  .dot-line {
+    margin: 0 4px;
+  }
+
+  .dot-label {
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  .method {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .method-icon {
+    width: 38px;
+    height: 38px;
   }
 }
 

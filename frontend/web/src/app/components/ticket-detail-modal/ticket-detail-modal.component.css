@@ -115,6 +115,7 @@
 .info-row {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   padding-top: 10px;
   font-size: 13px;
 }
@@ -123,8 +124,13 @@
   color: var(--muted-foreground);
 }
 
+/* A long sector or product name wraps under its label instead of widening the modal past the
+   viewport — this card has no other horizontal give. */
 .info-row span:last-child {
+  min-width: 0;
   font-weight: var(--font-weight-semibold);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .pdf-btn {
@@ -142,3 +148,23 @@
   box-sizing: border-box;
 }
 
+@media (max-width: 480px) {
+  .backdrop {
+    padding: 16px;
+  }
+
+  .header-band {
+    padding: 24px 18px 18px;
+  }
+
+  .body {
+    padding: 22px 18px 20px;
+  }
+
+  /* Shrinks with the card rather than forcing it wider; still far above the ~120px a scanner
+     needs. */
+  .qr {
+    width: min(180px, 60vw);
+    height: min(180px, 60vw);
+  }
+}

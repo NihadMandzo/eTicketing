@@ -1,12 +1,34 @@
+/* Fixed-size cards, every row centred — the same treatment (and for the same reason) as the home
+ * page's `.events-grid`, which this sits directly above.
+ *
+ * The original `auto-fill` + `1fr` grid did neither: `1fr` let each track absorb the leftover
+ * width, so three categories rendered as three page-wide slabs while eight rendered as small
+ * squares — the same card was a different size depending on how many categories the platform
+ * happened to have. And `auto-fill` keeps the empty tracks it creates, so a short row sat pinned
+ * to the left with dead space beside it.
+ *
+ * Flex rather than grid, because grid cannot centre a partial last row: with nine categories over
+ * six columns, the three left over are placed in the first three tracks and sit off to the left of
+ * a row that looks centred everywhere else. Flex breaks content into lines and applies
+ * `justify-content` to each line separately, so the last row centres like the rest.
+ * `flex: 1 1 120px` + `max-width: 150px` on the card reproduces `minmax(120px, 150px)`, and that
+ * cap is what stops one leftover card from growing across its whole line. */
 .category-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 16px;
 }
 
 .category-card {
   display: flex;
   flex-direction: column;
+  /* 140/150 rather than 120/150: inside the 900px wrapper this row lives in, five cards per line
+     leave enough slack that every card reaches the 150px cap — so a wrapped last row is made of
+     cards the same size as the rows above it, not wider ones. */
+  flex: 1 1 140px;
+  max-width: 150px;
+  min-width: 0;
   aspect-ratio: 1 / 1;
   padding: 0;
   border: 1.5px solid var(--border);
@@ -61,7 +83,20 @@
 
 @media (max-width: 600px) {
   .category-cards {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 12px;
+  }
+
+  /* Exactly three per row at every phone width, all the same size. A phone's container width is
+     fluid, so there is no fixed basis that both fits three cards at 320px and still reaches its cap
+     at 414px — and a basis short of its cap is what makes a wrapped last row render wider than the
+     rows above it. So the line is divided rather than grown into: `flex-grow` is off and the width
+     is a share of the row. The 150px cap still applies at the top of this range. */
+  .category-card {
+    flex: 0 0 calc((100% - 24px) / 3);
+  }
+
+  .category-card-title {
+    font-size: 13px;
+    padding: 8px 6px;
   }
 }
