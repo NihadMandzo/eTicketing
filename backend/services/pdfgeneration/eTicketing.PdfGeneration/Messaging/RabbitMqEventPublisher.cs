@@ -26,7 +26,10 @@ public class RabbitMqEventPublisher : IEventPublisher
 
     public async Task PublishAsync<T>(string routingKey, T message, CancellationToken ct = default)
     {
-        var factory = new ConnectionFactory { HostName = _options.Host };
+        // See RabbitMqConsumerService for why this can't be a plain HostName assignment.
+        var factory = Uri.TryCreate(_options.Host, UriKind.Absolute, out var uri) && uri.Scheme.StartsWith("amqp")
+            ? new ConnectionFactory { Uri = uri }
+            : new ConnectionFactory { HostName = _options.Host };
         using var connection = await factory.CreateConnectionAsync(ct);
         using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
 

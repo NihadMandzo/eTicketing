@@ -56,7 +56,13 @@ public sealed class RabbitMqConsumerService : BackgroundService
 
     private async Task RunOnceAsync(CancellationToken ct)
     {
-        var factory = new ConnectionFactory { HostName = _options.Host };
+        // RabbitMq:Host doubles as either a bare hostname (local docker-compose broker, no
+        // credentials) or a full amqp(s)://user:pass@host/vhost connection string (CloudAMQP in
+        // Azure) — HostName alone can't parse the latter, it would just try to DNS-resolve the
+        // whole URI string. Uri handles both scheme, TLS (amqps), credentials and vhost.
+        var factory = Uri.TryCreate(_options.Host, UriKind.Absolute, out var uri) && uri.Scheme.StartsWith("amqp")
+            ? new ConnectionFactory { Uri = uri }
+            : new ConnectionFactory { HostName = _options.Host };
         await using var connection = await factory.CreateConnectionAsync(ct);
         // Publisher confirmations: BasicPublishAsync below doesn't complete until the broker has
         // durably accepted the message — this is what makes "confirm the retry/dead-letter copy

@@ -24,7 +24,11 @@ public class RabbitMqEventPublisher : IEventPublisher
     {
         try
         {
-            var factory = new ConnectionFactory { HostName = _configuration["RabbitMq:Host"] ?? "localhost" };
+            // See CatalogRabbitMqConsumerService for why this can't be a plain HostName assignment.
+            var host = _configuration["RabbitMq:Host"] ?? "localhost";
+            var factory = Uri.TryCreate(host, UriKind.Absolute, out var uri) && uri.Scheme.StartsWith("amqp")
+                ? new ConnectionFactory { Uri = uri }
+                : new ConnectionFactory { HostName = host };
             using var connection = await factory.CreateConnectionAsync(ct);
             using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
 

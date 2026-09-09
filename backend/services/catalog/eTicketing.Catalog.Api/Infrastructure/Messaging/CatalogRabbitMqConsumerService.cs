@@ -62,7 +62,14 @@ public sealed class CatalogRabbitMqConsumerService : BackgroundService
 
     private async Task RunOnceAsync(CancellationToken ct)
     {
-        var factory = new ConnectionFactory { HostName = _configuration["RabbitMq:Host"] ?? "localhost" };
+        // RabbitMq:Host doubles as either a bare hostname (local docker-compose broker) or a full
+        // amqp(s)://user:pass@host/vhost connection string (self-hosted RabbitMQ in Azure needs
+        // real credentials — the default guest user only accepts localhost connections) — HostName
+        // alone can't parse the latter, it would just try to DNS-resolve the whole URI string.
+        var host = _configuration["RabbitMq:Host"] ?? "localhost";
+        var factory = Uri.TryCreate(host, UriKind.Absolute, out var uri) && uri.Scheme.StartsWith("amqp")
+            ? new ConnectionFactory { Uri = uri }
+            : new ConnectionFactory { HostName = host };
         await using var connection = await factory.CreateConnectionAsync(ct);
         await using var channel = await connection.CreateChannelAsync(
             new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true), ct);
