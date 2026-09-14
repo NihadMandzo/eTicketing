@@ -88,7 +88,9 @@ public sealed class RabbitMqConsumerService : BackgroundService
 
     private async Task HandleDeliveryAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken ct)
     {
-        var routingKey = delivery.RoutingKey;
+        // A retried delivery arrives under the queue name, not the event's routing key — see
+        // RoutingKeyResolver for why, and RepublishAsync for where the original is stashed.
+        var routingKey = RoutingKeyResolver.Resolve(delivery.BasicProperties.Type, delivery.RoutingKey);
 
         try
         {
@@ -98,7 +100,7 @@ public sealed class RabbitMqConsumerService : BackgroundService
         catch (PoisonMessageException ex)
         {
             _logger.LogError(ex, "Poruka za '{RoutingKey}' se ne može obraditi — premještam u dead-letter red.", routingKey);
-            await RepublishAsync(channel, RetryQueueNames.DeadLetter, delivery.Body, retryCount: null, ct);
+            await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, delivery.Body, retryCount: null, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (Exception ex)
@@ -108,14 +110,17 @@ public sealed class RabbitMqConsumerService : BackgroundService
             _logger.LogWarning(ex,
                 "Generisanje PDF-a za '{RoutingKey}' nije uspjelo (pokušaj {RetryCount}) — zakazujem ponovni pokušaj u redu '{Queue}'.",
                 routingKey, retryCount, targetQueue);
-            await RepublishAsync(channel, targetQueue, delivery.Body, retryCount, ct);
+            await RepublishAsync(channel, targetQueue, routingKey, delivery.Body, retryCount, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
     }
 
-    private static async Task RepublishAsync(IChannel channel, string targetQueue, ReadOnlyMemory<byte> body, int? retryCount, CancellationToken ct)
+    private static async Task RepublishAsync(
+        IChannel channel, string targetQueue, string routingKey, ReadOnlyMemory<byte> body, int? retryCount, CancellationToken ct)
     {
-        var properties = new BasicProperties { Persistent = true };
+        // Type carries the original routing key across the republish + dead-letter hops, both of
+        // which overwrite delivery.RoutingKey with a queue name.
+        var properties = new BasicProperties { Persistent = true, Type = routingKey };
         if (retryCount is not null)
         {
             properties.Headers = new Dictionary<string, object?> { [RetryCountHeader] = retryCount.Value };
