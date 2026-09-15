@@ -4,12 +4,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
-    "types": [
-      "vitest/globals"
-    ]
+    /* "node" mirrors tsconfig.app.json: src/environments/environment*.ts reads `process.env`
+       (@ngx-env bakes the values in at build time), so any spec that transitively imports an
+       environment file fails to compile with TS2591 without it — which is every spec that touches
+       a service with an API base URL. */
+    "types": ["vitest/globals", "node"]
   },
-  "include": [
-    "src/**/*.d.ts",
-    "src/**/*.spec.ts"
-  ]
+  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
 }
