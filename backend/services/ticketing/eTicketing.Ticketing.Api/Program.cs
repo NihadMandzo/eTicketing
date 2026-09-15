@@ -1,3 +1,4 @@
+using eTicketing.Contracts.Validation;
 ﻿using eTicketing.Contracts.Hosting;
 using eTicketing.Shared.Auth;
 using eTicketing.Ticketing.Api.Endpoints;
@@ -44,5 +45,9 @@ app.MapAnalyticsEndpoints();
 app.MapGateDeviceEndpoints();
 app.MapGateEndpoints();
 app.MapHealthChecks("/health");
+
+// Fails fast if any route declared WithValidation<T>() without a registered IValidator<T>;
+// that combination is otherwise silent, leaving the endpoint unvalidated while looking validated.
+app.VerifyRequestValidatorsRegistered();
 
 app.Run();

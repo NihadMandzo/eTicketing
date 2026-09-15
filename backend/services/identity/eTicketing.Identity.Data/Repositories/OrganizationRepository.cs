@@ -19,7 +19,7 @@ public class OrganizationRepository : Repository<Organization, Guid>, IOrganizat
             .Where(o => organizationIds == null || organizationIds.Count == 0 || organizationIds.Contains(o.Id))
             .Include(o => o.Users)
             .OrderBy(o => o.Name)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<Organization?> GetByIdWithUsersAsync(Guid id, CancellationToken ct = default)
         => Query().Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == id, ct);

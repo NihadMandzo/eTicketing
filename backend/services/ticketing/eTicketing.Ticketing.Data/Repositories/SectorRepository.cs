@@ -19,7 +19,7 @@ public class SectorRepository : Repository<Sector, Guid>, ISectorRepository
             .Where(s => organizationId == null || s.OrganizationId == organizationId)
             .Where(s => status == null || s.Status == status)
             .OrderByDescending(s => s.CreatedAt)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<Sector?> GetByIdWithTicketTypesAsync(Guid id, CancellationToken ct = default)
         => Query().Include(s => s.TicketTypes).FirstOrDefaultAsync(s => s.Id == id, ct);

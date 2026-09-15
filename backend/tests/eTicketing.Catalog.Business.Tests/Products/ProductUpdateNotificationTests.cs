@@ -82,7 +82,7 @@ public class ProductUpdateNotificationTests : IDisposable
         await _sut.UpdateAsync(id, Request() with { CategoryId = _sport.Id }, Caller());
 
         VerifyPublished(e =>
-            e.Changes.Any(c => c.Field == "Kategorija" && c.OldValue == "Muzika" && c.NewValue == "Sport"));
+            e.Changes.Any(c => c.Field == "Kategorija" && c.OldValue == "Pozorište" && c.NewValue == "Kino"));
     }
 
     [Fact]
@@ -200,8 +200,8 @@ public class ProductUpdateNotificationTests : IDisposable
 
     private async Task SeedAsync()
     {
-        _music = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
-        _sport = new Category { Name = "Sport", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _music = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _sport = new Category { Name = "Kino", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         await _fixture.CategoryRepository.AddAsync(_music);
         await _fixture.CategoryRepository.AddAsync(_sport);
         await _fixture.UnitOfWork.SaveChangesAsync();

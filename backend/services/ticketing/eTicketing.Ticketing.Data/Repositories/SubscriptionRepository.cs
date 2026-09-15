@@ -19,7 +19,10 @@ public class SubscriptionRepository : Repository<Subscription, Guid>, ISubscript
             .Include(s => s.Sector)
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAt)
-            .ToPagedResultAsync(page, pageSize, ct);
+            .ToPagedResultAsync(
+                page ?? BaseSearchObject.DefaultPage,
+                pageSize ?? BaseSearchObject.DefaultPageSize,
+                ct);
 
     public Task<Subscription?> GetByIdWithSectorAsync(Guid id, CancellationToken ct = default)
         => DbSet

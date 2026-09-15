@@ -15,9 +15,9 @@ public static class TicketPrintEndpoints
             .WithTags("TicketPrint")
             .RequireAuthorization("Organizer");
 
-        group.MapGet("/options", GetOptions);
+        group.MapGet("/options", GetOptions).WithValidation<TicketPrintOptionsQuery>();
         group.MapGet("/outstanding", GetOutstanding);
-        group.MapGet("/latest", GetLatest);
+        group.MapGet("/latest", GetLatest).WithValidation<TicketPrintLatestQuery>();
         group.MapPost("/", Create).WithValidation<CreateTicketPrintBatchRequest>();
         group.MapGet("/{id:guid}", Get);
         group.MapGet("/{id:guid}/file", Download);
@@ -29,9 +29,9 @@ public static class TicketPrintEndpoints
     }
 
     private static async Task<IResult> GetOptions(
-        Guid productId, DateOnly? date, ITicketPrintService service, HttpContext http, CancellationToken ct)
+        [AsParameters] TicketPrintOptionsQuery query, ITicketPrintService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.GetOptionsAsync(productId, date, http.User, ct);
+        var result = await service.GetOptionsAsync(query.ProductId, query.Date, http.User, ct);
         return result.ToHttpResult();
     }
 
@@ -46,9 +46,9 @@ public static class TicketPrintEndpoints
     /// apart from a malformed response — an explicit "no content" says the lookup succeeded and
     /// found nothing.</summary>
     private static async Task<IResult> GetLatest(
-        Guid productId, ITicketPrintService service, HttpContext http, CancellationToken ct)
+        [AsParameters] TicketPrintLatestQuery query, ITicketPrintService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.GetLatestForProductAsync(productId, http.User, ct);
+        var result = await service.GetLatestForProductAsync(query.ProductId, http.User, ct);
 
         if (result.IsSuccess && result.Value is null)
         {

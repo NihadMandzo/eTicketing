@@ -50,8 +50,8 @@ public class ProductServiceTests : IDisposable
 
     private async Task SeedCategoriesAndProducts()
     {
-        _music = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
-        _sport = new Category { Name = "Sport", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _music = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _sport = new Category { Name = "Kino", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         _dailyEntryCategory = new Category { Name = "Muzej", IsActive = true, TicketingMode = TicketingMode.DailyEntry };
         await _fixture.CategoryRepository.AddAsync(_music);
         await _fixture.CategoryRepository.AddAsync(_sport);
@@ -127,7 +127,7 @@ public class ProductServiceTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.Status.Should().Be(PublishStatus.Draft);
         result.Value.OrganizationId.Should().Be(_orgA);
-        result.Value.CategoryName.Should().Be("Muzika");
+        result.Value.CategoryName.Should().Be("Pozorište");
     }
 
     [Fact]

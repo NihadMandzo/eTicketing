@@ -42,7 +42,7 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
             .Where(u => string.IsNullOrEmpty(query.FTS)
                 || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, RoleType? role, CancellationToken ct = default)
         => Query()
@@ -52,7 +52,7 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
             .Where(u => string.IsNullOrEmpty(query.FTS)
                 || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<int> CountByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => Query().CountAsync(u => u.OrganizationId == organizationId, ct);

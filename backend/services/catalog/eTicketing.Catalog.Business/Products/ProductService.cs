@@ -296,6 +296,11 @@ public class ProductService : IProductService
 
     public async Task<Result<List<Guid>>> GetOrganizationIdsAsync(IReadOnlyList<int> categoryIds, CancellationToken ct = default)
     {
+        // No categories selected is a legitimate "filter nothing", not an error or a full scan —
+        // this short-circuit used to live in the endpoint handler.
+        if (categoryIds.Count == 0)
+            return Result<List<Guid>>.Success([]);
+
         var ids = await _productRepository.GetOrganizationIdsByCategoryIdsAsync(categoryIds, ct);
         return Result<List<Guid>>.Success(ids);
     }

@@ -53,6 +53,10 @@ public class CategoryService : ICategoryService
 
     public async Task<Result<CategoryResponse>> CreateAsync(CreateCategoryRequest request, CancellationToken ct = default)
     {
+        if (await _categoryRepository.ExistsByNameAsync(request.Name, ct: ct))
+            return Result<CategoryResponse>.Failure(Error.Conflict(
+                "category.name_already_exists", "Kategorija sa ovim nazivom već postoji."));
+
         var category = request.Adapt<Category>();
 
         await _categoryRepository.AddAsync(category, ct);
@@ -66,6 +70,10 @@ public class CategoryService : ICategoryService
         var category = await _categoryRepository.GetByIdAsync(id, ct);
         if (category is null)
             return Result<CategoryResponse>.Failure(Error.NotFound("category.not_found", "Kategorija nije pronađena."));
+
+        if (await _categoryRepository.ExistsByNameAsync(request.Name, excludeId: id, ct: ct))
+            return Result<CategoryResponse>.Failure(Error.Conflict(
+                "category.name_already_exists", "Kategorija sa ovim nazivom već postoji."));
 
         request.Adapt(category);
         await _unitOfWork.SaveChangesAsync(ct);

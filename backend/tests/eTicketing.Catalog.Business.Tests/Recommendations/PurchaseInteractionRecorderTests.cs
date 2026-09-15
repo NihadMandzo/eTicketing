@@ -148,7 +148,7 @@ public class PurchaseInteractionRecorderTests : IDisposable
 
     private async Task SeedAsync()
     {
-        var category = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        var category = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         await _fixture.CategoryRepository.AddAsync(category);
         await _fixture.UnitOfWork.SaveChangesAsync();
 

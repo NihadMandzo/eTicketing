@@ -135,7 +135,7 @@ public class ProductDeleteNotificationTests : IDisposable
 
     private async Task SeedAsync()
     {
-        _music = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _music = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         await _fixture.CategoryRepository.AddAsync(_music);
         await _fixture.UnitOfWork.SaveChangesAsync();
     }

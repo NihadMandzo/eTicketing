@@ -27,7 +27,7 @@ public class OrganizationProductStatsTests : IDisposable
         // applies, so the catalogue these tests run against is never empty to begin with.
         _sut = _fixture.CreateProductService();
 
-        _category = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _category = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         _fixture.CategoryRepository.AddAsync(_category).GetAwaiter().GetResult();
         _fixture.UnitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
     }

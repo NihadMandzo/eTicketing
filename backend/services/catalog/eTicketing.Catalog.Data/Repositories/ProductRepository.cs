@@ -21,7 +21,7 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
             .Where(p => status == null || p.Status == status)
             .Where(p => city == null || p.City == city)
             .OrderByDescending(p => p.CreatedAt)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<List<Guid>> GetOrganizationIdsByCategoryIdsAsync(IReadOnlyList<int> categoryIds, CancellationToken ct = default)
         => Query()
