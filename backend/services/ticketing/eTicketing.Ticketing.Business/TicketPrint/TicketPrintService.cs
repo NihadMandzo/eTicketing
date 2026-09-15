@@ -4,6 +4,7 @@ using eTicketing.Contracts.Results;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;

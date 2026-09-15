@@ -12,8 +12,20 @@ public static class OrganizationEndpoints
     {
         var group = app.MapGroup("/organizations").WithTags("Organizations");
 
-        group.MapGet("", GetAll).AllowAnonymous().WithValidation<OrganizationQuery>();
-        group.MapGet("/{id:guid}", GetById).AllowAnonymous();
+        // The list is a back-office screen (desktop Organizacije, platform staff only) — it was
+        // previously anonymous, which let anyone page through every organization on the platform
+        // together with its contact details and staff headcount.
+        group.MapGet("", GetAll).RequireAuthorization("PlatformStaff").WithValidation<OrganizationQuery>();
+
+        // Detail carries the back-office fields (UserCount/IsActive/CreatedAt), so it requires a
+        // caller; OrganizationService.GetByIdAsync then enforces staff-or-own-organization.
+        group.MapGet("/{id:guid}", GetById).RequireAuthorization("Organizer");
+
+        // ...and the storefront's own read, deliberately anonymous and deliberately narrower: the
+        // product page renders an "Organizator" card for signed-out visitors (web and mobile).
+        // Separate route rather than shape-switching inside GetById, so that what is public is
+        // visible in the routing table instead of buried in a branch.
+        group.MapGet("/{id:guid}/public", GetPublicById).AllowAnonymous();
 
         group.MapPost("", Create).RequireAuthorization("SuperAdminOnly").WithValidation<CreateOrganizationRequest>();
         group.MapPut("/{id:guid}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateOrganizationRequest>();
@@ -47,9 +59,15 @@ public static class OrganizationEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> GetById(Guid id, IOrganizationService service, CancellationToken ct)
+    private static async Task<IResult> GetById(Guid id, HttpContext http, IOrganizationService service, CancellationToken ct)
     {
-        var result = await service.GetByIdAsync(id, ct);
+        var result = await service.GetByIdAsync(id, http.User, ct);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetPublicById(Guid id, IOrganizationService service, CancellationToken ct)
+    {
+        var result = await service.GetPublicByIdAsync(id, ct);
         return result.ToHttpResult();
     }
 

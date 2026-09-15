@@ -2,6 +2,7 @@
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.Analytics;
 using eTicketing.Shared.TicketPdf;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using QuestPDF.Fluent;

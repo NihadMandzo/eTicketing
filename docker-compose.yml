@@ -24,8 +24,11 @@ services:
     environment:
       SA_PASSWORD: "${SA_PASSWORD:?Set SA_PASSWORD in .env}"
       ACCEPT_EULA: "Y"
+    # Bound to loopback, not 0.0.0.0: this is a developer convenience (SSMS/Azure Data Studio
+    # against the container), not something any other machine should reach. Publishing it on every
+    # interface put the database on the LAN of whatever network the dev machine happened to be on.
     ports:
-      - "${SQLSERVER_PORT:-1433}:1433"
+      - "127.0.0.1:${SQLSERVER_PORT:-1433}:1433"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
@@ -52,8 +55,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: eticketing-redis
+    # Loopback-only, same reasoning as sqlserver — and more urgent here: Redis runs with no
+    # password and holds the sector capacity counters, so anyone who could reach this port could
+    # take or wipe holds.
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Results;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 
 namespace eTicketing.Ticketing.Business.Reports;

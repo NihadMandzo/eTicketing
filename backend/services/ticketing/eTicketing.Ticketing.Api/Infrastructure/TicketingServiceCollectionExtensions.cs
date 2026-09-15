@@ -15,6 +15,7 @@ using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;

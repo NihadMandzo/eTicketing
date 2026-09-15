@@ -63,7 +63,12 @@ public class ProductServiceUpcomingTests : IDisposable
         return product;
     }
 
-    private static readonly DateTime Now = new(2026, 8, 31, 12, 0, 0, DateTimeKind.Utc);
+    // Anchored to the real clock, not a pinned date. ProductService.GetUpcomingAsync filters
+    // against DateTime.UtcNow directly (it takes no injected clock, unlike Ticketing's
+    // PlatformClock/FakeTimeProvider), so every offset below has to be relative to now — a fixed
+    // constant here silently became "in the past" once the wall clock passed it, and these five
+    // tests started failing on a date that had nothing to do with any code change.
+    private static readonly DateTime Now = DateTime.UtcNow;
 
     [Fact]
     public async Task GetUpcomingAsync_ReturnsPublishedSingleOccurrenceProductsWithAFutureDate()

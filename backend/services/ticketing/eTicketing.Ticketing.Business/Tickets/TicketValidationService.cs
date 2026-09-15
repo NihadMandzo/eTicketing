@@ -2,6 +2,7 @@ using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;

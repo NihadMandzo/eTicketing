@@ -5,6 +5,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations.Validators;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
@@ -52,13 +53,30 @@ public class OrganizationService : IOrganizationService
         });
     }
 
-    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, ClaimsPrincipal caller, CancellationToken ct = default)
     {
+        // Ownership is checked before the read, not after: an organizer asking for someone else's
+        // organization should get the same answer whether or not that organization exists.
+        if (!caller.IsPlatformStaff() && caller.GetOrganizationId() != id)
+        {
+            return Result<OrganizationResponse>.Failure(
+                Error.Unauthorized("organization.forbidden", "Nemate pristup ovoj organizaciji."));
+        }
+
         var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
 
         return organization is null
             ? Result<OrganizationResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."))
             : Result<OrganizationResponse>.Success(ToResponse(organization));
+    }
+
+    public async Task<Result<OrganizationPublicResponse>> GetPublicByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var organization = await _organizationRepository.GetByIdAsync(id, ct);
+
+        return organization is null
+            ? Result<OrganizationPublicResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."))
+            : Result<OrganizationPublicResponse>.Success(ToPublicResponse(organization));
     }
 
     /// <summary>Upper bound on <see cref="GetInternalByIdsAsync"/>, mirroring Catalog's
@@ -381,6 +399,11 @@ public class OrganizationService : IOrganizationService
     // — same reasoning as CategoryService.ToResponse in the Catalog service.
     private OrganizationResponse ToResponse(Organization organization) =>
         organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
+
+    // Same derived-LogoUrl treatment as ToResponse; the narrower target record is what keeps the
+    // back-office fields off the anonymous route rather than any filtering here.
+    private OrganizationPublicResponse ToPublicResponse(Organization organization) =>
+        organization.Adapt<OrganizationPublicResponse>() with { LogoUrl = BuildLogoUrl(organization) };
 
     // Version-stamped: a logo replace reuses the same blob key, so without this the URL never
     // changes and every client keeps serving the old image from cache. See BlobUrlVersioning.

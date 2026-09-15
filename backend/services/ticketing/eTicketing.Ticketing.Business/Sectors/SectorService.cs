@@ -3,6 +3,7 @@ using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;

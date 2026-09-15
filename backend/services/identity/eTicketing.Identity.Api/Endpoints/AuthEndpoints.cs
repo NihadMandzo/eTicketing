@@ -1,6 +1,7 @@
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using eTicketing.Identity.Business.Auth;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Shared.Auth;
 using Microsoft.AspNetCore.RateLimiting;

@@ -22,7 +22,7 @@ class OrganizationService {
   }
 
   Future<OrganizationResponse> getById(String id) async {
-    final response = await apiClient.get('Organizations/$id');
+    final response = await apiClient.get('Organizations/$id/public');
     if (!_isSuccess(response.statusCode)) _handleError(response);
     return OrganizationResponse.fromJson(response.data as Map<String, dynamic>);
   }

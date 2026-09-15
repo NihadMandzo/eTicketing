@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Business.Products.Mapping;
-using eTicketing.Catalog.Business.Security;
+using eTicketing.Contracts.Security;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;

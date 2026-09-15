@@ -3,6 +3,7 @@ using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;

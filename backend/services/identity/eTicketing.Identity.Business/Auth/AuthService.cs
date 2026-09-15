@@ -1,6 +1,7 @@
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
