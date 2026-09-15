@@ -44,6 +44,7 @@ public class OrganizationService : IOrganizationService
     {
         var paged = await _organizationRepository.SearchAsync(query, query.OrganizationIds, ct);
         var items = paged.Items.Select(ToResponse).ToList();
+
         return Result<PagedResult<OrganizationResponse>>.Success(new PagedResult<OrganizationResponse>
         {
             Items = items,
@@ -399,6 +400,11 @@ public class OrganizationService : IOrganizationService
     // — same reasoning as CategoryService.ToResponse in the Catalog service.
     private OrganizationResponse ToResponse(Organization organization) =>
         organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
+
+    /// <summary>The list-path overload: same LogoUrl patch, but the user count comes from the SQL
+    /// projection rather than a loaded Users collection — see OrganizationRepository.SearchAsync.</summary>
+    private OrganizationResponse ToResponse(OrganizationWithUserCount row) =>
+        row.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(row.Organization) };
 
     // Same derived-LogoUrl treatment as ToResponse; the narrower target record is what keeps the
     // back-office fields off the anonymous route rather than any filtering here.

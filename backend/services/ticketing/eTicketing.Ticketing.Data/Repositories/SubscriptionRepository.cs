@@ -14,8 +14,11 @@ public class SubscriptionRepository : Repository<Subscription, Guid>, ISubscript
             .Include(s => s.Sector)
             .FirstOrDefaultAsync(s => s.PaymentReference == paymentReference, ct);
 
+    // AsNoTracking: the only caller maps these straight to a response. GetByIdWithSectorAsync
+    // below stays tracked — cancellation writes through the instance it returns.
     public Task<PagedResult<Subscription>> GetMineAsync(Guid userId, int? page, int? pageSize, CancellationToken ct = default)
         => DbSet
+            .AsNoTracking()
             .Include(s => s.Sector)
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAt)

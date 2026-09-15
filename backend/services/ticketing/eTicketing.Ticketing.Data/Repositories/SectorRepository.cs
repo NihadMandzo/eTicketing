@@ -24,6 +24,26 @@ public class SectorRepository : Repository<Sector, Guid>, ISectorRepository
     public Task<Sector?> GetByIdWithTicketTypesAsync(Guid id, CancellationToken ct = default)
         => Query().Include(s => s.TicketTypes).FirstOrDefaultAsync(s => s.Id == id, ct);
 
+    public Task<List<Sector>> GetPublishedByProductWithTicketTypesAsync(Guid productId, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Include(s => s.TicketTypes)
+            .Where(s => s.ProductId == productId && s.Status == PublishStatus.Published)
+            .OrderBy(s => s.Name)
+            .ToListAsync(ct);
+
+    // No AsNoTracking here — see ISectorRepository for why this one has to stay tracked.
+    public Task<List<Sector>> GetByIdsWithTicketTypesAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return Task.FromResult(new List<Sector>());
+
+        return Query()
+            .Include(s => s.TicketTypes)
+            .Where(s => ids.Contains(s.Id))
+            .ToListAsync(ct);
+    }
+
     public Task<List<ProductCapacity>> GetPublishedCapacityByProductAsync(
         IReadOnlyList<Guid> productIds, CancellationToken ct = default)
     {

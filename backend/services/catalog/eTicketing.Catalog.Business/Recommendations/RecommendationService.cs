@@ -117,7 +117,7 @@ public class RecommendationService : IRecommendationService
     public async Task<Result<List<ProductResponse>>> GetSimilarAsync(
         Guid productId, SimilarProductsQuery query, CancellationToken ct = default)
     {
-        var anchor = await _products.GetByIdWithCategoryAsync(productId, ct);
+        var anchor = await _products.GetByIdWithCategoryNoTrackingAsync(productId, ct);
         if (anchor is null || anchor.Status != PublishStatus.Published)
             return Result<List<ProductResponse>>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 

@@ -18,6 +18,20 @@ public interface ISectorRepository : IRepository<Sector, Guid>
     /// own Sector lookup).</summary>
     Task<Sector?> GetByIdWithTicketTypesAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>A product's published sectors with their tiers, ordered by name — backs the
+    /// organizer's ticket-print options screen. No-tracking: the caller only reads them to build a
+    /// response.</summary>
+    Task<List<Sector>> GetPublishedByProductWithTicketTypesAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>The batch sibling of <see cref="GetByIdWithTicketTypesAsync"/>, for resolving every
+    /// sector named by a print batch in one query instead of one per line.
+    ///
+    /// **Tracked, deliberately** — unlike the other batch reads here. TicketPrintService hands these
+    /// Sector instances to Ticket.ForPrint and saves the resulting tickets in the same
+    /// SaveChangesAsync, so the change tracker has to already know them; AsNoTracking would make EF
+    /// treat each one as a new row to insert.</summary>
+    Task<List<Sector>> GetByIdsWithTicketTypesAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+
     /// <summary>Total published capacity per product — the denominator behind the Popunjenost
     /// column of GET /reports/products. Draft sectors are excluded: nobody could have bought into
     /// them, so counting their seats would depress every occupancy figure.

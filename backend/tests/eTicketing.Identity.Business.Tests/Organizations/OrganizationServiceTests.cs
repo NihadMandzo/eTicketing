@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Tests.TestFixtures;
+using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -401,6 +402,55 @@ public class OrganizationServiceTests : IDisposable
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("user.already_exists");
+    }
+
+    [Fact]
+    public async Task GetAsync_ReportsEachOrganizationsUserCount()
+    {
+        // The list path counts users in SQL instead of loading them (OrganizationRepository
+        // .SearchAsync projects o.Users.Count). Nothing asserted this before: the only UserCount
+        // assertion was on CreateAsync's response, which maps from a loaded entity — so the list
+        // could have reported 0 for every organization with the whole suite still green.
+        var org = await _sut.CreateAsync(ValidCreateRequest());
+        await _sut.AddUserAsync(org.Value!.Id, new AddOrganizationUserRequest
+        {
+            FirstName = "Bob",
+            LastName = "Staff",
+            Email = "bob@acme.example.com",
+            Username = "bobstaff",
+            Password = "SuperSecret123",
+            Role = RoleType.OrganizationAdmin
+        }, PlatformStaffCaller());
+
+        var result = await _sut.GetAsync(new OrganizationQuery { OrganizationIds = [org.Value.Id] });
+
+        // The founding OrganizationSuperAdmin plus the one added above.
+        result.Value!.Items.Should().ContainSingle().Which.UserCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_ForAnOrganizationWithNoUsers_ReportsZero()
+    {
+        // Inserted straight through the repository rather than via CreateAsync, which always mints
+        // the founding OrganizationSuperAdmin — and the two seeded organizations both have staff.
+        // A staffless organization only arises after its last account is removed, and the
+        // projection has to answer 0 there rather than dropping the row: a correlated COUNT(*) of
+        // nothing still returns a row, but an inner join would not have.
+        var empty = new Organization
+        {
+            Id = Guid.NewGuid(),
+            Name = "Prazna organizacija",
+            Email = "prazna@example.com",
+            PhoneNumber = "061000000",
+            Address = "Bez adrese 1",
+            IsActive = true,
+        };
+        await _fixture.OrganizationRepository.AddAsync(empty);
+        await _fixture.UnitOfWork.SaveChangesAsync();
+
+        var result = await _sut.GetAsync(new OrganizationQuery { OrganizationIds = [empty.Id] });
+
+        result.Value!.Items.Should().ContainSingle().Which.UserCount.Should().Be(0);
     }
 
     [Fact]

@@ -52,6 +52,24 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => t.OrderId);
         builder.HasIndex(t => t.PrintBatchId);
 
+        // Every one of the five report aggregations narrows by CreatedAt range and then by Status
+        // (see ReportScope) — the range column first so the scan is bounded before Status is
+        // considered, which is the opposite of the Product index above, where the equality
+        // predicate leads.
+        builder.HasIndex(t => new { t.CreatedAt, t.Status });
+
+        // GET /tickets/mine: filter UserId, sort CreatedAt DESC. Covers the same access pattern
+        // the bare UserId index above only half-served, which is why that one is left in place
+        // for the FK-style lookups rather than replaced.
+        builder.HasIndex(t => new { t.UserId, t.CreatedAt });
+
+        // Redemption/check-in analytics read only validated tickets, and validated ones are a
+        // small minority of the table — an index over the whole table would be mostly NULLs. The
+        // filter is written in SQL Server's bracket syntax; SQLite (the test fixtures, created
+        // with EnsureCreated rather than migrations) accepts brackets as identifier quoting too,
+        // so the same DDL builds on both.
+        builder.HasIndex(t => t.ValidatedAt).HasFilter("[ValidatedAt] IS NOT NULL");
+
         // The render worker pages through one batch in serial order, and TicketPrintService reads
         // MAX(SerialNumber) per product to continue numbering across batches. Unique so that two
         // overlapping CreateAsync calls for the same product — both racing past the in-flight check

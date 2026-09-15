@@ -33,6 +33,7 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
 
     public Task<PagedResult<User>> SearchStaffAsync(IReadOnlyList<RoleType>? roleFilters, BaseSearchObject query, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Include(u => u.Organization)
             .Where(u => u.Role != RoleType.User)
             // Minimal APIs bind an absent array-typed query param to an empty array, not null —
@@ -46,6 +47,7 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
 
     public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, RoleType? role, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Include(u => u.Organization)
             .Where(u => u.OrganizationId == organizationId)
             .Where(u => role == null || u.Role == role)

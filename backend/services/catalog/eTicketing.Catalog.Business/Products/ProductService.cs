@@ -271,7 +271,7 @@ public class ProductService : IProductService
 
     public async Task<Result<ProductResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        var product = await _productRepository.GetByIdWithCategoryNoTrackingAsync(id, ct);
         if (product is null || product.Status != PublishStatus.Published)
             return Result<ProductResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
@@ -307,7 +307,7 @@ public class ProductService : IProductService
 
     public async Task<Result<ProductInternalResponse>> GetInternalAsync(Guid id, CancellationToken ct = default)
     {
-        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        var product = await _productRepository.GetByIdWithCategoryNoTrackingAsync(id, ct);
         if (product is null)
             return Result<ProductInternalResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 

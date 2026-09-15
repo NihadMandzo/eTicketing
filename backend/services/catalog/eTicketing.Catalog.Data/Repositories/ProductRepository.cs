@@ -36,6 +36,9 @@ public class ProductRepository : Repository<Product, Guid>, IProductRepository
     public Task<Product?> GetByIdWithCategoryAsync(Guid id, CancellationToken ct = default)
         => Query().Include(p => p.Category).Include(p => p.Images).FirstOrDefaultAsync(p => p.Id == id, ct);
 
+    public Task<Product?> GetByIdWithCategoryNoTrackingAsync(Guid id, CancellationToken ct = default)
+        => Query().AsNoTracking().Include(p => p.Category).Include(p => p.Images).FirstOrDefaultAsync(p => p.Id == id, ct);
+
     public Task<List<Product>> GetByIdsWithCategoryAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
         => Query()
             .AsNoTracking()

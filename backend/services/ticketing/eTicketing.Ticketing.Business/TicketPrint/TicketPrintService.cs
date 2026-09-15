@@ -83,36 +83,37 @@ public class TicketPrintService : ITicketPrintService
 
         var product = access.Value!;
 
-        var sectors = await _sectorRepository.Query()
-            .AsNoTracking()
-            .Include(s => s.TicketTypes)
-            .Where(s => s.ProductId == productId && s.Status == PublishStatus.Published)
-            .OrderBy(s => s.Name)
-            .ToListAsync(ct);
+        var sectors = await _sectorRepository.GetPublishedByProductWithTicketTypesAsync(productId, ct);
 
         var blockedReason = BlockedReasonFor(product.TicketingMode);
 
-        var options = new List<TicketPrintSectorOption>(sectors.Count);
-        foreach (var sector in sectors)
-        {
-            // DailyEntry capacity is tracked per (sector, calendar day), so "remaining" only has a
-            // meaning once a day is chosen. Until then the counter to read is the sector's own,
-            // which is what an untouched day would give anyway.
-            var counterDate = product.TicketingMode == TicketingMode.DailyEntry ? date : null;
-            var remaining = await _capacityLock.GetRemainingAsync(sector.Id, sector.Capacity, counterDate, ct);
+        // DailyEntry capacity is tracked per (sector, calendar day), so "remaining" only has a
+        // meaning once a day is chosen. Until then the counter to read is the sector's own, which
+        // is what an untouched day would give anyway.
+        var counterDate = product.TicketingMode == TicketingMode.DailyEntry ? date : null;
 
-            options.Add(new TicketPrintSectorOption(
+        // One Redis round-trip per sector, issued together rather than in series — a product with
+        // twenty sectors was twenty sequential waits. Safe to parallelize precisely because
+        // GetRemainingAsync is read-only: nothing here reserves capacity, so there is no ordering
+        // to preserve and nothing to roll back. (The hold loop in CreateAsync is the opposite case
+        // and stays sequential — see the comment there.) Copies
+        // SectorService.GetPublishedAsync's own Task.WhenAll over the same call.
+        var remaining = await Task.WhenAll(sectors.Select(s =>
+            _capacityLock.GetRemainingAsync(s.Id, s.Capacity, counterDate, ct)));
+
+        var options = sectors
+            .Select((sector, index) => new TicketPrintSectorOption(
                 sector.Id,
                 sector.Name,
                 sector.Capacity,
-                remaining,
+                remaining[index],
                 sector.Price,
                 sector.PeriodYear,
                 sector.PeriodMonth,
                 [.. sector.TicketTypes
                     .OrderBy(t => t.Name)
-                    .Select(t => new TicketPrintTicketTypeOption(t.Id, t.Name, t.Price))]));
-        }
+                    .Select(t => new TicketPrintTicketTypeOption(t.Id, t.Name, t.Price))]))
+            .ToList();
 
         var nextSerial = await _ticketRepository.GetMaxSerialNumberAsync(productId, ct) + 1;
 
@@ -162,10 +163,7 @@ public class TicketPrintService : ITicketPrintService
         if (dateCheck.IsFailure) return Result<TicketPrintBatchResponse>.Failure(dateCheck.Error);
 
         var sectorIds = request.Lines.Select(l => l.SectorId).Distinct().ToList();
-        var sectors = await _sectorRepository.Query()
-            .Include(s => s.TicketTypes)
-            .Where(s => sectorIds.Contains(s.Id))
-            .ToListAsync(ct);
+        var sectors = await _sectorRepository.GetByIdsWithTicketTypesAsync(sectorIds, ct);
 
         var resolved = ResolveLines(request, product.TicketingMode, sectors);
         if (resolved.IsFailure) return Result<TicketPrintBatchResponse>.Failure(resolved.Error);

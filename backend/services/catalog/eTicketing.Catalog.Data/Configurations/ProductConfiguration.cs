@@ -28,6 +28,12 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasIndex(p => p.CategoryId);
         builder.HasIndex(p => p.City);
 
+        // The public storefront list: ProductRepository.SearchAsync filters Status and *always*
+        // sorts CreatedAt DESC, so the sort column is the second key — a seek on Status then an
+        // ordered range scan, instead of sorting every published product on every page request.
+        // Column order matters here: (CreatedAt, Status) would not support the Status seek.
+        builder.HasIndex(p => new { p.Status, p.CreatedAt });
+
         builder.HasData(ProductSeeder.GetSeedData());
     }
 }
