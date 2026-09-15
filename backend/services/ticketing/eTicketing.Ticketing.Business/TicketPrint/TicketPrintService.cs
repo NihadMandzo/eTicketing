@@ -183,8 +183,12 @@ public class TicketPrintService : ITicketPrintService
         var holds = new List<string>(perSector.Count);
         foreach (var (sector, quantity) in perSector)
         {
+            // ownerId: null — a system hold, not a buyer's. These counter tickets are minted for
+            // the organizer to sell at the door, so there is no account to bind the hold to, and
+            // the hold ids never leave this method: it releases or confirms every one of them
+            // before returning, so nothing outside can present one.
             var hold = await _capacityLock.TryHoldAsync(
-                sector.Id, sector.Capacity, quantity, request.ValidDate, CapacityHoldTtl, ct);
+                sector.Id, sector.Capacity, quantity, request.ValidDate, CapacityHoldTtl, null, ct);
 
             if (!hold.Success)
             {

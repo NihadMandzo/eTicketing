@@ -226,15 +226,26 @@ public class SectorService : ISectorService
             return Result<HoldSectorResponse>.Failure(Error.Validation("sector.date_not_applicable", "Datum se ne unosi za ovaj tip sektora."));
         }
 
-        var hold = await _capacityLock.TryHoldAsync(sector.Id, sector.Capacity, request.Quantity, request.Date, HoldTtl, ct);
+        var hold = await _capacityLock.TryHoldAsync(
+            sector.Id, sector.Capacity, request.Quantity, request.Date, HoldTtl, user.TryGetUserId(), ct);
         if (!hold.Success)
             return Result<HoldSectorResponse>.Failure(Error.Conflict("sector.no_capacity", "Nema dovoljno slobodnog kapaciteta."));
 
         return Result<HoldSectorResponse>.Success(new HoldSectorResponse(hold.HoldId!, hold.ExpiresAt!.Value));
     }
 
-    public async Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default)
+    public async Task<Result> ReleaseHoldAsync(string holdId, ClaimsPrincipal user, CancellationToken ct = default)
     {
+        var reservation = await _capacityLock.PeekAsync(holdId, ct);
+
+        // Success, not 404/403, for a hold that is unknown, expired, or somebody else's. A hold id
+        // is an unguessable 128-bit value, so the only caller who can present one they do not own
+        // is an attacker who obtained it — and answering them differently from "no such hold" would
+        // confirm the id is live. The honest caller cannot tell the difference either way: both
+        // frontends fire release and ignore the response.
+        if (reservation is null || (reservation.OwnerId is not null && reservation.OwnerId != user.TryGetUserId()))
+            return Result.Success();
+
         await _capacityLock.ReleaseAsync(holdId, ct);
         return Result.Success();
     }

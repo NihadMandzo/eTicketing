@@ -40,9 +40,10 @@ public record ResolvedOrder(
 ///
 /// Both calls begin with the same ResolveOrderAsync prelude:
 ///  1. Resolve the hold's actual reservation from Redis via ISectorCapacityLock.PeekAsync — never
-///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why). Also
-///     the guard against a replayed HoldId: PeekAsync returns null once ConfirmAsync has already
-///     run for it (see RedisSectorCapacityLock.ConfirmAsync).
+///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why), and
+///     refuse a hold owned by a different account. Also the guard against a replayed HoldId:
+///     PeekAsync returns null once ConfirmAsync has already run for it (see
+///     RedisSectorCapacityLock.ConfirmAsync).
 ///  2. Validate the request's line-item quantities sum to exactly what was held.
 ///  3. Load the held Sector (with TicketTypes) — must still exist and be Published.
 ///  4. Validate each line's TicketTypeId against the Sector's TicketTypes (all-or-nothing: either
@@ -120,10 +121,17 @@ public class PurchaseService : IPurchaseService
     /// rewritten, precisely so those stayed identical.
     /// </summary>
     private async Task<Result<ResolvedOrder>> ResolveOrderAsync(
-        string holdId, IReadOnlyList<PurchaseLineItemRequest> lineItems, CancellationToken ct)
+        string holdId, IReadOnlyList<PurchaseLineItemRequest> lineItems, Guid callerId, CancellationToken ct)
     {
         var reservation = await _capacityLock.PeekAsync(holdId, ct);
-        if (reservation is null)
+
+        // A hold belongs to the account that took it: spending someone else's is the same theft as
+        // releasing it (see SectorService.ReleaseHoldAsync), except the thief walks away with the
+        // seat. Deliberately the *same* error as an expired hold rather than a distinct "not
+        // yours" — a different answer would confirm to whoever presented the id that it is live.
+        // OwnerId is null for a hold with no owner: a system hold, or one minted before the owner
+        // was recorded, which stays spendable for the rest of its five-minute TTL.
+        if (reservation is null || (reservation.OwnerId is not null && reservation.OwnerId != callerId))
             return Result<ResolvedOrder>.Failure(Error.Validation("purchase.hold_expired", "Rezervacija je istekla ili ne postoji. Pokušajte ponovo."));
 
         var requestedQuantity = lineItems.Sum(li => li.Quantity);
@@ -154,7 +162,7 @@ public class PurchaseService : IPurchaseService
     public async Task<Result<PurchaseIntentResponse>> CreatePaymentIntentAsync(
         CreatePaymentIntentRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, ct);
+        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, user.GetUserId(), ct);
         if (resolved.IsFailure)
             return Result<PurchaseIntentResponse>.Failure(resolved.Error);
 
@@ -197,7 +205,7 @@ public class PurchaseService : IPurchaseService
 
     public async Task<Result<PurchaseResponse>> PurchaseAsync(PurchaseRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, ct);
+        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, user.GetUserId(), ct);
         if (resolved.IsFailure)
         {
             // The buyer has already confirmed at this point, so an authorization (or, for a

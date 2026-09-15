@@ -41,9 +41,14 @@ public interface ISectorService
 
     /// <summary>Best-effort early release of a still-live hold — e.g. the buyer switched to a
     /// different spot/date before completing checkout, or one hold in a multi-hold cart failed so
-    /// the others must be given back rather than left to expire on their own TTL. A thin wrapper
-    /// over ISectorCapacityLock.ReleaseAsync: always succeeds even for an unknown/already-expired
-    /// holdId (same no-op semantics as ReleaseAsync itself), since the caller only ever wants
-    /// "make sure this hold isn't holding capacity any more", never confirmation it existed.</summary>
-    Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default);
+    /// the others must be given back rather than left to expire on their own TTL. Always succeeds
+    /// even for an unknown/already-expired holdId (same no-op semantics as
+    /// ISectorCapacityLock.ReleaseAsync itself), since the caller only ever wants "make sure this
+    /// hold isn't holding capacity any more", never confirmation it existed.
+    ///
+    /// Only the account that took the hold can release it: otherwise a leaked hold id is enough to
+    /// dump another buyer's seats back into the pool mid-checkout. A hold with no recorded owner —
+    /// a system hold, or one minted before the owner was recorded — stays releasable by anyone,
+    /// which is why <paramref name="user"/> is compared rather than required to match.</summary>
+    Task<Result> ReleaseHoldAsync(string holdId, ClaimsPrincipal user, CancellationToken ct = default);
 }

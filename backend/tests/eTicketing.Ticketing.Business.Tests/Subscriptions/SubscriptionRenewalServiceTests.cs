@@ -112,7 +112,7 @@ public class SubscriptionRenewalServiceTests : IDisposable
 
         _fixture.CapacityLock.Verify(
             l => l.TryHoldAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateOnly?>(),
-                It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+                It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _fixture.CapacityLock.Verify(
             l => l.ReleaseConfirmedAsync(It.IsAny<Guid>(), It.IsAny<DateOnly?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),

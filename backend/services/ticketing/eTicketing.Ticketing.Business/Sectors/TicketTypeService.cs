@@ -22,10 +22,17 @@ public class TicketTypeService : ITicketTypeService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<List<TicketTypeResponse>>> GetBySectorAsync(Guid sectorId, CancellationToken ct = default)
+    public async Task<Result<List<TicketTypeResponse>>> GetBySectorAsync(Guid sectorId, ClaimsPrincipal user, CancellationToken ct = default)
     {
         var sector = await _sectorRepository.GetByIdAsync(sectorId, ct);
         if (sector is null)
+            return Result<List<TicketTypeResponse>>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
+
+        // Same NotFound as an unknown sector, deliberately: a 403 here would tell an anonymous
+        // caller that the id names a real, unpublished sector. The owning organizer still needs
+        // this read on a Draft — that is the whole ticket-type step of the create-then-publish
+        // flow in the desktop sector dialog — so ownership, not publication alone, is the gate.
+        if (sector.Status != PublishStatus.Published && AuthorizeOwnership(user, sector.OrganizationId) is not null)
             return Result<List<TicketTypeResponse>>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 
         var ticketTypes = await _ticketTypeRepository.GetBySectorIdAsync(sectorId, ct);

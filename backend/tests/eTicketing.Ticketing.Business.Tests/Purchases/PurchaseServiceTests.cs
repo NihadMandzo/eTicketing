@@ -8,6 +8,7 @@ using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tests.TestFixtures;
 using eTicketing.Ticketing.Data.Entities;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 
 namespace eTicketing.Ticketing.Business.Tests.Purchases;
@@ -20,6 +21,11 @@ public class PurchaseServiceTests : IDisposable
     private readonly ITicketTypeService _ticketTypeService;
 
     private readonly Guid _orgA = Guid.NewGuid();
+
+    // Stable for the lifetime of one test class instance: PurchaseService now compares the hold's
+    // recorded owner against the caller, so a fresh NameIdentifier per OrgACaller() call would make
+    // every buyer a different person from the one who took the hold.
+    private readonly Guid _callerId = Guid.NewGuid();
     private readonly Guid _singleOccurrenceProductId = Guid.NewGuid();
     private readonly Guid _dailyEntryProductId = Guid.NewGuid();
     private readonly Guid _recurringReservationProductId = Guid.NewGuid();
@@ -55,7 +61,7 @@ public class PurchaseServiceTests : IDisposable
     {
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(ClaimTypes.NameIdentifier, _callerId.ToString()),
             new(ClaimTypes.Role, "OrganizationSuperAdmin"),
             new(ClaimTypes.Email, "organizer@example.com"),
             new("organizationId", _orgA.ToString()),
@@ -138,7 +144,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_SingleOccurrenceHappyPath_CreatesConfirmedTicketAndPublishesEvent()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 2));
+        MockHold(new HeldReservation(sector.Id, null, 2, _callerId));
         MockSuccessfulCharge();
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 2 }), OrgACaller());
@@ -165,7 +171,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_PublishesOneQrPayloadPerTicket_MatchingTheMintedTicketIds()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 2));
+        MockHold(new HeldReservation(sector.Id, null, 2, _callerId));
         MockSuccessfulCharge();
 
         TicketPurchased? published = null;
@@ -191,7 +197,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_ReturnsRenderableQrImageAndNoPdfUrlYet()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
         MockSuccessfulCharge();
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
@@ -205,7 +211,7 @@ public class PurchaseServiceTests : IDisposable
     {
         var sector = await CreatePublishedSectorAsync(_dailyEntryProductId, "August 2026", 300, 10, 2026, 8);
         var date = new DateOnly(2026, 8, 15);
-        MockHold(new HeldReservation(sector.Id, date, 1));
+        MockHold(new HeldReservation(sector.Id, date, 1, _callerId));
         MockSuccessfulCharge();
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
@@ -218,7 +224,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_RecurringReservationHappyPath_CreatesSubscriptionAndOneTicket()
     {
         var sector = await CreatePublishedSectorAsync(_recurringReservationProductId, "A-12", 1, 80);
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
         MockSuccessfulCharge();
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
@@ -242,7 +248,7 @@ public class PurchaseServiceTests : IDisposable
         var odrasli = (await _ticketTypeService.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller())).Value!;
         var djeca = (await _ticketTypeService.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Djeca", Price = 4 }, OrgACaller())).Value!;
         var date = new DateOnly(2026, 8, 20);
-        MockHold(new HeldReservation(sector.Id, date, 3));
+        MockHold(new HeldReservation(sector.Id, date, 3, _callerId));
         MockSuccessfulCharge();
 
         var request = BuildRequest(
@@ -262,7 +268,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_QuantityMismatchWithHold_ReturnsValidationError()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 2));
+        MockHold(new HeldReservation(sector.Id, null, 2, _callerId));
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 3 }), OrgACaller());
 
@@ -281,11 +287,75 @@ public class PurchaseServiceTests : IDisposable
         result.Error.Code.Should().Be("purchase.hold_expired");
     }
 
+    // --- Hold ownership ---
+
+    [Fact]
+    public async Task PurchaseAsync_WithAHoldBelongingToAnotherAccount_IsRefusedWithoutCharging()
+    {
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1, Guid.NewGuid())); // somebody else's hold
+        MockSuccessfulCharge();
+
+        var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        // Same error as an expired hold, deliberately: a distinct "not yours" would confirm to the
+        // thief that the id names a live reservation.
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("purchase.hold_expired");
+
+        // The victim keeps their seat: nothing captured, nothing confirmed, nothing released.
+        _fixture.PaymentClient.Verify(
+            p => p.CapturePaymentAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _fixture.CapacityLock.Verify(l => l.ConfirmAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        (await _fixture.TicketRepository.Query().ToListAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreatePaymentIntentAsync_WithAHoldBelongingToAnotherAccount_IsRefused()
+    {
+        // The intent call is where a stolen hold id would first be spent — it prices the
+        // reservation — so it has to refuse for the same reason PurchaseAsync does.
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1, Guid.NewGuid()));
+
+        var result = await _sut.CreatePaymentIntentAsync(
+            new CreatePaymentIntentRequest { HoldId = "hold-1", LineItems = [new PurchaseLineItemRequest { Quantity = 1 }] },
+            OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("purchase.hold_expired");
+        _fixture.PaymentClient.Verify(
+            p => p.CreateIntentAsync(
+                It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_WithAHoldThatHasNoRecordedOwner_StillSucceeds()
+    {
+        // A hold minted by the previous deploy, before the owner was recorded. Those keep arriving
+        // for the remaining five minutes of their TTL; refusing them would fail every checkout that
+        // straddled the deploy. See RedisSectorCapacityLock's HoldInfoVersionPrefix.
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1, null));
+        MockSuccessfulCharge();
+
+        var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CapacityLock.Verify(l => l.ConfirmAsync("hold-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task PurchaseAsync_PaymentDeclined_ReleasesHoldAndReturns400()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
         MockDeclinedCharge();
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
@@ -301,7 +371,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_PaymentCircuitOpen_ReleasesHoldAndReturns503()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
         _fixture.PaymentClient
             .Setup(p => p.CapturePaymentAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
@@ -321,7 +391,7 @@ public class PurchaseServiceTests : IDisposable
     {
         var sector = await CreatePublishedSectorAsync(_dailyEntryProductId, "August 2026", 300, 10, 2026, 8);
         await _ticketTypeService.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
-        MockHold(new HeldReservation(sector.Id, new DateOnly(2026, 8, 10), 1));
+        MockHold(new HeldReservation(sector.Id, new DateOnly(2026, 8, 10), 1, _callerId));
 
         var request = BuildRequest(new PurchaseLineItemRequest { TicketTypeId = Guid.NewGuid(), Quantity = 1 });
         var result = await _sut.PurchaseAsync(request, OrgACaller());
@@ -334,7 +404,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task PurchaseAsync_ForSectorWithNoTicketTypes_LineItemWithTicketTypeId_ReturnsValidationError()
     {
         var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
 
         var request = BuildRequest(new PurchaseLineItemRequest { TicketTypeId = Guid.NewGuid(), Quantity = 1 });
         var result = await _sut.PurchaseAsync(request, OrgACaller());
@@ -354,7 +424,7 @@ public class PurchaseServiceTests : IDisposable
         var confirmed = false;
         _fixture.CapacityLock
             .Setup(l => l.PeekAsync("hold-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => confirmed ? null : new HeldReservation(sector.Id, null, 1));
+            .ReturnsAsync(() => confirmed ? null : new HeldReservation(sector.Id, null, 1, _callerId));
         _fixture.CapacityLock
             .Setup(l => l.ConfirmAsync("hold-1", It.IsAny<CancellationToken>()))
             .Callback(() => confirmed = true)
@@ -388,7 +458,7 @@ public class PurchaseServiceTests : IDisposable
         _fixture.SectorRepository.Update(tracked);
         await _fixture.UnitOfWork.SaveChangesAsync();
 
-        MockHold(new HeldReservation(sector.Id, null, 1));
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
 
         var result = await _sut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
 

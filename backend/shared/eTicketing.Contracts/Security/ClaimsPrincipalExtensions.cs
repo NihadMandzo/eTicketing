@@ -18,6 +18,19 @@ public static class ClaimsPrincipalExtensions
     public static Guid GetUserId(this ClaimsPrincipal user)
         => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    /// <summary>The non-throwing <see cref="GetUserId"/>, for code that decides an authorization
+    /// question from the caller's identity and must not turn a principal without a usable
+    /// <c>sub</c> into a 500. Every principal minted by JwtTokenGenerator carries one, but not
+    /// every principal reaching a service was minted there — eTicketing.Ticketing also registers
+    /// the GateDevice scheme, whose principal identifies a turnstile rather than an account.
+    /// Returns null rather than Guid.Empty so a missing claim can never compare equal to a real
+    /// owner id.</summary>
+    public static Guid? TryGetUserId(this ClaimsPrincipal user)
+    {
+        var value = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(value, out var userId) ? userId : null;
+    }
+
     // JwtTokenGenerator (eTicketing.Identity) already mints ClaimTypes.Email into every token, so
     // Ticketing can denormalize Ticket.UserEmail straight off the caller's claims — no cross-
     // service call to Identity needed on the purchase-critical path. The null-forgiving operator

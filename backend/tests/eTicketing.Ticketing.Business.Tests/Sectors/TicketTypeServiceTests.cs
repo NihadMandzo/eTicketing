@@ -45,13 +45,28 @@ public class TicketTypeServiceTests : IDisposable
 
     private ClaimsPrincipal OrgACaller() => BuildCaller("OrganizationSuperAdmin", _orgA);
     private ClaimsPrincipal OrgBCaller() => BuildCaller("OrganizationSuperAdmin", _orgB);
+    private static ClaimsPrincipal PlatformStaffCaller() => BuildCaller("SuperAdmin");
 
+    /// <summary>What http.User is on an anonymous request: authenticated is false and there are no
+    /// claims at all. GET ticket-types is an AllowAnonymous route, so this is the caller the
+    /// publication check has to be right about.</summary>
+    private static ClaimsPrincipal AnonymousCaller() => new(new ClaimsIdentity());
+
+    /// <summary>Creates the sector as Draft — SectorService.CreateAsync always does, per the
+    /// preview-then-publish pattern — which is exactly the state an organizer adds ticket types in.</summary>
     private async Task<Sector> CreateOwnedSectorAsync()
     {
         var created = await _sectorService.CreateAsync(
             new UpsertSectorRequest { ProductId = _productId, Name = "August 2026", Capacity = 100, Price = 10, PeriodYear = 2026, PeriodMonth = 8 },
             OrgACaller());
         return (await _fixture.SectorRepository.GetByIdAsync(created.Value!.Id))!;
+    }
+
+    private async Task<Sector> CreateOwnedPublishedSectorAsync()
+    {
+        var sector = await CreateOwnedSectorAsync();
+        await _sectorService.PublishAsync(sector.Id, OrgACaller());
+        return (await _fixture.SectorRepository.GetByIdAsync(sector.Id))!;
     }
 
     [Fact]
@@ -106,11 +121,86 @@ public class TicketTypeServiceTests : IDisposable
         await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
         await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Djeca", Price = 4 }, OrgACaller());
 
-        var result = await _sut.GetBySectorAsync(sector.Id);
+        var result = await _sut.GetBySectorAsync(sector.Id, OrgACaller());
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(2);
         result.Value.Should().Contain(t => t.Name == "Odrasli" && t.Price == 10);
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForPublishedSector_ReturnsTicketTypesToAnAnonymousCaller()
+    {
+        var sector = await CreateOwnedPublishedSectorAsync();
+        await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
+
+        var result = await _sut.GetBySectorAsync(sector.Id, AnonymousCaller());
+
+        // The storefront reads this without a session — a published sector's tiers are public by
+        // definition, since they are what the buyer picks between.
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle(t => t.Name == "Odrasli");
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForDraftSector_ReturnsNotFoundToAnAnonymousCaller()
+    {
+        var sector = await CreateOwnedSectorAsync();
+        await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Tajna cijena", Price = 999 }, OrgACaller());
+
+        var result = await _sut.GetBySectorAsync(sector.Id, AnonymousCaller());
+
+        // Unannounced names and prices. NotFound rather than Unauthorized on purpose: a 403 would
+        // confirm the id names a real sector that simply is not live yet.
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("sector.not_found");
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForDraftSector_ReturnsNotFoundToAnotherOrganization()
+    {
+        var sector = await CreateOwnedSectorAsync();
+        await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Tajna cijena", Price = 999 }, OrgACaller());
+
+        var result = await _sut.GetBySectorAsync(sector.Id, OrgBCaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("sector.not_found");
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForDraftSector_ReturnsTicketTypesToTheOwningOrganizer()
+    {
+        // The reason publication alone cannot be the gate: the desktop sector dialog lists a
+        // sector's tiers while it is still a Draft, which is the whole point of the step.
+        var sector = await CreateOwnedSectorAsync();
+        await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
+
+        var result = await _sut.GetBySectorAsync(sector.Id, OrgACaller());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle(t => t.Name == "Odrasli");
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForDraftSector_ReturnsTicketTypesToPlatformStaff()
+    {
+        var sector = await CreateOwnedSectorAsync();
+        await _sut.CreateAsync(sector.Id, new UpsertTicketTypeRequest { Name = "Odrasli", Price = 10 }, OrgACaller());
+
+        var result = await _sut.GetBySectorAsync(sector.Id, PlatformStaffCaller());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetBySectorAsync_ForUnknownSector_ReturnsNotFound()
+    {
+        var result = await _sut.GetBySectorAsync(Guid.NewGuid(), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("sector.not_found");
     }
 
     [Fact]
@@ -135,7 +225,7 @@ public class TicketTypeServiceTests : IDisposable
         var result = await _sut.DeleteAsync(sector.Id, created.Value!.Id, OrgACaller());
 
         result.IsSuccess.Should().BeTrue();
-        var remaining = await _sut.GetBySectorAsync(sector.Id);
+        var remaining = await _sut.GetBySectorAsync(sector.Id, OrgACaller());
         remaining.Value.Should().BeEmpty();
     }
 
