@@ -26,6 +26,12 @@
     <ProjectReference Include="..\..\services\identity\eTicketing.Identity.Business\eTicketing.Identity.Business.csproj" />
     <ProjectReference Include="..\..\services\identity\eTicketing.Identity.Data\eTicketing.Identity.Data.csproj" />
     <ProjectReference Include="..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <!-- Test-only reference, for AuthCookiePolicyTests. eTicketing.Identity is the only service
+         that writes the session cookies, so the policy governing them is tested beside it. It is a
+         security control whose failure mode is silent — a cookie that is merely sent on requests it
+         should not be, or stored when it should have been refused — so it gets assertions rather
+         than trust. -->
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Auth\eTicketing.Shared.Auth.csproj" />
   </ItemGroup>
 
 </Project>

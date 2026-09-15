@@ -1,4 +1,9 @@
-import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
+import {
+  provideHttpClient,
+  withFetch,
+  withInterceptors,
+  withInterceptorsFromDi,
+} from '@angular/common/http';
 import {
   ApplicationConfig,
   PLATFORM_ID,
@@ -39,7 +44,14 @@ export const appConfig: ApplicationConfig = {
     // Order matters: loadingInterceptor must see every request, including ones the refresh
     // interceptor retries after a 401 — placing it first means the overlay stays up across that
     // retry instead of flickering off and back on between the failed call and its replay.
-    provideHttpClient(withFetch(), withInterceptors([loadingInterceptor, credentialsInterceptor, authRefreshInterceptor])),
+    // withInterceptorsFromDi alongside the functional list: it is what lets app.config.server.ts
+    // add SsrApiBaseInterceptor for server rendering only, without calling provideHttpClient a
+    // second time and clobbering this configuration when the two configs are merged.
+    provideHttpClient(
+      withFetch(),
+      withInterceptors([loadingInterceptor, credentialsInterceptor, authRefreshInterceptor]),
+      withInterceptorsFromDi(),
+    ),
     // Restores auth state from the session cookie on every page load/refresh, so a logged-in user
     // doesn't appear signed out after an F5.
     //

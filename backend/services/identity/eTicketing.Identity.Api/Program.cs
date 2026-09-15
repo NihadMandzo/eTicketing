@@ -29,6 +29,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseExceptionHandler();
+// Before UseAuthentication, and before the rate limiter that is the whole reason it is here:
+// everything downstream reads Connection.RemoteIpAddress, and until this runs that is the
+// Gateway's container address for every single request. See ForwardedHeadersExtensions.
+app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
