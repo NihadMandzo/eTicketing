@@ -1,0 +1,21 @@
+# Docker ignores .gitignore entirely, so bin/ and obj/ — which git already ignores —
+# were being uploaded to the daemon on every build: ~1.7 GB of context for a tree whose
+# sources are a few MB.
+#
+# It is also a correctness fix, not only a speed one. Each Dockerfile restores first and
+# then does `COPY services/<svc>/ services/<svc>/`, so a host obj/ folder lands on top of
+# the restore output the image just produced — Windows absolute paths and a Windows RID
+# graph overwriting the Linux one, inside a Linux container.
+**/bin/
+**/obj/
+
+# Editor/tooling state that has no bearing on a build.
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.user
+**/TestResults/
+
+# The build never reads these, and .git in particular is large.
+.git/
+**/*.md
