@@ -5,20 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace eTicketing.Contracts.Tests.Pagination;
 
-/// <summary>A throwaway entity, so these tests depend on no real domain model.</summary>
-public class PagedRow
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
-
-public class PagingDbContext : DbContext
-{
-    public PagingDbContext(DbContextOptions<PagingDbContext> options) : base(options) { }
-
-    public DbSet<PagedRow> Rows => Set<PagedRow>();
-}
-
 /// <summary>
 /// Pins the locked pagination contract: 0-indexed, always paged at the database level, and the
 /// echoed Page/PageSize are never null. The regression these guard against is real — Page/PageSize

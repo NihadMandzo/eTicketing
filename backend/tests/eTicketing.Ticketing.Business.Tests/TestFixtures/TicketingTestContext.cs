@@ -303,12 +303,3 @@ public sealed class TicketingTestContext : IDisposable
         _connection.Dispose();
     }
 }
-
-/// <summary>The real queue is a Channel drained by a hosted service; tests only need to know which
-/// batch ids were handed to it.</summary>
-public sealed class RecordingTicketPrintQueue : ITicketPrintQueue
-{
-    public List<Guid> Enqueued { get; } = [];
-
-    public void Enqueue(Guid batchId) => Enqueued.Add(batchId);
-}

@@ -7,17 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace eTicketing.Contracts.Tests.Validation;
 
-/// <summary>A stand-in request type, so this test depends on no real service's DTOs.</summary>
-public sealed record SampleQuery
-{
-    public int Size { get; init; }
-}
-
-public sealed class SampleQueryValidator : AbstractValidator<SampleQuery>
-{
-    public SampleQueryValidator() => RuleFor(x => x.Size).InclusiveBetween(1, 100);
-}
-
 /// <summary>
 /// Pins the startup guard itself. Worth testing precisely because the bug it prevents is the
 /// quiet kind: a route can declare <c>WithValidation&lt;T&gt;()</c> with no validator behind it
