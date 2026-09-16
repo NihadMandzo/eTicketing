@@ -4,6 +4,7 @@
     <ProjectReference Include="..\eTicketing.Payment.Business\eTicketing.Payment.Business.csproj" />
     <ProjectReference Include="..\eTicketing.Payment.Data\eTicketing.Payment.Data.csproj" />
     <ProjectReference Include="..\..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\shared\eTicketing.Shared.Messaging\eTicketing.Shared.Messaging.csproj" />
   </ItemGroup>
 
   <ItemGroup>

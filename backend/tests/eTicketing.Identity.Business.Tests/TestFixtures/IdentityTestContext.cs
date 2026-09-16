@@ -1,14 +1,16 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Moq;
+using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Identity.Business.Admins;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations;
 using eTicketing.Identity.Business.Security;
-using eTicketing.Identity.Data;
 using eTicketing.Identity.Data.Repositories;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Moq;
+using eTicketing.Identity.Data;
+using eTicketing.Shared.Messaging;
 
 namespace eTicketing.Identity.Business.Tests.TestFixtures;
 
@@ -63,9 +65,15 @@ public sealed class IdentityTestContext : IDisposable
         TokenGenerator = new JwtTokenGenerator(Options.Create(JwtOptions));
     }
 
-    public IAuthService CreateAuthService() => new AuthService(
+
+    /// <summary>The real outbox publisher over this fixture's own DbContext, for the tests that
+    /// need to see an actual OutboxMessage row rather than a satisfied mock. Every other test uses
+    /// the mock, which cannot tell a publish that writes a row from one that writes nothing.</summary>
+    public IEventPublisher OutboxPublisher => new OutboxEventPublisher<IdentityDbContext>(DbContext);
+
+    public IAuthService CreateAuthService(IEventPublisher? eventPublisher = null) => new AuthService(
         UserRepository, RefreshTokenRepository, PasswordResetTokenRepository, UnitOfWork, TokenGenerator,
-        EventPublisherMock.Object, Options.Create(JwtOptions));
+        eventPublisher ?? EventPublisherMock.Object, Options.Create(JwtOptions));
 
     public IOrganizationService CreateOrganizationService() => new OrganizationService(
         OrganizationRepository, UserRepository, UnitOfWork, BlobStorage, EventPublisherMock.Object);

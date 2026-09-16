@@ -1,6 +1,6 @@
 using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.External;
-using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -29,6 +29,7 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
     private readonly ITicketRepository _ticketRepository;
     private readonly IIdentityClient _identityClient;
     private readonly IEventPublisher _eventPublisher;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly PlatformClock _clock;
     private readonly ILogger<ProductDeletionNotifier> _logger;
 
@@ -36,12 +37,14 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
         ITicketRepository ticketRepository,
         IIdentityClient identityClient,
         IEventPublisher eventPublisher,
+        IUnitOfWork unitOfWork,
         PlatformClock clock,
         ILogger<ProductDeletionNotifier> logger)
     {
         _ticketRepository = ticketRepository;
         _identityClient = identityClient;
         _eventPublisher = eventPublisher;
+        _unitOfWork = unitOfWork;
         _clock = clock;
         _logger = logger;
     }
@@ -76,6 +79,13 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
         {
             await NotifyOrganizationAsync(message, contact, buyers.Count, ct);
         }
+
+        // These publishes write outbox rows rather than reaching the broker, and a row that is
+        // never saved is an event that silently never happens. This class has no domain write of
+        // its own — it is a pure fan-out — so the save that commits them has to be explicit. One
+        // call covering both audiences, after the organization notice too, so a deletion's whole
+        // set of emails either goes out or none of it does.
+        await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Proizvod {ProductId} je obrisan — obavještenje poslano za {BuyerCount} kupaca{Organizer}.",

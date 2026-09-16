@@ -1,14 +1,15 @@
-using eTicketing.Contracts.Persistence;
-using eTicketing.Payment.Business.Payments;
-using eTicketing.Payment.Business.Payments.Gateways;
-using eTicketing.Payment.Business.Payments.Webhooks;
-using eTicketing.Payment.Data;
-using eTicketing.Payment.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Persistence;
+using eTicketing.Payment.Business.Payments.Gateways;
+using eTicketing.Payment.Business.Payments.Webhooks;
+using eTicketing.Payment.Business.Payments;
+using eTicketing.Payment.Data.Repositories;
+using eTicketing.Payment.Data;
 
 namespace eTicketing.Payment.Business.Tests.TestFixtures;
 

@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Headers;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Auth;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
@@ -128,7 +129,11 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddSingleton<ITicketPrintQueue>(sp => sp.GetRequiredService<TicketPrintQueue>());
         builder.Services.AddHostedService<TicketPrintRenderWorker>();
         builder.Services.AddHostedService<TicketingRabbitMqConsumerService>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Transactional outbox: a publish from the business layer becomes a row in the same
+        // SaveChangesAsync as the data that caused it, and a hosted dispatcher moves those rows to
+        // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
+        // publish-then-save now matters.
+        builder.Services.AddOutboxMessaging<TicketingDbContext>(builder.Configuration);
         builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
         builder.Services.AddScoped<ISubscriptionRenewalService, SubscriptionRenewalService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ISectorService).Assembly);

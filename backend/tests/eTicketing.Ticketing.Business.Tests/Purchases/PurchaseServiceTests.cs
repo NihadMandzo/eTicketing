@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using System.Text.Json;
 using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Messaging;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
@@ -285,6 +287,87 @@ public class PurchaseServiceTests : IDisposable
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("purchase.hold_expired");
+    }
+
+    // --- Outbox ---
+
+    [Fact]
+    public async Task PurchaseAsync_CommitsTicketPurchasedInTheSameTransactionAsTheTickets()
+    {
+        // Built against the real outbox publisher rather than the mock the rest of this class uses.
+        // The mock is satisfied by a publish placed *after* SaveChangesAsync — which with an outbox
+        // writes a row nothing commits, so a paying customer gets no email and no PDF. Only the
+        // committed row can tell those apart, and this is the publish it matters most for.
+        var outboxSut = _fixture.CreatePurchaseService(_fixture.OutboxPublisher);
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
+        MockSuccessfulCharge();
+
+        var result = await outboxSut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        var message = await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().SingleAsync();
+        message.RoutingKey.Should().Be(EventNames.TicketPurchased);
+        (await _fixture.TicketRepository.Query().AsNoTracking().CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_PublishesTicketIdsThatMatchTheCommittedTickets()
+    {
+        // The publish now happens before the save, so the payload is built from entities that are
+        // not in the database yet. That is only safe because Ticket ids are client-generated Guids
+        // (Ticket.ForXxx) — if one were ever database-generated, every QR code in the email would
+        // point at a ticket that does not exist, and nothing else here would notice.
+        var outboxSut = _fixture.CreatePurchaseService(_fixture.OutboxPublisher);
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 2, _callerId));
+        MockSuccessfulCharge();
+
+        await outboxSut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 2 }), OrgACaller());
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        var message = await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().SingleAsync();
+        var published = JsonSerializer.Deserialize<TicketPurchased>(message.Payload)!;
+        var committedIds = await _fixture.TicketRepository.Query().AsNoTracking().Select(t => t.Id).ToListAsync();
+
+        published.Tickets.Select(t => t.TicketId).Should().BeEquivalentTo(committedIds);
+        published.PurchasedAt.Should().NotBe(default);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_WhenTheCardIsDeclined_StillCommitsThePaymentFailedEvent()
+    {
+        // The declined path writes no Ticket and no Subscription, so it is the one place where the
+        // outbox row has no domain write to ride along with — PurchaseService has to save it
+        // explicitly. Without that the event is added to the change tracker and simply discarded.
+        var outboxSut = _fixture.CreatePurchaseService(_fixture.OutboxPublisher);
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 1, _callerId));
+        MockDeclinedCharge();
+
+        var result = await outboxSut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        var message = await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().SingleAsync();
+        message.RoutingKey.Should().Be(EventNames.PaymentFailed);
+        (await _fixture.TicketRepository.Query().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_WithAnExpiredHold_WritesNoEvent()
+    {
+        var outboxSut = _fixture.CreatePurchaseService(_fixture.OutboxPublisher);
+        MockHold(null);
+
+        var result = await outboxSut.PurchaseAsync(BuildRequest(new PurchaseLineItemRequest { Quantity = 1 }), OrgACaller());
+
+        result.IsFailure.Should().BeTrue();
+        _fixture.DbContext.ChangeTracker.Clear();
+        (await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     // --- Hold ownership ---

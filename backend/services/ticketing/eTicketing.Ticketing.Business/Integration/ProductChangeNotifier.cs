@@ -1,5 +1,5 @@
 using eTicketing.Contracts.Events;
-using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -23,17 +23,20 @@ public class ProductChangeNotifier : IProductChangeNotifier
 {
     private readonly ITicketRepository _ticketRepository;
     private readonly IEventPublisher _eventPublisher;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly PlatformClock _clock;
     private readonly ILogger<ProductChangeNotifier> _logger;
 
     public ProductChangeNotifier(
         ITicketRepository ticketRepository,
         IEventPublisher eventPublisher,
+        IUnitOfWork unitOfWork,
         PlatformClock clock,
         ILogger<ProductChangeNotifier> logger)
     {
         _ticketRepository = ticketRepository;
         _eventPublisher = eventPublisher;
+        _unitOfWork = unitOfWork;
         _clock = clock;
         _logger = logger;
     }
@@ -64,6 +67,12 @@ public class ProductChangeNotifier : IProductChangeNotifier
                 new ProductChangedNotification(message.ProductId, message.ProductName, buyer.UserEmail, message.Changes),
                 ct);
         }
+
+        // These publishes write outbox rows rather than reaching the broker, and a row that is
+        // never saved is an event that silently never happens. This class has no domain write of
+        // its own — it is a pure fan-out — so the save that commits them has to be explicit. One
+        // call for the whole fan-out, so a recipient list either goes out entirely or not at all.
+        await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Proizvod {ProductId} je izmijenjen — obavještenje poslano za {Count} kupaca.", message.ProductId, buyers.Count);

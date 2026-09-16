@@ -32,6 +32,7 @@
          should not be, or stored when it should have been refused — so it gets assertions rather
          than trust. -->
     <ProjectReference Include="..\..\shared\eTicketing.Shared.Auth\eTicketing.Shared.Auth.csproj" />
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Messaging\eTicketing.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

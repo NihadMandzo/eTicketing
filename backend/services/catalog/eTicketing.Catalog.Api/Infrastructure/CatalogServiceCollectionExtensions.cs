@@ -7,6 +7,7 @@ using eTicketing.Catalog.Business.Recommendations;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 using eTicketing.Shared.Storage;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +34,11 @@ public static class CatalogServiceCollectionExtensions
         builder.Services.AddScoped<ICategoryService, CategoryService>();
         builder.Services.AddScoped<IProductService, ProductService>();
         builder.Services.AddScoped<ProductResponseFactory>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Transactional outbox: a publish from the business layer becomes a row in the same
+        // SaveChangesAsync as the data that caused it, and a hosted dispatcher moves those rows to
+        // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
+        // publish-then-save now matters.
+        builder.Services.AddOutboxMessaging<CatalogDbContext>(builder.Configuration);
 
         // Recommendations. The model is a singleton because it is expensive to build and shared by
         // every request; everything around it is scoped like the rest of the service.

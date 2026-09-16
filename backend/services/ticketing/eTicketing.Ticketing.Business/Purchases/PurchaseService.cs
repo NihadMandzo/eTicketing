@@ -14,14 +14,6 @@ using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Ticketing.Business.Purchases;
 
-/// <summary>Mirrors eTicketing.Identity.Business.Auth.AuthService's own inline IEventPublisher —
-/// duplicated per-service by design (see RabbitMqEventPublisher's doc comment), not shared/promoted
-/// to Contracts.</summary>
-public interface IEventPublisher
-{
-    Task PublishAsync<T>(string routingKey, T message, CancellationToken ct = default);
-}
-
 /// <summary>What a hold actually entitles the caller to buy, resolved server-side. Every field here
 /// comes from Redis and the database, never from the request.</summary>
 public record ResolvedOrder(
@@ -264,6 +256,12 @@ public class PurchaseService : IPurchaseService
                 new PaymentFailed(userId, userEmail, charge.FailureCode ?? "card_declined", _clock.UtcNow),
                 ct);
 
+            // The declined path writes nothing else — no Ticket, no Subscription — so this is the
+            // one save that commits the outbox row. Without it the publish above would add a row to
+            // the change tracker that nothing ever persists, and the event would silently not
+            // happen. See eTicketing.Shared.Messaging.OutboxEventPublisher.
+            await _unitOfWork.SaveChangesAsync(ct);
+
             return Result<PurchaseResponse>.Failure(Error.Validation("payment.declined", "Plaćanje je odbijeno. Provjerite podatke kartice."));
         }
 
@@ -330,6 +328,31 @@ public class PurchaseService : IPurchaseService
         foreach (var ticket in tickets)
             await _ticketRepository.AddAsync(ticket, ct);
 
+        // Read from the clock rather than from tickets[0].CreatedAt, which the audit interceptor
+        // only fills in *during* SaveChangesAsync — and the publish below now happens before it.
+        // Same instant for the event and the response, so a buyer and their confirmation email
+        // never disagree about when the purchase happened.
+        var purchasedAt = _clock.UtcNow;
+
+        // Published into the same transaction as the tickets, and therefore before the save rather
+        // than after it. Ticket ids are client-generated Guids (see Ticket.ForXxx), so the payload
+        // and its signed QR codes are fully known at this point. This is the publish the outbox
+        // matters most for: it is the only notice eTicketing.PdfGeneration and
+        // eTicketing.Notifications ever get that a real person paid for something.
+        // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
+        // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
+        await _eventPublisher.PublishAsync(
+            EventNames.TicketPurchased,
+            new TicketPurchased(
+                orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
+                userId, userEmail, totalPrice, purchasedAt,
+                tickets.Select(t => new PurchasedTicket(
+                    t.Id,
+                    _qrCodec.Sign(t.Id),
+                    TicketTypeNameOf(t, ticketTypesById),
+                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList()),
+            ct);
+
         try
         {
             await _unitOfWork.SaveChangesAsync(ct);
@@ -347,22 +370,8 @@ public class PurchaseService : IPurchaseService
             throw;
         }
 
-        // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
-        // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
-        await _eventPublisher.PublishAsync(
-            EventNames.TicketPurchased,
-            new TicketPurchased(
-                orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
-                userId, userEmail, totalPrice, tickets[0].CreatedAt,
-                tickets.Select(t => new PurchasedTicket(
-                    t.Id,
-                    _qrCodec.Sign(t.Id),
-                    TicketTypeNameOf(t, ticketTypesById),
-                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList()),
-            ct);
-
         var response = new PurchaseResponse(
-            orderId, sector.ProductId, sector.Id, totalPrice, tickets[0].CreatedAt,
+            orderId, sector.ProductId, sector.Id, totalPrice, purchasedAt,
             tickets.Select(t => _responseFactory.Create(t, sector.Name, TicketTypeNameOf(t, ticketTypesById))).ToList());
 
         return Result<PurchaseResponse>.Success(response);

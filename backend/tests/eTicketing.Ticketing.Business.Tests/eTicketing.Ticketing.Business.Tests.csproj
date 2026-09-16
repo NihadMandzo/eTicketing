@@ -44,6 +44,7 @@
          PurchaseService reads that string, and getting its format wrong fails open — see
          Infrastructure/RedisSectorCapacityLockTests. -->
     <ProjectReference Include="..\..\services\ticketing\eTicketing.Ticketing.Api\eTicketing.Ticketing.Api.csproj" />
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Messaging\eTicketing.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

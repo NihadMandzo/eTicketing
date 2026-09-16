@@ -134,11 +134,12 @@ public class ProductService : IProductService
         product.Longitude = request.Longitude!.Value;
         product.City = request.City!.Value;
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        // Published after the commit, never before: a buyer must not be emailed "the date moved"
-        // about a save that then failed. eTicketing.Ticketing consumes this and fans it out to the
-        // actual ticket holders — Catalog has no idea who they are.
+        // Published *into* the commit now, not after it. The concern behind the old ordering —
+        // a buyer emailed "the date moved" about a save that then failed — is what the outbox
+        // actually settles: the row is part of this SaveChangesAsync, so a failed save takes the
+        // event with it. See eTicketing.Shared.Messaging.OutboxEventPublisher.
+        // eTicketing.Ticketing consumes this and fans it out to the actual ticket holders —
+        // Catalog has no idea who they are.
         if (changes.Count > 0)
         {
             await _eventPublisher.PublishAsync(
@@ -146,6 +147,8 @@ public class ProductService : IProductService
                 new ProductUpdated(product.Id, product.Name, DateTime.UtcNow, changes),
                 ct);
         }
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));
     }
@@ -176,14 +179,16 @@ public class ProductService : IProductService
             DeletedByPlatformStaff: user.IsPlatformStaff() && user.GetOrganizationId() != product.OrganizationId);
 
         _productRepository.Remove(product);
-        await _unitOfWork.SaveChangesAsync(ct);
 
-        // After the commit, never before — the same rule UpdateAsync follows. Nobody may be told
-        // their event is cancelled on the strength of a delete that then failed to commit.
+        // Into the commit, the same rule UpdateAsync follows. Nobody may be told their event is
+        // cancelled on the strength of a delete that then failed — and with the outbox that is
+        // guaranteed rather than merely sequenced, because the row shares this transaction.
         // eTicketing.Ticketing consumes this and fans it out: Catalog has no idea who bought a
         // ticket. Published for drafts too, which have no buyers but whose owning organization
         // still needs telling when platform staff removed one.
         await _eventPublisher.PublishAsync(EventNames.ProductDeleted, deleted, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         // DB delete first (cascades ProductImage rows too, see ProductImageConfiguration): if
         // SaveChangesAsync above throws, every blob is left untouched rather than orphaned while

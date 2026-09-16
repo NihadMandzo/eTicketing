@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- So OutboxDispatcherTests can drive one pass directly rather than through reflection or by
+         waiting on the timer. -->
+    <InternalsVisibleTo Include="eTicketing.Shared.Messaging.Tests" />
+  </ItemGroup>
+
+</Project>

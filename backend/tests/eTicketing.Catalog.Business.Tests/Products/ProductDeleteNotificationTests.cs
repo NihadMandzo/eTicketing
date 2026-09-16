@@ -3,8 +3,10 @@ using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Business.Tests.TestFixtures;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Messaging;
 using eTicketing.Contracts.Persistence;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 
 namespace eTicketing.Catalog.Business.Tests.Products;
@@ -41,6 +43,41 @@ public class ProductDeleteNotificationTests : IDisposable
             && e.ProductName == "Ljetni Festival"
             && e.OrganizationId == _organizationId
             && e.ProductDate == ProductDate);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_CommitsTheEventInTheSameTransactionAsTheDelete()
+    {
+        // Built against the real outbox publisher rather than the mock the other tests here use.
+        // The mock is satisfied by a publish placed *after* SaveChangesAsync — which with an
+        // outbox writes a row nothing commits, so the buyers are never told anything. Only a check
+        // for the committed row can tell those two apart.
+        var outboxService = _fixture.CreateProductService(_fixture.OutboxPublisher);
+        var id = await CreateAsync();
+
+        var result = await outboxService.DeleteAsync(id, Organizer());
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.DbContext.ChangeTracker.Clear();
+
+        var message = await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().SingleAsync();
+        message.RoutingKey.Should().Be(EventNames.ProductDeleted);
+
+        // Both halves landed: the product is gone and the notice is queued. Neither can now happen
+        // without the other.
+        (await _fixture.DbContext.Products.AsNoTracking().AnyAsync(p => p.Id == id)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ForAnUnknownProduct_WritesNoEvent()
+    {
+        var outboxService = _fixture.CreateProductService(_fixture.OutboxPublisher);
+
+        var result = await outboxService.DeleteAsync(Guid.NewGuid(), Organizer());
+
+        result.IsFailure.Should().BeTrue();
+        _fixture.DbContext.ChangeTracker.Clear();
+        (await _fixture.DbContext.Set<OutboxMessage>().AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     [Fact]

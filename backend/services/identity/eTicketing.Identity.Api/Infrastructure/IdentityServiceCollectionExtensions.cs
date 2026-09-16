@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 using eTicketing.Identity.Business;
 using eTicketing.Identity.Business.Admins;
 using eTicketing.Identity.Business.Auth;
@@ -82,7 +83,11 @@ public static class IdentityServiceCollectionExtensions
         // needed here.
 
         // --- Messaging ---
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Transactional outbox: a publish from the business layer becomes a row in the same
+        // SaveChangesAsync as the data that caused it, and a hosted dispatcher moves those rows to
+        // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
+        // publish-then-save now matters.
+        builder.Services.AddOutboxMessaging<IdentityDbContext>(builder.Configuration);
 
         // --- Rate limiting ---
         // Every partition key below is the caller's IP, which is only actually the caller's IP

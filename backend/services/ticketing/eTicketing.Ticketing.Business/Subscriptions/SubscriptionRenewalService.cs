@@ -3,6 +3,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Ticketing.Business.Purchases;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -35,6 +36,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TicketQrCodec _qrCodec;
+    private readonly PlatformClock _clock;
     private readonly ILogger<SubscriptionRenewalService> _logger;
 
     public SubscriptionRenewalService(
@@ -45,6 +47,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
         TicketQrCodec qrCodec,
+        PlatformClock clock,
         ILogger<SubscriptionRenewalService> logger)
     {
         _subscriptionRepository = subscriptionRepository;
@@ -54,6 +57,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _qrCodec = qrCodec;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -107,19 +111,24 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
             message.AmountPaid, subscription.Id, message.PeriodStart, message.PeriodEnd);
 
         await _ticketRepository.AddAsync(ticket, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
 
         // Same event the synchronous purchase publishes, so the existing Notifications and
-        // PdfGeneration consumers email the new period's ticket with no extra wiring.
+        // PdfGeneration consumers email the new period's ticket with no extra wiring — and
+        // published before the save for the same reason PurchaseService does it: the outbox row
+        // belongs in the same transaction as the ticket it announces. The timestamp comes from the
+        // clock rather than ticket.CreatedAt, which the audit interceptor only fills in during
+        // SaveChangesAsync.
         await _eventPublisher.PublishAsync(
             EventNames.TicketPurchased,
             new TicketPurchased(
                 orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
                 subscription.UserId, subscription.UserEmail ?? string.Empty,
-                message.AmountPaid, ticket.CreatedAt,
+                message.AmountPaid, _clock.UtcNow,
                 [new PurchasedTicket(ticket.Id, _qrCodec.Sign(ticket.Id), null, ticket.PricePaid,
                     ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo)]),
             ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Obnovljena pretplata {SubscriptionId} za period {PeriodStart} - {PeriodEnd}.",

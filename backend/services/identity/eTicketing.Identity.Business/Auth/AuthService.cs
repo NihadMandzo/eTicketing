@@ -11,11 +11,6 @@ using Microsoft.Extensions.Options;
 
 namespace eTicketing.Identity.Business.Auth;
 
-public interface IEventPublisher
-{
-    Task PublishAsync<T>(string routingKey, T message, CancellationToken ct = default);
-}
-
 public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
@@ -61,14 +56,17 @@ public class AuthService : IAuthService
 
         await _userRepository.AddAsync(user, ct);
 
-        // IssueTokensAsync does the one SaveChangesAsync for this method — the verification
-        // code set above is persisted in that same call, no extra DB round trip.
-        var loginResult = await IssueTokensAsync(user, ct);
-
+        // Before IssueTokensAsync, which is what performs this method's one SaveChangesAsync: the
+        // publish writes an outbox row into that same save (see
+        // eTicketing.Shared.Messaging.OutboxEventPublisher), so the verification email and the
+        // account it belongs to commit together or not at all.
         await _eventPublisher.PublishAsync(
             EventNames.VerificationEmailRequested,
             new VerificationEmailRequested(user.Id, user.Email, user.FirstName, verificationCode),
             ct);
+
+        // The verification code set above is persisted in that same call, no extra DB round trip.
+        var loginResult = await IssueTokensAsync(user, ct);
 
         return Result<LoginResult>.Success(loginResult);
     }
@@ -282,12 +280,17 @@ public class AuthService : IAuthService
         user.EmailVerificationCode = verificationCode;
         user.EmailVerificationCodeExpiresAt = DateTime.UtcNow.AddHours(24);
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         await _eventPublisher.PublishAsync(
             EventNames.VerificationEmailRequested,
             new VerificationEmailRequested(user.Id, user.Email, user.FirstName, verificationCode),
             ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result.Success();
     }
@@ -329,12 +332,17 @@ public class AuthService : IAuthService
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         }, ct);
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         await _eventPublisher.PublishAsync(
             EventNames.PasswordResetRequested,
             new PasswordResetRequested(user.Id, user.Email, user.FirstName, rawToken),
             ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result.Success();
     }

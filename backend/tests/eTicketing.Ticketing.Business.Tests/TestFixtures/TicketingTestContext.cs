@@ -1,24 +1,4 @@
 ﻿using eTicketing.Contracts.Persistence;
-using eTicketing.Ticketing.Business.Analytics;
-using eTicketing.Ticketing.Business.Analytics.Anomalies;
-using eTicketing.Ticketing.Business.Analytics.Forecasting;
-using eTicketing.Ticketing.Business.Analytics.Insights;
-using eTicketing.Ticketing.Business.Analytics.Narrative;
-using eTicketing.Ticketing.Business.Analytics.Segmentation;
-using eTicketing.Ticketing.Business.External;
-using eTicketing.Ticketing.Business.GateDevices;
-using eTicketing.Ticketing.Business.Integration;
-using eTicketing.Ticketing.Business.Purchases;
-using eTicketing.Ticketing.Business.Reports;
-using eTicketing.Ticketing.Business.Security;
-using eTicketing.Shared.TicketPdf;
-using eTicketing.Ticketing.Business.Sectors;
-using eTicketing.Ticketing.Business.TicketPrint;
-using eTicketing.Ticketing.Business.Subscriptions;
-using eTicketing.Ticketing.Business.Tickets;
-using eTicketing.Ticketing.Business.Time;
-using eTicketing.Ticketing.Data;
-using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -26,6 +6,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using MsOptions = Microsoft.Extensions.Options.Options;
+using eTicketing.Contracts.Events;
+using eTicketing.Shared.Messaging;
+using eTicketing.Shared.TicketPdf;
+using eTicketing.Ticketing.Business.Analytics.Anomalies;
+using eTicketing.Ticketing.Business.Analytics.Forecasting;
+using eTicketing.Ticketing.Business.Analytics.Insights;
+using eTicketing.Ticketing.Business.Analytics.Narrative;
+using eTicketing.Ticketing.Business.Analytics.Segmentation;
+using eTicketing.Ticketing.Business.Analytics;
+using eTicketing.Ticketing.Business.External;
+using eTicketing.Ticketing.Business.GateDevices;
+using eTicketing.Ticketing.Business.Integration;
+using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.Security;
+using eTicketing.Ticketing.Business.Subscriptions;
+using eTicketing.Ticketing.Business.TicketPrint;
+using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
+using eTicketing.Ticketing.Data.Repositories;
+using eTicketing.Ticketing.Data;
 
 namespace eTicketing.Ticketing.Business.Tests.TestFixtures;
 
@@ -153,7 +155,7 @@ public sealed class TicketingTestContext : IDisposable
     public ISubscriptionRenewalService CreateSubscriptionRenewalService() =>
         new SubscriptionRenewalService(
             SubscriptionRepository, TicketRepository, SectorRepository, CapacityLock.Object,
-            EventPublisher.Object, UnitOfWork, QrCodec, NullLogger<SubscriptionRenewalService>.Instance);
+            EventPublisher.Object, UnitOfWork, QrCodec, PlatformClock, NullLogger<SubscriptionRenewalService>.Instance);
 
     public ITicketValidationService CreateTicketValidationService() =>
         new TicketValidationService(
@@ -164,11 +166,13 @@ public sealed class TicketingTestContext : IDisposable
         new TicketPdfCompletionService(TicketRepository, UnitOfWork, NullLogger<TicketPdfCompletionService>.Instance);
 
     public IProductChangeNotifier CreateProductChangeNotifier() =>
-        new ProductChangeNotifier(TicketRepository, EventPublisher.Object, PlatformClock, NullLogger<ProductChangeNotifier>.Instance);
+        new ProductChangeNotifier(
+            TicketRepository, EventPublisher.Object, UnitOfWork, PlatformClock,
+            NullLogger<ProductChangeNotifier>.Instance);
 
     public IProductDeletionNotifier CreateProductDeletionNotifier() =>
         new ProductDeletionNotifier(
-            TicketRepository, IdentityClient.Object, EventPublisher.Object, PlatformClock,
+            TicketRepository, IdentityClient.Object, EventPublisher.Object, UnitOfWork, PlatformClock,
             NullLogger<ProductDeletionNotifier>.Instance);
 
     /// <summary>Records what the service asked to render without doing any of it, so a print test
@@ -221,10 +225,17 @@ public sealed class TicketingTestContext : IDisposable
             GateDeviceRepository, CatalogClient.Object, KeyGenerator, UnitOfWork, Clock,
             NullLogger<GateDeviceService>.Instance);
 
-    public IPurchaseService CreatePurchaseService() =>
+
+    /// <summary>The real outbox publisher over this fixture's own DbContext, for the tests that
+    /// need to see an actual OutboxMessage row rather than a satisfied mock. Every other test uses
+    /// the mock, which cannot tell a publish that writes a row from one that writes nothing.</summary>
+    public IEventPublisher OutboxPublisher => new OutboxEventPublisher<TicketingDbContext>(DbContext);
+
+    public IPurchaseService CreatePurchaseService(IEventPublisher? eventPublisher = null) =>
         new PurchaseService(
             SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
-            EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock, NullLogger<PurchaseService>.Instance);
+            eventPublisher ?? EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock,
+            NullLogger<PurchaseService>.Instance);
 
     public void Dispose()
     {

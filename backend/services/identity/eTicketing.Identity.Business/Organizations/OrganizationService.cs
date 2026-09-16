@@ -147,13 +147,19 @@ public class OrganizationService : IOrganizationService
 
         await _userRepository.AddAsync(adminUser, ct);
 
-        // Jedan SaveChangesAsync poziv — organizacija i prvi organizator se upisuju u istoj transakciji.
-        await _unitOfWork.SaveChangesAsync(ct);
-
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         await _eventPublisher.PublishAsync(
             EventNames.OrganizationCreated,
             new OrganizationCreatedNotification(organization.Id, organization.Name, request.NotificationEmail),
             ct);
+
+        // Jedan SaveChangesAsync poziv — organizacija, prvi organizator i outbox red se upisuju u
+        // istoj transakciji.
+        await _unitOfWork.SaveChangesAsync(ct);
 
         // EF's change-tracker fixup already put adminUser into organization.Users once both
         // entities were tracked (set via the Organization nav property above), so the mapped

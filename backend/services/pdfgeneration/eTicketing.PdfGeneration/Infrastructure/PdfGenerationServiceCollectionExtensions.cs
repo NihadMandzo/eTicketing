@@ -1,11 +1,12 @@
+using Microsoft.Extensions.Http.Resilience;
+using Polly;
+using QuestPDF.Infrastructure;
 using eTicketing.PdfGeneration.Documents;
 using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Messaging;
 using eTicketing.PdfGeneration.Options;
+using eTicketing.Shared.Messaging;
 using eTicketing.Shared.TicketPdf;
-using Microsoft.Extensions.Http.Resilience;
-using Polly;
-using QuestPDF.Infrastructure;
 
 namespace eTicketing.PdfGeneration.Infrastructure;
 
@@ -43,7 +44,9 @@ public static class PdfGenerationServiceCollectionExtensions
             });
 
         builder.Services.AddSingleton<ITicketPdfGenerator, TicketPdfGenerator>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Direct to the broker, no outbox — this service has no database to put one in. It
+        // republishes from a message it is still holding, so a failure nacks and redelivers.
+        builder.Services.AddDirectMessaging(builder.Configuration);
         builder.Services.AddSingleton<TicketPurchasedDispatcher>();
         builder.Services.AddHostedService<RabbitMqConsumerService>();
 
