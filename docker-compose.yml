@@ -245,12 +245,11 @@ services:
       # the address alone rather than a number nobody answers.
       TicketSupport__Email: "${SUPPORT_EMAIL:-podrska@ekarta.ba}"
       TicketSupport__Phone: "${SUPPORT_PHONE:-}"
-      # TicketPurchased carries no product name/date (Ticketing only stores a ProductId) — the PDF
-      # gets them from Catalog's internal endpoint.
-      Services__Catalog: "http://catalog-service:8080"
+      # No Services__Catalog and no catalog-service dependency: TicketPurchased now carries the
+      # product's name, date and city, read from Ticketing's own ProductSnapshot at purchase time.
+      # This consumer talks to the broker and to blob storage, and to nothing else.
     depends_on:
       rabbitmq: { condition: service_healthy }
-      catalog-service: { condition: service_started }
     networks: [eticketing-network]
     restart: unless-stopped
 

@@ -32,6 +32,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly ITicketRepository _ticketRepository;
     private readonly ISectorRepository _sectorRepository;
+    private readonly IProductSnapshotRepository _productSnapshots;
     private readonly ISectorCapacityLock _capacityLock;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
@@ -43,6 +44,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
         ISubscriptionRepository subscriptionRepository,
         ITicketRepository ticketRepository,
         ISectorRepository sectorRepository,
+        IProductSnapshotRepository productSnapshots,
         ISectorCapacityLock capacityLock,
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
@@ -53,6 +55,7 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
         _subscriptionRepository = subscriptionRepository;
         _ticketRepository = ticketRepository;
         _sectorRepository = sectorRepository;
+        _productSnapshots = productSnapshots;
         _capacityLock = capacityLock;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
@@ -112,6 +115,12 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
 
         await _ticketRepository.AddAsync(ticket, ct);
 
+        // Deliberately not a gate. The provider has already taken this month's money on its own
+        // schedule; refusing to mint the ticket because the product was unpublished would leave a
+        // paying subscriber with nothing. Absent snapshot just means the PDF falls back to a
+        // generic heading — see TicketPurchased.ProductName.
+        var product = await _productSnapshots.GetByIdNoTrackingAsync(sector.ProductId, ct);
+
         // Same event the synchronous purchase publishes, so the existing Notifications and
         // PdfGeneration consumers email the new period's ticket with no extra wiring — and
         // published before the save for the same reason PurchaseService does it: the outbox row
@@ -125,7 +134,8 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
                 subscription.UserId, subscription.UserEmail ?? string.Empty,
                 message.AmountPaid, _clock.UtcNow,
                 [new PurchasedTicket(ticket.Id, _qrCodec.Sign(ticket.Id), null, ticket.PricePaid,
-                    ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo)]),
+                    ticket.ValidDate, ticket.ValidFrom, ticket.ValidTo)],
+                product?.Name, product?.Date, product?.City),
             ct);
 
         await _unitOfWork.SaveChangesAsync(ct);

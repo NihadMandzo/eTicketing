@@ -16,9 +16,14 @@ namespace eTicketing.Ticketing.Business.Purchases;
 
 /// <summary>What a hold actually entitles the caller to buy, resolved server-side. Every field here
 /// comes from Redis and the database, never from the request.</summary>
+/// <param name="Product">The local read model of the eTicketing.Catalog product this sector belongs
+/// to. Resolved once here because both jobs need it: refusing a purchase for a product that is no
+/// longer published, and stamping the ticket's event name/date/city onto TicketPurchased so
+/// eTicketing.PdfGeneration needs no catalogue client of its own.</param>
 public record ResolvedOrder(
     HeldReservation Reservation,
     Sector Sector,
+    ProductSnapshot Product,
     IReadOnlyDictionary<Guid, TicketType> TicketTypesById,
     decimal TotalPrice);
 
@@ -70,6 +75,7 @@ public record ResolvedOrder(
 public class PurchaseService : IPurchaseService
 {
     private readonly ISectorRepository _sectorRepository;
+    private readonly IProductSnapshotRepository _productSnapshots;
     private readonly ITicketRepository _ticketRepository;
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly ISectorCapacityLock _capacityLock;
@@ -83,6 +89,7 @@ public class PurchaseService : IPurchaseService
 
     public PurchaseService(
         ISectorRepository sectorRepository,
+        IProductSnapshotRepository productSnapshots,
         ITicketRepository ticketRepository,
         ISubscriptionRepository subscriptionRepository,
         ISectorCapacityLock capacityLock,
@@ -95,6 +102,7 @@ public class PurchaseService : IPurchaseService
         ILogger<PurchaseService> logger)
     {
         _sectorRepository = sectorRepository;
+        _productSnapshots = productSnapshots;
         _ticketRepository = ticketRepository;
         _subscriptionRepository = subscriptionRepository;
         _capacityLock = capacityLock;
@@ -134,6 +142,14 @@ public class PurchaseService : IPurchaseService
         if (sector is null || sector.Status != PublishStatus.Published)
             return Result<ResolvedOrder>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
 
+        // Re-checked here and not only at hold time: a hold lives five minutes, and the product can
+        // be unpublished or deleted inside that window. Held capacity is not a right to buy
+        // something that has since been taken off sale. Read from the local snapshot — the purchase
+        // critical path gets no new synchronous dependency.
+        var product = await _productSnapshots.GetByIdNoTrackingAsync(sector.ProductId, ct);
+        if (product is null || product.Status != PublishStatus.Published)
+            return Result<ResolvedOrder>.Failure(SectorService.ProductUnavailable());
+
         var ticketTypesById = sector.TicketTypes.ToDictionary(t => t.Id);
         if (ticketTypesById.Count > 0)
         {
@@ -148,7 +164,7 @@ public class PurchaseService : IPurchaseService
         var totalPrice = lineItems.Sum(li =>
             li.Quantity * (li.TicketTypeId is null ? sector.Price : ticketTypesById[li.TicketTypeId.Value].Price));
 
-        return Result<ResolvedOrder>.Success(new ResolvedOrder(reservation, sector, ticketTypesById, totalPrice));
+        return Result<ResolvedOrder>.Success(new ResolvedOrder(reservation, sector, product, ticketTypesById, totalPrice));
     }
 
     public async Task<Result<PurchaseIntentResponse>> CreatePaymentIntentAsync(
@@ -350,7 +366,11 @@ public class PurchaseService : IPurchaseService
                     t.Id,
                     _qrCodec.Sign(t.Id),
                     TicketTypeNameOf(t, ticketTypesById),
-                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList()),
+                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList(),
+                // Carried on the event so eTicketing.PdfGeneration can print a real event name,
+                // date and city without a catalogue lookup of its own — and carried as of *now*,
+                // which is what a ticket should show even if the product is renamed later.
+                order.Product.Name, order.Product.Date, order.Product.City),
             ct);
 
         try

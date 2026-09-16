@@ -7,10 +7,16 @@ namespace eTicketing.Ticketing.Data.Repositories;
 
 public class SectorRepository : Repository<Sector, Guid>, ISectorRepository
 {
-    public SectorRepository(TicketingDbContext context) : base(context) { }
+    private readonly TicketingDbContext _context;
+
+    public SectorRepository(TicketingDbContext context) : base(context)
+    {
+        _context = context;
+    }
 
     public Task<PagedResult<Sector>> SearchAsync(
-        BaseSearchObject query, Guid? productId, Guid? organizationId, PublishStatus? status, CancellationToken ct = default)
+        BaseSearchObject query, Guid? productId, Guid? organizationId, PublishStatus? status,
+        bool requirePublishedProduct, CancellationToken ct = default)
         => Query()
             .AsNoTracking()
             .Include(s => s.TicketTypes)
@@ -18,6 +24,10 @@ public class SectorRepository : Repository<Sector, Guid>, ISectorRepository
             .Where(s => productId == null || s.ProductId == productId)
             .Where(s => organizationId == null || s.OrganizationId == organizationId)
             .Where(s => status == null || s.Status == status)
+            // Translates to an EXISTS, so it filters and counts in one round trip. A product with
+            // no snapshot row at all fails it, which is the safe direction — see ProductSnapshot.
+            .Where(s => !requirePublishedProduct || _context.ProductSnapshots
+                .Any(p => p.ProductId == s.ProductId && p.Status == PublishStatus.Published))
             .OrderByDescending(s => s.CreatedAt)
             .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 

@@ -3,6 +3,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Shared.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Auth;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
+using eTicketing.Ticketing.Api.Infrastructure.ReadModels;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
 using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
 using eTicketing.Ticketing.Business.Analytics;
@@ -15,6 +16,7 @@ using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.ReadModels;
 using eTicketing.Ticketing.Business.Reports;
 using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
@@ -50,6 +52,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         builder.Services.AddScoped<ITicketPrintBatchRepository, TicketPrintBatchRepository>();
         builder.Services.AddScoped<IGateDeviceRepository, GateDeviceRepository>();
+        builder.Services.AddScoped<IProductSnapshotRepository, ProductSnapshotRepository>();
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
@@ -112,6 +115,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketPdfService, TicketPdfService>();
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
+        builder.Services.AddScoped<IProductSnapshotProjector, ProductSnapshotProjector>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
         builder.Services.AddScoped<IProductDeletionNotifier, ProductDeletionNotifier>();
         builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();
@@ -129,6 +133,9 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddSingleton<ITicketPrintQueue>(sp => sp.GetRequiredService<TicketPrintQueue>());
         builder.Services.AddHostedService<TicketPrintRenderWorker>();
         builder.Services.AddHostedService<TicketingRabbitMqConsumerService>();
+        // Catches up the ProductSnapshot read model for products whose events this service never
+        // saw — the rows that predate the projection, and anything lost during a long outage.
+        builder.Services.AddHostedService<ProductSnapshotBackfillWorker>();
         // Transactional outbox: a publish from the business layer becomes a row in the same
         // SaveChangesAsync as the data that caused it, and a hosted dispatcher moves those rows to
         // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of

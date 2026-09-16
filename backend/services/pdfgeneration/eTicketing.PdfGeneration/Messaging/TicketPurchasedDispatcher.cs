@@ -40,8 +40,7 @@ public sealed class TicketPurchasedDispatcher
         _logger.LogInformation(
             "Generišem {Count} PDF ulaznica za narudžbu {OrderId}.", order.Tickets.Count, order.OrderId);
 
-        var ready = await _generator.GenerateAsync(order, ct)
-            ?? throw new PoisonMessageException($"Proizvod iz narudžbe {order.OrderId} više ne postoji.");
+        var ready = await _generator.GenerateAsync(order, ct);
 
         // Two consumers pick this up: eTicketing.Notifications sends the confirmation email with
         // every PDF attached, and eTicketing.Ticketing flips the tickets Confirmed → Ready.

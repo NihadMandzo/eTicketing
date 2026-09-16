@@ -18,6 +18,10 @@ public class TicketingDbContext : DbContext, IUnitOfWork
     public DbSet<GateDevice> GateDevices => Set<GateDevice>();
     public DbSet<GateDeviceSector> GateDeviceSectors => Set<GateDeviceSector>();
 
+    /// <summary>A read model of eTicketing.Catalog's Product, not a domain table — this service
+    /// never writes it except by projecting events. See ProductSnapshot.</summary>
+    public DbSet<ProductSnapshot> ProductSnapshots => Set<ProductSnapshot>();
+
     /// <summary>Events waiting to reach the broker, written in the same transaction as the data
     /// that produced them. Not a domain table — see eTicketing.Contracts.Messaging.OutboxMessage.</summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

@@ -81,6 +81,7 @@ public class ProductService : IProductService
         };
 
         await _productRepository.AddAsync(product, ct);
+        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         product.Category = validation.Value;
@@ -98,6 +99,10 @@ public class ProductService : IProductService
             return Result<ProductResponse>.Failure(ownershipError);
 
         product.Status = PublishStatus.Published;
+
+        // The transition eTicketing.Ticketing cares about most: until its snapshot says Published,
+        // this product's sectors are not listed and cannot be held.
+        await PublishSnapshotAsync(product, product.Category!.TicketingMode, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));
@@ -148,10 +153,33 @@ public class ProductService : IProductService
                 ct);
         }
 
+        // Unconditional, unlike the notification above: a projection that only hears about changes
+        // somebody decided were worth emailing about is a projection that quietly goes stale. A
+        // draft edit produces no email and still produces a snapshot.
+        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));
     }
+
+    /// <summary>
+    /// Publishes the product's current state for eTicketing.Ticketing's ProductSnapshot read model,
+    /// on every create, publish and edit. Into the caller's transaction, like every other publish
+    /// here — the snapshot must not claim a state this database then failed to commit.
+    ///
+    /// <para>Separate from <see cref="EventNames.ProductUpdated"/> on purpose. That one is an email
+    /// trigger: published products only, only when a human-visible field changed, carrying Bosnian
+    /// display strings. This one is state: always, typed. Folding them together would mean either
+    /// emailing buyers about draft edits or letting the projection miss half of them.</para>
+    /// </summary>
+    private Task PublishSnapshotAsync(Product product, TicketingMode ticketingMode, CancellationToken ct) =>
+        _eventPublisher.PublishAsync(
+            EventNames.ProductSnapshotChanged,
+            new ProductSnapshotChanged(
+                product.Id, product.OrganizationId, product.Name, product.Date, product.City,
+                product.Status, ticketingMode, DateTime.UtcNow),
+            ct);
 
     public async Task<Result> DeleteAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
     {

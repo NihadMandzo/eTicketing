@@ -19,6 +19,7 @@ using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.ReadModels;
 using eTicketing.Ticketing.Business.Reports;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Security;
@@ -26,6 +27,7 @@ using eTicketing.Ticketing.Business.Subscriptions;
 using eTicketing.Ticketing.Business.TicketPrint;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Business.Time;
+using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using eTicketing.Ticketing.Data;
 
@@ -50,6 +52,7 @@ public sealed class TicketingTestContext : IDisposable
 
     public TicketingDbContext DbContext { get; }
     public ISectorRepository SectorRepository { get; }
+    public IProductSnapshotRepository ProductSnapshotRepository { get; }
     public ITicketTypeRepository TicketTypeRepository { get; }
     public ITicketRepository TicketRepository { get; }
     public ISubscriptionRepository SubscriptionRepository { get; }
@@ -106,6 +109,7 @@ public sealed class TicketingTestContext : IDisposable
         DbContext.Database.EnsureCreated();
 
         SectorRepository = new SectorRepository(DbContext);
+        ProductSnapshotRepository = new ProductSnapshotRepository(DbContext);
         TicketTypeRepository = new TicketTypeRepository(DbContext);
         TicketRepository = new TicketRepository(DbContext);
         SubscriptionRepository = new SubscriptionRepository(DbContext);
@@ -132,7 +136,42 @@ public sealed class TicketingTestContext : IDisposable
     public TicketResponseFactory ResponseFactory => new(QrCodec);
 
     public ISectorService CreateSectorService() =>
-        new SectorService(SectorRepository, CatalogClient.Object, CapacityLock.Object, UnitOfWork);
+        new SectorService(
+            SectorRepository, ProductSnapshotRepository, CreateProductSnapshotProjector(),
+            CatalogClient.Object, CapacityLock.Object, UnitOfWork);
+
+    /// <summary>The real projector over this fixture's own context — it is a projection onto a
+    /// table, so a mock would assert nothing about whether the table ends up right.</summary>
+    public IProductSnapshotProjector CreateProductSnapshotProjector() =>
+        new ProductSnapshotProjector(
+            ProductSnapshotRepository, CatalogClient.Object, UnitOfWork,
+            NullLogger<ProductSnapshotProjector>.Instance);
+
+    /// <summary>Records a product as Published in the local read model, which is what the buy path
+    /// checks before listing, holding or selling a sector. Sector tests that are not *about* product
+    /// status call this so their sector is actually on sale.</summary>
+    public async Task<ProductSnapshot> SeedProductSnapshotAsync(
+        Guid productId, PublishStatus status = PublishStatus.Published, Guid? organizationId = null,
+        string name = "Testni proizvod", DateTime? date = null,
+        TicketingMode ticketingMode = TicketingMode.SingleOccurrence)
+    {
+        var snapshot = new ProductSnapshot
+        {
+            ProductId = productId,
+            OrganizationId = organizationId ?? Guid.NewGuid(),
+            Name = name,
+            Date = date,
+            City = City.Sarajevo,
+            Status = status,
+            TicketingMode = ticketingMode,
+            ChangedAt = Clock.GetUtcNow().UtcDateTime,
+        };
+
+        DbContext.ProductSnapshots.Add(snapshot);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        return snapshot;
+    }
 
     public ITicketTypeService CreateTicketTypeService() =>
         new TicketTypeService(SectorRepository, TicketTypeRepository, UnitOfWork);
@@ -154,7 +193,7 @@ public sealed class TicketingTestContext : IDisposable
 
     public ISubscriptionRenewalService CreateSubscriptionRenewalService() =>
         new SubscriptionRenewalService(
-            SubscriptionRepository, TicketRepository, SectorRepository, CapacityLock.Object,
+            SubscriptionRepository, TicketRepository, SectorRepository, ProductSnapshotRepository, CapacityLock.Object,
             EventPublisher.Object, UnitOfWork, QrCodec, PlatformClock, NullLogger<SubscriptionRenewalService>.Instance);
 
     public ITicketValidationService CreateTicketValidationService() =>
@@ -233,7 +272,7 @@ public sealed class TicketingTestContext : IDisposable
 
     public IPurchaseService CreatePurchaseService(IEventPublisher? eventPublisher = null) =>
         new PurchaseService(
-            SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
+            SectorRepository, ProductSnapshotRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
             eventPublisher ?? EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock,
             NullLogger<PurchaseService>.Instance);
 

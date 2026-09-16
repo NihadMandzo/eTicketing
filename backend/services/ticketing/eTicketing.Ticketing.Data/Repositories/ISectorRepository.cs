@@ -10,8 +10,19 @@ public interface ISectorRepository : IRepository<Sector, Guid>
     /// SectorService.GetPublishedAsync/GetMineAsync/GetAllAsync. Parameters are passed plainly
     /// rather than the Business-layer SectorQuery type so Data doesn't need to reference
     /// Business.</summary>
+    /// <param name="requirePublishedProduct">Also require a ProductSnapshot row that says the
+    /// owning product is Published — the public buy path only. A sector's own Status says nothing
+    /// about the product it belongs to, so without this a product that was unpublished or deleted
+    /// in eTicketing.Catalog keeps its sectors on sale here.
+    ///
+    /// <para>Applied inside the query, not to the materialized page, because filtering afterwards
+    /// would leave TotalCount counting rows that were then dropped — the paging contract in
+    /// .claude/rules/01-domain.md is what both PaginationBar widgets read.</para>
+    /// <para>The back-office listings pass false: an organizer configuring sectors for a product
+    /// they have not published yet must still see them.</para></param>
     Task<PagedResult<Sector>> SearchAsync(
-        BaseSearchObject query, Guid? productId, Guid? organizationId, PublishStatus? status, CancellationToken ct = default);
+        BaseSearchObject query, Guid? productId, Guid? organizationId, PublishStatus? status,
+        bool requirePublishedProduct, CancellationToken ct = default);
 
     /// <summary>Plain GetByIdAsync (DbSet.FindAsync) can't eager-load — use this instead wherever
     /// the caller needs Sector.TicketTypes populated in the response (Publish/Update; Purchase's
