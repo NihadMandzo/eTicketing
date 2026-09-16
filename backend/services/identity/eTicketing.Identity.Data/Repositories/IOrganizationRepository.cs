@@ -19,18 +19,33 @@ public interface IOrganizationRepository : IRepository<Organization, Guid>
     Task<PagedResult<OrganizationWithUserCount>> SearchAsync(BaseSearchObject query, IReadOnlyList<Guid>? organizationIds, CancellationToken ct = default);
 
     /// <summary>Single organization with Users loaded — GetByIdAsync maps the user count off the
-    /// collection, and GetInternalContactAsync needs the rows themselves to find the
-    /// OrganizationSuperAdmin. One organization's staff is a bounded read, unlike a whole page of
-    /// them, so this one keeps the Include.</summary>
+    /// collection. One organization's staff is a bounded read, unlike a whole page of them, so this
+    /// one keeps the Include.</summary>
     Task<Organization?> GetByIdWithUsersAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Organizations by id, WITHOUT Users — backs the internal
-    /// POST /internal/organizations/by-ids that eTicketing.Ticketing's Izvještaji reports call to
-    /// label their rows. Deliberately skips the Users include the two methods above need: that
-    /// caller wants a name and an address, and pulling every staff row per organization for it
-    /// would be pure waste. Unknown ids are simply absent from the result.</summary>
-    Task<List<Organization>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+    /// <summary>Every organization's contact details plus its OrganizationSuperAdmin's address, in
+    /// one query — the periodic republish that keeps eTicketing.Ticketing's OrganizationSnapshot
+    /// read model honest.
+    ///
+    /// <para>A projection, not entities, and specifically not an <c>Include(o =&gt; o.Users)</c>:
+    /// this runs over every organization on the platform, and the super admin's email is one value
+    /// per row. The correlated sub-select costs a row each; the include would cost every staff
+    /// account on the platform.</para></summary>
+    Task<List<OrganizationSnapshotRow>> GetSnapshotRowsAsync(CancellationToken ct = default);
 }
+
+/// <summary>Projection, not an entity — one organization's outward-facing details, with
+/// SuperAdminEmail folded in from the Users table. Lives here rather than being the Contracts event
+/// type for the same reason SearchAsync takes a BaseSearchObject: Data cannot reference Business,
+/// and the mapping to the event belongs with the code that publishes it.</summary>
+public record OrganizationSnapshotRow(
+    Guid Id,
+    string Name,
+    string Address,
+    string Email,
+    string PhoneNumber,
+    string? SuperAdminEmail,
+    bool IsActive);
 
 /// <summary>Projection, not an entity — one organization plus how many users belong to it, counted
 /// in SQL. Lives here rather than being the Business-layer OrganizationResponse for the same reason

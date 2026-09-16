@@ -16,6 +16,9 @@ namespace eTicketing.Ticketing.Api.Infrastructure.Messaging;
 ///  - <c>product.changed</c> from eTicketing.Catalog — project into the ProductSnapshot read model,
 ///    which is what lets the browse, hold and purchase paths check a product's publish status
 ///    without a synchronous call back to Catalog.
+///  - <c>organization.changed</c> / <c>organization.deleted</c> from eTicketing.Identity — the same
+///    idea for organization names and contact details, which the Izvještaji reports and the
+///    cancellation notice used to fetch over HTTP.
 ///
 /// Modelled on eTicketing.Notifications' RabbitMqConsumerService (reconnect loop, manual ack,
 /// publisher confirms before acking a republish) — and, like eTicketing.PdfGeneration's, it caps
@@ -41,6 +44,8 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
         EventNames.ProductUpdated,
         EventNames.ProductSnapshotChanged,
         EventNames.ProductDeleted,
+        EventNames.OrganizationSnapshotChanged,
+        EventNames.OrganizationDeleted,
         // From eTicketing.Payment, driven by the payment provider's own webhooks: a recurring
         // reservation is renewed, falls behind, or ends. See SubscriptionRenewalService.
         EventNames.SubscriptionRenewed,
@@ -176,6 +181,18 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
                 await scope.ServiceProvider.GetRequiredService<IProductSnapshotProjector>()
                     .RemoveAsync(productDeleted.ProductId, ct);
                 await scope.ServiceProvider.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(productDeleted, ct);
+                break;
+
+            case EventNames.OrganizationSnapshotChanged:
+                var organizationSnapshot = Deserialize<OrganizationSnapshotChanged>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<IOrganizationSnapshotProjector>()
+                    .ApplyAsync(organizationSnapshot, ct);
+                break;
+
+            case EventNames.OrganizationDeleted:
+                var organizationDeleted = Deserialize<OrganizationDeleted>(body, routingKey);
+                await scope.ServiceProvider.GetRequiredService<IOrganizationSnapshotProjector>()
+                    .RemoveAsync(organizationDeleted.OrganizationId, ct);
                 break;
 
             case EventNames.SubscriptionRenewed:

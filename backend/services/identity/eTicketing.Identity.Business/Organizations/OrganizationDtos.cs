@@ -72,33 +72,6 @@ public sealed record UpdateOrganizationUserRequest : IStaffProfileRequest
 /// POST/PUT /organizations/{id}/logo endpoints — organizations no longer carry logo bytes at
 /// all (see Organization.LogoBlobName); it's derived from Azure Blob Storage, not a stored
 /// column.</summary>
-/// <summary>The internal-only shape returned by POST /internal/organizations/by-ids, for
-/// eTicketing.Ticketing's Izvještaji reports. Deliberately far narrower than
-/// <see cref="OrganizationResponse"/>: a report labels rows, so it gets a name, an address and
-/// whether the organization is live — never contact details, logos or user counts, none of which
-/// another service has any business holding.</summary>
-public record OrganizationInternalResponse(Guid Id, string Name, string Address, bool IsActive);
-
-/// <summary>
-/// Contact details for one organization, for the single caller that legitimately needs them:
-/// eTicketing.Ticketing telling a buyer whose event was deleted who to ask for a refund.
-///
-/// <para>Deliberately a separate record from <see cref="OrganizationInternalResponse"/> rather
-/// than extra fields on it. That one is documented as never carrying contact details, and the
-/// Izvještaji reports it serves have no business holding them — widening it would hand every
-/// report row an email address it never asked for. A second, narrower endpoint keeps the reason
-/// each field crosses the service boundary visible.</para>
-/// </summary>
-/// <param name="SuperAdminEmail">The organization's OrganizationSuperAdmin, if it still has one —
-/// who platform staff's "we removed your product" notice goes to. Null for an organization whose
-/// super admin was deleted; the caller then falls back to <paramref name="Email"/>.</param>
-public record OrganizationContactResponse(
-    Guid Id,
-    string Name,
-    string Email,
-    string PhoneNumber,
-    string? SuperAdminEmail);
-
 public record OrganizationResponse(
     Guid Id,
     string Name,

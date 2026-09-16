@@ -1,7 +1,7 @@
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
-using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Time;
+using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
 
@@ -22,12 +22,15 @@ namespace eTicketing.Ticketing.Business.Integration;
 /// </list>
 ///
 /// <para>The refund contact is the organization's own address, not the platform's: the organizer
-/// took the payment, so the organizer issues the refund.</para>
+/// took the payment, so the organizer issues the refund. It comes from the local
+/// OrganizationSnapshot read model rather than a call to eTicketing.Identity — see that entity for
+/// why, and note the degradation is unchanged: no row reads exactly as an unreachable Identity did,
+/// and the cancellation still goes out without a contact block.</para>
 /// </summary>
 public class ProductDeletionNotifier : IProductDeletionNotifier
 {
     private readonly ITicketRepository _ticketRepository;
-    private readonly IIdentityClient _identityClient;
+    private readonly IOrganizationSnapshotRepository _organizations;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PlatformClock _clock;
@@ -35,14 +38,14 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
 
     public ProductDeletionNotifier(
         ITicketRepository ticketRepository,
-        IIdentityClient identityClient,
+        IOrganizationSnapshotRepository organizations,
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
         PlatformClock clock,
         ILogger<ProductDeletionNotifier> logger)
     {
         _ticketRepository = ticketRepository;
-        _identityClient = identityClient;
+        _organizations = organizations;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _clock = clock;
@@ -56,7 +59,7 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
         var today = _clock.Today();
         var buyers = await _ticketRepository.GetLiveBuyerTicketCountsForProductAsync(message.ProductId, today, ct);
 
-        var contact = await ResolveContactAsync(message.OrganizationId, ct);
+        var contact = await _organizations.GetByIdNoTrackingAsync(message.OrganizationId, ct);
 
         foreach (var buyer in buyers)
         {
@@ -100,7 +103,7 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
     /// address — an organization whose super admin was deleted still has a mailbox worth telling.
     /// </summary>
     private async Task NotifyOrganizationAsync(
-        ProductDeleted message, IdentityOrganizationContactResponse? contact, int buyerCount, CancellationToken ct)
+        ProductDeleted message, OrganizationSnapshot? contact, int buyerCount, CancellationToken ct)
     {
         var recipient = FirstNonEmpty(contact?.SuperAdminEmail, contact?.Email);
         if (recipient is null)
@@ -128,27 +131,6 @@ public class ProductDeletionNotifier : IProductDeletionNotifier
                 // this notice actionable rather than merely informative.
                 TicketCount: buyerCount),
             ct);
-    }
-
-    /// <summary>
-    /// Identity being unreachable must not swallow the cancellation. A buyer learning their event
-    /// is off without a contact line is far better served than a buyer learning nothing because a
-    /// lookup for a phone number failed, so this degrades to null rather than throwing.
-    /// </summary>
-    private async Task<IdentityOrganizationContactResponse?> ResolveContactAsync(
-        Guid organizationId, CancellationToken ct)
-    {
-        try
-        {
-            return await _identityClient.GetOrganizationContactAsync(organizationId, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Neuspješno dohvaćanje kontakt podataka organizacije {OrganizationId} — obavještenja se šalju bez kontakta.",
-                organizationId);
-            return null;
-        }
     }
 
     private static string? FirstNonEmpty(params string?[] candidates) =>

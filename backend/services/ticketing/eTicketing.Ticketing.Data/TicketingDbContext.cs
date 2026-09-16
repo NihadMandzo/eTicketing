@@ -22,6 +22,10 @@ public class TicketingDbContext : DbContext, IUnitOfWork
     /// never writes it except by projecting events. See ProductSnapshot.</summary>
     public DbSet<ProductSnapshot> ProductSnapshots => Set<ProductSnapshot>();
 
+    /// <summary>Likewise a read model, of eTicketing.Identity's Organization. See
+    /// OrganizationSnapshot.</summary>
+    public DbSet<OrganizationSnapshot> OrganizationSnapshots => Set<OrganizationSnapshot>();
+
     /// <summary>Events waiting to reach the broker, written in the same transaction as the data
     /// that produced them. Not a domain table — see eTicketing.Contracts.Messaging.OutboxMessage.</summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

@@ -53,6 +53,7 @@ public sealed class TicketingTestContext : IDisposable
     public TicketingDbContext DbContext { get; }
     public ISectorRepository SectorRepository { get; }
     public IProductSnapshotRepository ProductSnapshotRepository { get; }
+    public IOrganizationSnapshotRepository OrganizationSnapshotRepository { get; }
     public ITicketTypeRepository TicketTypeRepository { get; }
     public ITicketRepository TicketRepository { get; }
     public ISubscriptionRepository SubscriptionRepository { get; }
@@ -61,9 +62,6 @@ public sealed class TicketingTestContext : IDisposable
     public IUnitOfWork UnitOfWork { get; }
     public Mock<ICatalogClient> CatalogClient { get; } = new();
 
-    /// <summary>Only the Izvještaji reports call Identity; every other org-scoped decision reads
-    /// the claim off the token. Mocked like every other cross-service HTTP client here.</summary>
-    public Mock<IIdentityClient> IdentityClient { get; } = new();
     public Mock<ISectorCapacityLock> CapacityLock { get; } = new();
     public Mock<IPaymentClient> PaymentClient { get; } = new();
     public Mock<IEventPublisher> EventPublisher { get; } = new();
@@ -110,6 +108,7 @@ public sealed class TicketingTestContext : IDisposable
 
         SectorRepository = new SectorRepository(DbContext);
         ProductSnapshotRepository = new ProductSnapshotRepository(DbContext);
+        OrganizationSnapshotRepository = new OrganizationSnapshotRepository(DbContext);
         TicketTypeRepository = new TicketTypeRepository(DbContext);
         TicketRepository = new TicketRepository(DbContext);
         SubscriptionRepository = new SubscriptionRepository(DbContext);
@@ -120,13 +119,6 @@ public sealed class TicketingTestContext : IDisposable
         ValidationLock
             .Setup(l => l.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("test-lock-token");
-
-        // Reports label their rows with organization names, but no report *depends* on the label
-        // being resolvable — an unknown id falls back to a placeholder. Defaulting to an empty
-        // list keeps every test that isn't about labelling free of Identity setup.
-        IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
 
         CatalogClient
             .Setup(c => c.GetOrganizationProductStatsAsync(It.IsAny<CancellationToken>()))
@@ -211,8 +203,37 @@ public sealed class TicketingTestContext : IDisposable
 
     public IProductDeletionNotifier CreateProductDeletionNotifier() =>
         new ProductDeletionNotifier(
-            TicketRepository, IdentityClient.Object, EventPublisher.Object, UnitOfWork, PlatformClock,
+            TicketRepository, OrganizationSnapshotRepository, EventPublisher.Object, UnitOfWork, PlatformClock,
             NullLogger<ProductDeletionNotifier>.Instance);
+
+    public IOrganizationSnapshotProjector CreateOrganizationSnapshotProjector() =>
+        new OrganizationSnapshotProjector(
+            OrganizationSnapshotRepository, UnitOfWork, NullLogger<OrganizationSnapshotProjector>.Instance);
+
+    /// <summary>Records an organization in the local read model — the reports label their rows from
+    /// it, and the cancellation notice takes its refund contact from it.</summary>
+    public async Task<OrganizationSnapshot> SeedOrganizationSnapshotAsync(
+        Guid organizationId, string name = "Testna organizacija", string address = "Ferhadija 1",
+        string email = "kontakt@organizacija.ba", string phoneNumber = "+387 33 000 000",
+        string? superAdminEmail = null)
+    {
+        var snapshot = new OrganizationSnapshot
+        {
+            OrganizationId = organizationId,
+            Name = name,
+            Address = address,
+            Email = email,
+            PhoneNumber = phoneNumber,
+            SuperAdminEmail = superAdminEmail,
+            IsActive = true,
+            ChangedAt = Clock.GetUtcNow().UtcDateTime,
+        };
+
+        DbContext.OrganizationSnapshots.Add(snapshot);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        return snapshot;
+    }
 
     /// <summary>Records what the service asked to render without doing any of it, so a print test
     /// can assert on the queue hand-off and drive the renderer itself when it wants to.</summary>
@@ -231,7 +252,7 @@ public sealed class TicketingTestContext : IDisposable
             UnitOfWork, PlatformClock, NullLogger<TicketPrintRenderer>.Instance);
 
     public IReportService CreateReportService() =>
-        new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, IdentityClient.Object, PlatformClock);
+        new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, OrganizationSnapshotRepository, PlatformClock);
 
     /// <summary>The AI Uvidi service with the real ML.NET components — SSA and K-Means are
     /// milliseconds on test-sized data, and stubbing them would leave the source ladder (Model /

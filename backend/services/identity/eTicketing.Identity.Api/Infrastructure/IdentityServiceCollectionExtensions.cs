@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Threading.RateLimiting;
 using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Pagination;
@@ -69,6 +69,7 @@ public static class IdentityServiceCollectionExtensions
         builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         builder.Services.AddScoped<IAuthService, AuthService>();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+        builder.Services.AddScoped<IOrganizationSnapshotPublisher, OrganizationSnapshotPublisher>();
         builder.Services.AddScoped<IAdminService, AdminService>();
         builder.Services.AddScoped<IAuthCookieService, AuthCookieService>();
         builder.Services.AddValidatorsFromAssembly(typeof(IAuthService).Assembly);
@@ -88,6 +89,12 @@ public static class IdentityServiceCollectionExtensions
         // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
         // publish-then-save now matters.
         builder.Services.AddOutboxMessaging<IdentityDbContext>(builder.Configuration);
+
+        // Pushes the organization read model to eTicketing.Ticketing on startup and every six
+        // hours. It is the backfill and the self-heal in one, and it is on this side because the
+        // synchronous Ticketing→Identity call it replaced is gone — there is nothing left for that
+        // service to pull its own gaps with.
+        builder.Services.AddHostedService<OrganizationSnapshotRepublishWorker>();
 
         // --- Rate limiting ---
         // Every partition key below is the caller's IP, which is only actually the caller's IP

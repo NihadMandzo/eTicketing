@@ -28,6 +28,13 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
     public Task<bool> ExistsByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default)
         => Query().AnyAsync(u => u.OrganizationId == organizationId && u.Role == role, ct);
 
+    public Task<string?> GetEmailByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Where(u => u.OrganizationId == organizationId && u.Role == role)
+            .Select(u => (string?)u.Email)
+            .FirstOrDefaultAsync(ct);
+
     public Task<User?> GetByIdWithOrganizationAsync(Guid id, CancellationToken ct = default)
         => Query().Include(u => u.Organization).FirstOrDefaultAsync(u => u.Id == id, ct);
 

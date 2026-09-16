@@ -66,9 +66,7 @@ public class ReportPdfServiceTests : IDisposable
             .Setup(c => c.GetOrganizationProductStatsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CatalogOrganizationProductStats(_org, 3, 2, 1, 1)]);
 
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new IdentityOrganizationResponse(_org, "Sunset Events", "Mostar", true)]);
+        _fixture.SeedOrganizationSnapshotAsync(_org, "Sunset Events", "Mostar").GetAwaiter().GetResult();
     }
 
     private static ClaimsPrincipal Caller(string role, Guid? organizationId = null)

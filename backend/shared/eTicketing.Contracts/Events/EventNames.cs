@@ -8,6 +8,15 @@ public static class EventNames
     public const string VerificationEmailRequested = "verification-email.requested";
     public const string PaymentFailed = "payment.failed";
     public const string OrganizationCreated = "organization.created";
+
+    /// <summary>eTicketing.Identity → eTicketing.Ticketing. The organization's contact details after
+    /// any change to them, feeding the OrganizationSnapshot read model that replaced the
+    /// Ticketing→Identity HTTP call. Note this is a different thing from
+    /// <see cref="OrganizationCreated"/>, which is an email to the founding admin.</summary>
+    public const string OrganizationSnapshotChanged = "organization.changed";
+
+    /// <summary>eTicketing.Identity → eTicketing.Ticketing. Drop the organization's snapshot row.</summary>
+    public const string OrganizationDeleted = "organization.deleted";
     public const string OrganizationAdminDeleted = "organization-admin.deleted";
     public const string PasswordResetRequested = "password-reset.requested";
     public const string AdminPasswordChanged = "admin-password.changed";

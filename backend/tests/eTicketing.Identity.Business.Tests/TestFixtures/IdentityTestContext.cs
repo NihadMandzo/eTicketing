@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -75,8 +75,20 @@ public sealed class IdentityTestContext : IDisposable
         UserRepository, RefreshTokenRepository, PasswordResetTokenRepository, UnitOfWork, TokenGenerator,
         eventPublisher ?? EventPublisherMock.Object, Options.Create(JwtOptions));
 
-    public IOrganizationService CreateOrganizationService() => new OrganizationService(
-        OrganizationRepository, UserRepository, UnitOfWork, BlobStorage, EventPublisherMock.Object);
+    public IOrganizationService CreateOrganizationService(IEventPublisher? eventPublisher = null)
+    {
+        var publisher = eventPublisher ?? EventPublisherMock.Object;
+        return new OrganizationService(
+            OrganizationRepository, UserRepository, UnitOfWork, BlobStorage, publisher,
+            CreateSnapshotPublisher(publisher));
+    }
+
+    /// <summary>The real snapshot publisher, not a mock: what it derives — specifically which
+    /// address ends up in SuperAdminEmail — is the part that goes wrong, and a mock would assert
+    /// only that somebody was asked to publish something.</summary>
+    public IOrganizationSnapshotPublisher CreateSnapshotPublisher(IEventPublisher? eventPublisher = null) =>
+        new OrganizationSnapshotPublisher(
+            OrganizationRepository, UserRepository, eventPublisher ?? EventPublisherMock.Object, UnitOfWork);
 
     public IAdminService CreateAdminService() => new AdminService(
         UserRepository, RefreshTokenRepository, UnitOfWork, EventPublisherMock.Object);

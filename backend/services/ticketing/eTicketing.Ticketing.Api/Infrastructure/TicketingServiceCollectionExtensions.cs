@@ -53,6 +53,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketPrintBatchRepository, TicketPrintBatchRepository>();
         builder.Services.AddScoped<IGateDeviceRepository, GateDeviceRepository>();
         builder.Services.AddScoped<IProductSnapshotRepository, ProductSnapshotRepository>();
+        builder.Services.AddScoped<IOrganizationSnapshotRepository, OrganizationSnapshotRepository>();
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
@@ -97,16 +98,11 @@ public static class TicketingServiceCollectionExtensions
                 pb.AddTimeout(TimeSpan.FromSeconds(5));
             });
 
-        // Ticketing → Identity: same shape as the Catalog client above. Only the Izvještaji
-        // reports need it — every other org-scoped decision in this service reads organizationId
-        // straight off the caller's token and never has to ask Identity anything.
-        builder.Services.AddHttpClient<IIdentityClient, HttpIdentityClient>(c =>
-                c.BaseAddress = new Uri(builder.Configuration["Services:Identity"]!))
-            .AddResilienceHandler("identity-pipeline", pb =>
-            {
-                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 3 });
-                pb.AddTimeout(TimeSpan.FromSeconds(5));
-            });
+        // There is deliberately no Ticketing → Identity client. The organization names, addresses
+        // and contact details the reports and the cancellation notice need come from the local
+        // OrganizationSnapshot read model, fed by organization.changed / organization.deleted —
+        // which puts this service back inside the two-call whitelist in
+        // .claude/rules/01-domain.md. Everything else org-scoped reads the claim off the token.
 
         builder.Services.AddScoped<ISectorService, SectorService>();
         builder.Services.AddScoped<ITicketTypeService, TicketTypeService>();
@@ -116,6 +112,7 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
         builder.Services.AddScoped<IProductSnapshotProjector, ProductSnapshotProjector>();
+        builder.Services.AddScoped<IOrganizationSnapshotProjector, OrganizationSnapshotProjector>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
         builder.Services.AddScoped<IProductDeletionNotifier, ProductDeletionNotifier>();
         builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();

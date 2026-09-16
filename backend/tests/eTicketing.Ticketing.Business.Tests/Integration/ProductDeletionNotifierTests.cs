@@ -201,25 +201,24 @@ public class ProductDeletionNotifierTests : IDisposable
     [Fact]
     public async Task NotifyAsync_WithNoContactAtAll_SkipsTheOrganizationRatherThanFailing()
     {
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationContactAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IdentityOrganizationContactResponse?)null);
+        // No snapshot at all: an organization this service has never received an event for.
+        await ClearContactAsync();
 
         await _sut.NotifyAsync(Deleted(byPlatformStaff: true));
 
         VerifyTotalPublished(0);
     }
 
-    // ── degraded Identity ────────────────────────────────────────────────────────────────────
+    // ── degraded projection ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task NotifyAsync_WhenIdentityIsUnreachable_StillTellsBuyersTheEventIsCancelled()
+    public async Task NotifyAsync_WithNoOrganizationSnapshot_StillTellsBuyersTheEventIsCancelled()
     {
-        // A buyer learning their event is off without a contact line beats learning nothing at all
-        // because a lookup for a phone number failed.
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationContactAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("Identity down"));
+        // A buyer learning their event is off without a contact line beats learning nothing at all.
+        // This used to be an unreachable eTicketing.Identity; it is now a missing projection row —
+        // different cause, and deliberately the same degradation, because the buyer's side of it is
+        // identical either way.
+        await ClearContactAsync();
         await SeedTicketAsync("ana@example.com");
 
         await _sut.NotifyAsync(Deleted());
@@ -230,11 +229,29 @@ public class ProductDeletionNotifierTests : IDisposable
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
-    private void GivenContact(string? superAdminEmail = "emir@sarajevo-events.ba") =>
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationContactAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new IdentityOrganizationContactResponse(
-                _organizationId, "Sarajevo Events", "kontakt@sarajevo-events.ba", "+387 33 123 456", superAdminEmail));
+    /// <summary>Replaces the organization's snapshot row, so a test can restate the contact the
+    /// constructor already seeded — one row per organization is the whole point of the read model's
+    /// key, so this cannot simply insert another.</summary>
+    private void GivenContact(string? superAdminEmail = "emir@sarajevo-events.ba")
+    {
+        ClearContactAsync().GetAwaiter().GetResult();
+        _fixture.SeedOrganizationSnapshotAsync(
+            _organizationId, "Sarajevo Events", "Ferhadija 1", "kontakt@sarajevo-events.ba",
+            "+387 33 123 456", superAdminEmail).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Removes the organization's snapshot row — how a deleted organization, or one this
+    /// service has never received an event for, actually reads locally.</summary>
+    private async Task ClearContactAsync()
+    {
+        var existing = await _fixture.OrganizationSnapshotRepository.GetByIdAsync(_organizationId);
+        if (existing is not null)
+        {
+            _fixture.OrganizationSnapshotRepository.Remove(existing);
+            await _fixture.UnitOfWork.SaveChangesAsync();
+            _fixture.DbContext.ChangeTracker.Clear();
+        }
+    }
 
     private ProductDeleted Deleted(bool byPlatformStaff = false) =>
         new(_productId, "Ljetni Festival", _organizationId, null, DateTime.UtcNow, byPlatformStaff);
