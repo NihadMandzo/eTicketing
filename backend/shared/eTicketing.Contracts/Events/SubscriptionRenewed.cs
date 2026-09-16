@@ -19,22 +19,3 @@ public record SubscriptionRenewed(
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
     DateTime PaidAt);
-
-/// <summary>
-/// eTicketing.Payment → eTicketing.Ticketing. A renewal charge failed. The subscription becomes
-/// PastDue and no ticket is minted, but nothing is released yet: the provider is still retrying its
-/// own dunning schedule, and only when that is exhausted does it fire the cancellation below.
-/// </summary>
-public record SubscriptionPaymentFailed(
-    string ProviderSubscriptionId,
-    string Reason,
-    DateTime FailedAt);
-
-/// <summary>
-/// eTicketing.Payment → eTicketing.Ticketing. The subscription has ended for good, either because
-/// the buyer cancelled and the paid-for period ran out, or because dunning gave up. This is what
-/// frees the parking space back to its sector's capacity.
-/// </summary>
-public record SubscriptionCancelled(
-    string ProviderSubscriptionId,
-    DateTime CancelledAt);
