@@ -7,16 +7,6 @@ using Microsoft.Extensions.Options;
 
 namespace eTicketing.Identity.Business.Auth;
 
-public interface IAuthCookieService
-{
-    /// <summary>Writes the httpOnly access + refresh token cookies for a freshly issued/rotated
-    /// <see cref="LoginResult"/>.</summary>
-    void WriteAuthCookies(HttpContext http, LoginResult result);
-
-    /// <summary>Expires both auth cookies — used on logout and whenever a refresh attempt fails.</summary>
-    void ClearAuthCookies(HttpContext http);
-}
-
 /// <summary>
 /// Owns the httpOnly access/refresh cookie lifecycle for the auth flow: cookie names, policy
 /// (see <see cref="AuthCookiePolicy"/>) and expiry math all live here, as one piece of business

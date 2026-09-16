@@ -33,21 +33,3 @@ public interface IOrganizationRepository : IRepository<Organization, Guid>
     /// account on the platform.</para></summary>
     Task<List<OrganizationSnapshotRow>> GetSnapshotRowsAsync(CancellationToken ct = default);
 }
-
-/// <summary>Projection, not an entity — one organization's outward-facing details, with
-/// SuperAdminEmail folded in from the Users table. Lives here rather than being the Contracts event
-/// type for the same reason SearchAsync takes a BaseSearchObject: Data cannot reference Business,
-/// and the mapping to the event belongs with the code that publishes it.</summary>
-public record OrganizationSnapshotRow(
-    Guid Id,
-    string Name,
-    string Address,
-    string Email,
-    string PhoneNumber,
-    string? SuperAdminEmail,
-    bool IsActive);
-
-/// <summary>Projection, not an entity — one organization plus how many users belong to it, counted
-/// in SQL. Lives here rather than being the Business-layer OrganizationResponse for the same reason
-/// SearchAsync takes a BaseSearchObject: Data cannot reference Business.</summary>
-public record OrganizationWithUserCount(Organization Organization, int UserCount);
