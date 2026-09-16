@@ -358,6 +358,34 @@ public class PurchaseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task PurchaseAsync_WhenTheCardIsDeclined_PublishesTheOrderDetailsWithTheFailure()
+    {
+        // Until this event was consumed by anything it carried only a user id, an address and a
+        // provider code — enough to send nothing useful. eTicketing.Notifications now writes the
+        // buyer a decline notice, and without these three it could not say which attempt it was
+        // about, which is the whole difference between a useful email and an alarming one.
+        var sector = await CreatePublishedSectorAsync(_singleOccurrenceProductId, "VIP", 100, 50);
+        MockHold(new HeldReservation(sector.Id, null, 2, _callerId));
+        MockDeclinedCharge();
+
+        PaymentFailed? published = null;
+        _fixture.EventPublisher
+            .Setup(p => p.PublishAsync(EventNames.PaymentFailed, It.IsAny<PaymentFailed>(), It.IsAny<CancellationToken>()))
+            .Callback<string, PaymentFailed, CancellationToken>((_, e, _) => published = e);
+
+        var request = BuildRequest(new PurchaseLineItemRequest { Quantity = 2 });
+        await _sut.PurchaseAsync(request, OrgACaller());
+
+        published.Should().NotBeNull();
+        published!.OrderId.Should().Be(request.OrderId);
+        published.SectorName.Should().Be("VIP");
+        published.Amount.Should().Be(100);
+        // The provider's code travels raw; deciding what a buyer is told about it is the
+        // consumer's job — see PaymentFailedTemplate.DescribeReason.
+        published.Reason.Should().Be("card_declined");
+    }
+
+    [Fact]
     public async Task PurchaseAsync_WithAnExpiredHold_WritesNoEvent()
     {
         var outboxSut = _fixture.CreatePurchaseService(_fixture.OutboxPublisher);

@@ -43,6 +43,40 @@ public class NotificationDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAsync_ForPaymentFailed_SendsTheDeclineNoticeToTheBuyer()
+    {
+        // This routing key was published by eTicketing.Ticketing and bound by nobody, so the broker
+        // matched it against no queue and dropped every one — a buyer whose card was declined heard
+        // nothing at all. This fact is the binding.
+        var evt = new PaymentFailed(
+            Guid.NewGuid(), "buyer@example.com", "insufficient_funds",
+            new DateTime(2026, 9, 1, 14, 30, 0, DateTimeKind.Utc),
+            Guid.NewGuid(), "VIP", 50m);
+
+        await _sut.DispatchAsync(EventNames.PaymentFailed, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m =>
+                m.ToEmail == "buyer@example.com"
+                && m.HtmlBody.Contains("nema dovoljno sredstava")
+                && m.HtmlBody.Contains("Novac vam nije naplaćen")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ForPaymentFailed_KeepsTheRawProviderCodeOutOfTheEmail()
+    {
+        var evt = new PaymentFailed(
+            Guid.NewGuid(), "buyer@example.com", "stolen_card", DateTime.UtcNow, Guid.NewGuid(), "VIP", 50m);
+
+        await _sut.DispatchAsync(EventNames.PaymentFailed, Serialize(evt));
+
+        _emailSenderMock.Verify(s => s.SendAsync(
+            It.Is<EmailMessage>(m => !m.HtmlBody.Contains("stolen_card")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task DispatchAsync_ForOrganizationCreated_SendsToRecipientEmail()
     {
         var evt = new OrganizationCreatedNotification(Guid.NewGuid(), "Acme Events", "kontakt@acme.example");

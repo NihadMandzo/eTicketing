@@ -267,9 +267,14 @@ public class PurchaseService : IPurchaseService
         if (charge.Status != PaymentChargeStatus.Succeeded)
         {
             await _capacityLock.ReleaseAsync(request.HoldId, ct);
+            // Everything on this event is already in hand — the order, what they were buying and
+            // for how much — and without it eTicketing.Notifications could only send a buyer a
+            // decline notice that does not say which attempt it was about.
             await _eventPublisher.PublishAsync(
                 EventNames.PaymentFailed,
-                new PaymentFailed(userId, userEmail, charge.FailureCode ?? "card_declined", _clock.UtcNow),
+                new PaymentFailed(
+                    userId, userEmail, charge.FailureCode ?? "card_declined", _clock.UtcNow,
+                    orderId, sector.Name, totalPrice),
                 ct);
 
             // The declined path writes nothing else — no Ticket, no Subscription — so this is the
