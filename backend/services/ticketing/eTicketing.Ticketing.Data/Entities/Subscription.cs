@@ -2,13 +2,6 @@ using eTicketing.Contracts.Persistence;
 
 namespace eTicketing.Ticketing.Data.Entities;
 
-public enum SubscriptionStatus
-{
-    Active,
-    Cancelled,
-    PastDue
-}
-
 /// <summary>
 /// Tracks a RecurringReservation Sector's (e.g. one parking space) ongoing reservation by a buyer.
 ///

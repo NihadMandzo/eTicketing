@@ -14,19 +14,6 @@ using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Ticketing.Business.Purchases;
 
-/// <summary>What a hold actually entitles the caller to buy, resolved server-side. Every field here
-/// comes from Redis and the database, never from the request.</summary>
-/// <param name="Product">The local read model of the eTicketing.Catalog product this sector belongs
-/// to. Resolved once here because both jobs need it: refusing a purchase for a product that is no
-/// longer published, and stamping the ticket's event name/date/city onto TicketPurchased so
-/// eTicketing.PdfGeneration needs no catalogue client of its own.</param>
-public record ResolvedOrder(
-    HeldReservation Reservation,
-    Sector Sector,
-    ProductSnapshot Product,
-    IReadOnlyDictionary<Guid, TicketType> TicketTypesById,
-    decimal TotalPrice);
-
 /// <summary>
 /// Orchestrates the purchase critical path from .claude/rules/01-domain.md, in two calls.
 ///

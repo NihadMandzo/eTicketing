@@ -12,14 +12,6 @@ using QuestPDF.Fluent;
 
 namespace eTicketing.Ticketing.Business.Tickets;
 
-/// <summary>A rendered ticket, ready to be streamed to the browser.</summary>
-public sealed record TicketPdfDownload(byte[] Content, string FileName);
-
-public interface ITicketPdfService
-{
-    Task<Result<TicketPdfDownload>> GetAsync(Guid ticketId, ClaimsPrincipal user, CancellationToken ct = default);
-}
-
 /// <summary>
 /// Renders a buyer's ticket on demand, rather than serving a stored file.
 ///

@@ -2,17 +2,6 @@ using eTicketing.Contracts.Persistence;
 
 namespace eTicketing.Ticketing.Data.Entities;
 
-/// <summary>Persisted as the integer ordinal and mirrored by ordinal in the Flutter desktop's
-/// TicketPrintBatchStatus. Append new values only; never reorder or remove.</summary>
-public enum TicketPrintBatchStatus
-{
-    Queued,     // Tickets minted and capacity claimed; waiting for the render worker
-    Rendering,  // TicketPrintRenderWorker has picked it up
-    Ready,      // The file row holds the finished PDF, waiting to be downloaded once
-    Failed,     // Rendering blew up; ErrorMessage says why, and the batch can be retried
-    Expired     // Nobody collected the PDF and the retention sweep deleted it; see below
-}
-
 /// <summary>
 /// One bulk export of physical, printable tickets for a Product, requested by an organizer from
 /// the desktop back-office. Creating the batch is what mints the Tickets and claims their capacity
@@ -85,24 +74,4 @@ public class TicketPrintBatch : BaseEntity
     /// permanently with no action that would remove it.</para>
     /// </summary>
     public DateTime? DismissedAt { get; set; }
-}
-
-/// <summary>
-/// The rendered sheet for one <see cref="TicketPrintBatch"/>, in its own table so the batch row
-/// stays cheap to read.
-///
-/// <para><b>Deliberately transient.</b> Ticket PDFs are never archived anywhere in this platform —
-/// that is why GET /tickets/{id}/pdf re-renders per request instead of reading a stored file — and
-/// this sheet is worse than one ticket: it is thousands of working gate codes in a single file. So
-/// this row exists only in the gap between "the worker finished" and "the organizer downloaded
-/// it". It is deleted the moment the bytes are handed over, and swept away if nobody ever collects
-/// them. Nothing is ever written to blob storage.</para>
-/// </summary>
-public class TicketPrintBatchFile
-{
-    // PK and FK at once — a batch has at most one file.
-    public Guid BatchId { get; set; }
-    public TicketPrintBatch? Batch { get; set; }
-
-    public byte[] Content { get; set; } = [];
 }

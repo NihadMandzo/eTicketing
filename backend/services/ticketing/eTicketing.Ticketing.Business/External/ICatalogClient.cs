@@ -2,19 +2,6 @@ using eTicketing.Contracts.Persistence;
 
 namespace eTicketing.Ticketing.Business.External;
 
-/// <summary>Mirrors eTicketing.Catalog.Business.Products.ProductInternalResponse's JSON shape —
-/// duplicated rather than shared across the service boundary (Ticketing never references
-/// Catalog's assemblies, only its HTTP contract), same reasoning as every other cross-service
-/// call in this codebase.</summary>
-public record CatalogProductResponse(
-    Guid Id,
-    Guid OrganizationId,
-    PublishStatus Status,
-    TicketingMode TicketingMode,
-    string Name,
-    DateTime? Date,
-    City City);
-
 /// <summary>HTTP client interface to eTicketing.Catalog's internal-only endpoints (never routed
 /// through the Gateway). Used at Sector-creation time to verify the caller's organization owns the
 /// Product and to copy its Category.TicketingMode onto the new Sector, and at gate-validation time
@@ -44,13 +31,3 @@ public interface ICatalogClient
     Task<IReadOnlyList<CatalogProductResponse>> GetUpcomingProductsAsync(
         Guid? organizationId, int count, CancellationToken ct = default);
 }
-
-/// <summary>Mirrors eTicketing.Catalog.Business.Products.OrganizationProductStatsResponse's JSON
-/// shape — duplicated across the service boundary for the same reason as
-/// <see cref="CatalogProductResponse"/>.</summary>
-public record CatalogOrganizationProductStats(
-    Guid OrganizationId,
-    int Total,
-    int Published,
-    int Draft,
-    int WithoutImage);
