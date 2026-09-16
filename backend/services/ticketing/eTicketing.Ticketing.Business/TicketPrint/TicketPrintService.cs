@@ -9,6 +9,7 @@ using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
+using Mapster;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -593,23 +594,8 @@ public class TicketPrintService : ITicketPrintService
         return $"ulaznice-{slug}-{batch.SerialFrom:D6}-{batch.SerialTo:D6}.pdf";
     }
 
-    private static TicketPrintBatchResponse ToResponse(TicketPrintBatch batch) => new(
-        batch.Id,
-        batch.ProductId,
-        batch.ProductName,
-        batch.Status,
-        batch.TicketCount,
-        batch.RenderedCount,
-        batch.PageCount,
-        batch.SerialFrom,
-        batch.SerialTo,
-        batch.NominalValue,
-        batch.ValidDate,
-        batch.FileSizeBytes,
-        batch.ErrorMessage,
-        batch.CreatedAt,
-        batch.CompletedAt,
-        batch.DownloadedAt);
+    private static TicketPrintBatchResponse ToResponse(TicketPrintBatch batch) =>
+        batch.Adapt<TicketPrintBatchResponse>();
 
     private sealed record ResolvedLine(Sector Sector, Guid? TicketTypeId, decimal UnitPrice, int Quantity);
 }

@@ -51,18 +51,24 @@ public class SubscriptionServiceTests : IDisposable
         };
         await _fixture.SectorRepository.AddAsync(sector);
 
-        var subscription = new Subscription
+        var subscription = Subscription.Create(
+            sector.Id, userId, "kupac@example.com",
+            new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30),
+            $"sub_{Guid.NewGuid():N}", "hold-1");
+
+        // Non-Active states are reached through the real transitions rather than assigned, which is
+        // the point of the entity owning them — a seed that could set Status directly could also
+        // seed a state the domain cannot actually produce.
+        switch (status)
         {
-            Id = Guid.NewGuid(),
-            SectorId = sector.Id,
-            UserId = userId,
-            UserEmail = "kupac@example.com",
-            Status = status,
-            CurrentPeriodStart = new DateOnly(2026, 9, 1),
-            CurrentPeriodEnd = new DateOnly(2026, 9, 30),
-            PaymentReference = $"sub_{Guid.NewGuid():N}",
-            CapacityHoldId = "hold-1",
-        };
+            case SubscriptionStatus.Cancelled:
+                subscription.Cancel(new DateTime(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc));
+                break;
+            case SubscriptionStatus.PastDue:
+                subscription.MarkPastDue();
+                break;
+        }
+
         await _fixture.SubscriptionRepository.AddAsync(subscription);
         await _fixture.UnitOfWork.SaveChangesAsync();
 

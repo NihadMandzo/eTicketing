@@ -98,7 +98,7 @@ public class ProductService : IProductService
         if (ownershipError is not null)
             return Result<ProductResponse>.Failure(ownershipError);
 
-        product.Status = PublishStatus.Published;
+        product.Publish();
 
         // The transition eTicketing.Ticketing cares about most: until its snapshot says Published,
         // this product's sectors are not listed and cannot be held.
@@ -395,15 +395,14 @@ public class ProductService : IProductService
     public async Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default)
     {
         var stats = await _productRepository.GetOrganizationStatsAsync(ct);
-        return Result<List<OrganizationProductStatsResponse>>.Success(stats
-            .Select(s => new OrganizationProductStatsResponse(
-                s.OrganizationId, s.Total, s.Published, s.Draft, s.WithoutImage))
-            .ToList());
+        return Result<List<OrganizationProductStatsResponse>>.Success(
+            stats.Adapt<List<OrganizationProductStatsResponse>>());
     }
 
+    /// <summary>Requires Product.Category to be loaded — see ProductMappingConfig for what happens
+    /// to TicketingMode if it is not.</summary>
     private static ProductInternalResponse ToInternalResponse(Product product) =>
-        new(product.Id, product.OrganizationId, product.Status, product.Category!.TicketingMode,
-            product.Name, product.Date, product.City);
+        product.Adapt<ProductInternalResponse>();
 
     /// <summary>Shared by PreviewAsync/CreateAsync/UpdateAsync so preview and the real write path
     /// always agree on the same validation message (per SPRINT_2 US-2.2's acceptance criteria).

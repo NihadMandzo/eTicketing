@@ -90,7 +90,7 @@ public class SectorService : ISectorService
         if (ownershipError is not null)
             return Result<SectorResponse>.Failure(ownershipError);
 
-        sector.Status = PublishStatus.Published;
+        sector.Publish();
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<SectorResponse>.Success(ToResponse(sector));

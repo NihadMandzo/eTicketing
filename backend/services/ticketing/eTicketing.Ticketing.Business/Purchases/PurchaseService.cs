@@ -309,25 +309,18 @@ public class PurchaseService : IPurchaseService
                     case TicketingMode.RecurringReservation:
                         // Sector.Capacity is always 1 for this mode, so reservation.Quantity is
                         // always 1 too — this branch runs at most once per purchase.
-                        subscription ??= new Subscription
-                        {
-                            Id = Guid.NewGuid(),
-                            SectorId = sector.Id,
-                            UserId = userId,
-                            UserEmail = userEmail,
-                            Status = SubscriptionStatus.Active,
+                        subscription ??= Subscription.Create(
+                            sector.Id, userId, userEmail,
                             // The provider's own billing period, not a locally computed one: it is
                             // what the buyer's card statement will say, and every renewal webhook
                             // reports periods on the same schedule. Falling back to the local
                             // business day only covers a provider that reported none.
-                            CurrentPeriodStart = periodStart ?? _clock.Today(),
-                            CurrentPeriodEnd = periodEnd ?? _clock.Today().AddMonths(1).AddDays(-1),
-                            PaymentReference = request.PaymentIntentId,
+                            periodStart ?? _clock.Today(),
+                            periodEnd ?? _clock.Today().AddMonths(1).AddDays(-1),
+                            request.PaymentIntentId,
                             // Kept so cancelling this subscription can hand the space back; the hold
                             // is confirmed (permanent) and cannot be resolved from Redis afterwards.
-                            CapacityHoldId = request.HoldId,
-                        };
-                        subscription.NextRenewalAt = subscription.CurrentPeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
+                            request.HoldId);
 
                         ticket = Ticket.ForRecurringReservation(
                             sector.Id, ticketType?.Id, orderId, sector.ProductId, userId, userEmail, unitPrice,

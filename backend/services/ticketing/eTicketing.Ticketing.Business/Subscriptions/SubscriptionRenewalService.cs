@@ -99,11 +99,15 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
             return;
         }
 
-        subscription.CurrentPeriodStart = message.PeriodStart;
-        subscription.CurrentPeriodEnd = message.PeriodEnd;
-        subscription.NextRenewalAt = message.PeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        // A renewal after a failed month clears PastDue: the provider got paid in the end.
-        subscription.Status = SubscriptionStatus.Active;
+        // Refused for an already-cancelled subscription, which matters because cancelling released
+        // the parking space back to the sector: minting a ticket here would hand out a bay that has
+        // already been resold. See Subscription.Renew.
+        if (!subscription.Renew(message.PeriodStart, message.PeriodEnd))
+        {
+            _logger.LogWarning(
+                "Obnova otkazane pretplate {SubscriptionId} -- ignorišem.", subscription.Id);
+            return;
+        }
 
         // No capacity call. The space was permanently decremented at first purchase and stays taken
         // for the life of the subscription -- re-holding it would fail, since remaining is zero.
@@ -155,13 +159,12 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
             return;
         }
 
-        // Already dead: a late failure notice must not resurrect it into PastDue.
-        if (subscription.Status == SubscriptionStatus.Cancelled)
+        // Nothing is released here. The provider is still working through its own dunning retries
+        // and the buyer keeps the space while it does; only an actual cancellation frees it. False
+        // means it was already dead — a late failure notice must not resurrect it into PastDue.
+        if (!subscription.MarkPastDue())
             return;
 
-        // Nothing is released here. The provider is still working through its own dunning retries
-        // and the buyer keeps the space while it does; only an actual cancellation frees it.
-        subscription.Status = SubscriptionStatus.PastDue;
         await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogWarning(
@@ -178,12 +181,12 @@ public class SubscriptionRenewalService : ISubscriptionRenewalService
             return;
         }
 
-        if (subscription.Status == SubscriptionStatus.Cancelled)
+        // False means a redelivery of a cancellation already processed. Returning here is not just
+        // tidiness — it is what stops the capacity release below running twice and handing the same
+        // space back to the sector's counter two or three times over.
+        if (!subscription.Cancel(message.CancelledAt))
             return;
 
-        subscription.Status = SubscriptionStatus.Cancelled;
-        subscription.CancelledAt = message.CancelledAt;
-        subscription.NextRenewalAt = null;
         await _unitOfWork.SaveChangesAsync(ct);
 
         // THE point of this handler. The space was permanently decremented at first purchase, so

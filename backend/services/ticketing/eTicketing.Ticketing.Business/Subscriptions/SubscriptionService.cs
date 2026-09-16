@@ -77,7 +77,11 @@ public class SubscriptionService : ISubscriptionService
         // Status stays Active and the space stays taken: the buyer paid for this period and their
         // ticket is valid until it ends. Only the provider's cancellation webhook flips the status
         // and hands the space back (see SubscriptionRenewalService.CancelAsync).
-        subscription.CancelAtPeriodEnd = true;
+        //
+        // The two guards above stay here rather than moving onto the entity: they pick which Error
+        // a refusal maps to, and those codes are what the clients branch on. The entity's own guard
+        // is the backstop for any caller that skips them.
+        subscription.ScheduleCancellation();
         await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(

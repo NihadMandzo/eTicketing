@@ -6,6 +6,7 @@ using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using Mapster;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -408,6 +409,5 @@ public class RecommendationService : IRecommendationService
         totals.Count == 0 ? 1.0 : Math.Max(1.0, totals.Values.Max());
 
     private static ModelSnapshotResponse ToSnapshotResponse(RecommendationModelSnapshot snapshot) =>
-        new(snapshot.Id, snapshot.TrainedAt, snapshot.InteractionCount, snapshot.UserCount,
-            snapshot.ProductCount, snapshot.TrainingDurationMs, snapshot.IsActive);
+        snapshot.Adapt<ModelSnapshotResponse>();
 }
