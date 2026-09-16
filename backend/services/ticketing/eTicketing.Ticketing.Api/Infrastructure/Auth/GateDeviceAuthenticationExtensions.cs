@@ -1,11 +1,4 @@
-using System.Security.Claims;
-using System.Text.Encodings.Web;
-using eTicketing.Contracts.Security;
-using eTicketing.Ticketing.Business.Security;
-using eTicketing.Ticketing.Data.Entities;
-using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Options;
 
 namespace eTicketing.Ticketing.Api.Infrastructure.Auth;
 
