@@ -7,14 +7,6 @@ using QuestPDF.Fluent;
 
 namespace eTicketing.PdfGeneration.Documents;
 
-public interface ITicketPdfGenerator
-{
-    /// <summary>Renders one PDF per ticket in the order and returns the <see cref="TicketPdfReady"/>
-    /// carrying them. Never fails for want of product data: everything the sheet needs now arrives
-    /// on the event itself.</summary>
-    Task<TicketPdfReady> GenerateAsync(TicketPurchased order, CancellationToken ct = default);
-}
-
 /// <summary>
 /// The whole of SPRINT_4 US-4.2 in one place: render a page per ticket and hand back the event that
 /// carries them to eTicketing.Notifications.

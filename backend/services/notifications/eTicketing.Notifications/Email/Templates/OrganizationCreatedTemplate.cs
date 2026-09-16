@@ -2,8 +2,6 @@ using System.Net;
 
 namespace eTicketing.Notifications.Email.Templates;
 
-public sealed record OrganizationCreatedData(string OrganizationName, string LoginUrl);
-
 public static class OrganizationCreatedTemplate
 {
     public static (string Subject, string Html) Render(OrganizationCreatedData data)
