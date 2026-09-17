@@ -29,7 +29,14 @@ public sealed record ProductOrganizationIdsQuery
             .ToList();
 
     /// <summary>Raw tokens, before parsing — the validator reports on these so a malformed id is
-    /// a 400 rather than being silently dropped from the filter.</summary>
+    /// a 400 rather than being silently dropped from the filter.
+    ///
+    /// <para>Empty tokens are kept, not removed. Removing them let "?categoryIds=," pass validation
+    /// as a non-blank value that parsed down to no ids at all, and "1,,2" pass as if it were
+    /// "1,2" — a malformed filter answered with a 200. An absent or blank parameter is still no
+    /// tokens, which is "no filter selected".</para></summary>
     public IReadOnlyList<string> Tokens() =>
-        (CategoryIds ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string.IsNullOrWhiteSpace(CategoryIds)
+            ? []
+            : CategoryIds.Split(',', StringSplitOptions.TrimEntries);
 }

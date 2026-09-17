@@ -37,7 +37,8 @@ public static class ForwardedHeadersExtensions
     /// fabricated entry and be believed — so size it to the *shortest* chain, and treat the limiter
     /// as defence in depth rather than an authorization boundary. Default 1: correct for compose,
     /// and the value that fails closed (one global bucket again) rather than spoofably open if a
-    /// deployment forgets to set it.</para>
+    /// deployment forgets to set it. Production sets <c>ForwardedHeaders__ForwardLimit=2</c> in
+    /// <c>.github/workflows/identity-service.yml</c>, the only service that calls this.</para>
     /// </summary>
     public static IServiceCollection AddPlatformForwardedHeaders(
         this IServiceCollection services, IConfiguration configuration)

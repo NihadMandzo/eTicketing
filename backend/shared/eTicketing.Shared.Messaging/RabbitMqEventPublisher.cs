@@ -21,6 +21,14 @@ namespace eTicketing.Shared.Messaging;
 /// returns as soon as the bytes are written to the socket, so an unroutable or rejected message
 /// looks identical to a delivered one. With them, a failure throws — which is what lets the outbox
 /// keep the row and try again rather than deleting it on a false success.</item>
+/// <item><b>Publishes are <c>mandatory</c>.</b> Confirms alone do not cover the unroutable case: a
+/// topic exchange that matches no queue still confirms the publish, and simply drops the message.
+/// With <c>mandatory</c> the broker returns it instead, and the client turns that return into a
+/// <c>PublishReturnException</c> — so the outbox keeps the row through a consumer's startup window
+/// rather than deleting an event nobody received. The flip side is deliberate: an event published
+/// under a routing key nothing binds stops that service's outbox at the row (see
+/// <c>OutboxMessage.AttemptCount</c> and <c>LastError</c>), instead of vanishing silently the way
+/// payment.failed once did.</item>
 /// <item><b>The connection is cached.</b> Every copy opened a TCP connection, a channel and an
 /// exchange declaration per message, then tore it all down. That is several round trips of latency
 /// on the purchase critical path for what should be one.</item>
@@ -68,7 +76,8 @@ public sealed class RabbitMqEventPublisher : IEventPublisher, IRawEventPublisher
         await channel.BasicPublishAsync(
             exchange: EventNames.Exchange,
             routingKey: routingKey,
-            mandatory: false,
+            // Unroutable must fail, not confirm. See the class comment.
+            mandatory: true,
             basicProperties: new BasicProperties
             {
                 // Survive a broker restart. See the class comment — durable queues alone do not.
@@ -96,7 +105,7 @@ public sealed class RabbitMqEventPublisher : IEventPublisher, IRawEventPublisher
         await channel.BasicPublishAsync(
             exchange: EventNames.Exchange,
             routingKey: routingKey,
-            mandatory: false,
+            mandatory: true,
             basicProperties: new BasicProperties
             {
                 Persistent = true,

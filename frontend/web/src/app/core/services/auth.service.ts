@@ -33,6 +33,10 @@ export class AuthService {
    * `refresh()` for why concurrent refreshes must not each issue their own request. */
   private refreshInFlight: Observable<UserResponse> | null = null;
 
+  /** Bumped by `logout()`. A refresh remembers the value it started under, and only a refresh
+   * that finishes under the same value may set `currentUser`. */
+  private refreshEpoch = 0;
+
   login(request: LoginRequest): Observable<UserResponse> {
     return this.http.post<LoginResponse>(`${this.baseUrl}/login`, request).pipe(
       map((response) => response.user),
@@ -83,19 +87,37 @@ export class AuthService {
    * routine 15-minute expiry into a forced re-login.
    *
    * `finalize` clears the shared handle once the request settles, so the next expiry starts a new
-   * refresh rather than replaying this one's result.
+   * refresh rather than replaying this one's result — but only if the handle is still this
+   * refresh's. After a `logout()` a newer refresh may have taken the slot, and an older one
+   * settling late must not drop it, or concurrent 401s would start racing rotations again.
    */
   refresh(): Observable<UserResponse> {
-    this.refreshInFlight ??= this.http.post<LoginResponse>(`${this.baseUrl}/refresh`, {}).pipe(
-      map((response) => response.user),
-      tap((user) => this.currentUser.set(user)),
-      finalize(() => {
-        this.refreshInFlight = null;
-      }),
-      shareReplay({ bufferSize: 1, refCount: false }),
-    );
+    if (this.refreshInFlight) {
+      return this.refreshInFlight;
+    }
 
-    return this.refreshInFlight;
+    const epoch = this.refreshEpoch;
+    const refresh$: Observable<UserResponse> = this.http
+      .post<LoginResponse>(`${this.baseUrl}/refresh`, {})
+      .pipe(
+        map((response) => response.user),
+        tap((user) => {
+          // A logout since this refresh started has already cleared the session; this response
+          // belongs to the session it ended and must not sign the visitor back in.
+          if (epoch === this.refreshEpoch) {
+            this.currentUser.set(user);
+          }
+        }),
+        finalize(() => {
+          if (this.refreshInFlight === refresh$) {
+            this.refreshInFlight = null;
+          }
+        }),
+        shareReplay({ bufferSize: 1, refCount: false }),
+      );
+
+    this.refreshInFlight = refresh$;
+    return refresh$;
   }
 
   changePassword(request: ChangePasswordRequest): Observable<void> {
@@ -131,9 +153,12 @@ export class AuthService {
   }
 
   logout(): Observable<void> {
-    // Drop any shared refresh started before this logout: its `tap` would otherwise repopulate
-    // `currentUser` after we cleared it, leaving the app looking signed in against a session the
-    // server has already revoked.
+    // A refresh already in flight cannot be cancelled by dropping the handle: the interceptor that
+    // started it is still subscribed, so its response still arrives. Moving the epoch is what
+    // stops that response from repopulating `currentUser` after we cleared it — which would leave
+    // the app looking signed in against a session the server has already revoked. Dropping the
+    // handle as well keeps a request made after logout from joining that stale refresh.
+    this.refreshEpoch++;
     this.refreshInFlight = null;
 
     return this.http.post<void>(`${this.baseUrl}/logout`, {}).pipe(

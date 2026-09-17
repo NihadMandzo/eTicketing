@@ -17,13 +17,17 @@ namespace eTicketing.Contracts.Messaging;
 /// moves rows to the broker at its own pace and deletes them once the broker has confirmed.</para>
 ///
 /// <para><b>Delivery becomes at-least-once.</b> A dispatcher that publishes, is confirmed, and dies
-/// before deleting the row will publish again on restart. There is no inbox table anywhere in this
-/// platform yet, so consumers are not idempotent — a redelivery can re-send an email.
-/// <see cref="MessageId"/> is recorded so that when one is built it has a key to dedupe on.</para>
+/// before deleting the row will publish again on restart, under the same <see cref="Id"/>.
+/// eTicketing.Notifications recognises that repeat by the id (DeduplicatingDeliveryHandler), so a
+/// redelivery does not re-send the email. The other consumers have no general inbox. Most of what they
+/// do is safe to repeat anyway (snapshot upserts, status flips, and a renewal that checks whether its
+/// period was already minted), but two known gaps remain: Catalog's recommendation signal counts a
+/// redelivered purchase twice, and Ticketing's product-change and product-deletion fan-outs, if
+/// redelivered, write fresh rows under new ids that Notifications cannot recognise as repeats.</para>
 /// </summary>
 public class OutboxMessage : BaseEntity
 {
-    /// <summary>Also the AMQP message id, so a future inbox table can dedupe on it.</summary>
+    /// <summary>Also the AMQP message id — the key a consumer dedupes a repeated publish on.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The topic-exchange routing key — an EventNames constant.</summary>

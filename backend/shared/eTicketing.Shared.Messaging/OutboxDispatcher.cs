@@ -17,7 +17,12 @@ namespace eTicketing.Shared.Messaging;
 /// <para><b>Publish, then delete, in that order.</b> The reverse would lose an event whenever the
 /// process died in between. This way the same event can be published twice instead, which is the
 /// trade the outbox makes: at-least-once rather than at-most-once. See
-/// <see cref="OutboxMessage"/> on what that means for consumers, which are not idempotent yet.</para>
+/// <see cref="OutboxMessage"/> on what that means for consumers.</para>
+///
+/// <para><b>One pass per database at a time.</b> A pass reads rows without marking them as taken,
+/// so two replicas of a service would otherwise both publish every row — a duplicate on every
+/// event rather than only after a crash. <see cref="IOutboxDispatchLock"/> makes a pass exclusive;
+/// a replica that finds it taken skips the tick.</para>
 ///
 /// <para>Rows are hard-deleted, per this repo's no-soft-delete rule. A dispatched event's record is
 /// the message in the broker, not a tombstone here.</para>
@@ -36,15 +41,18 @@ public sealed class OutboxDispatcher<TContext> : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRawEventPublisher _publisher;
+    private readonly IOutboxDispatchLock _dispatchLock;
     private readonly ILogger<OutboxDispatcher<TContext>> _logger;
 
     public OutboxDispatcher(
         IServiceScopeFactory scopeFactory,
         IRawEventPublisher publisher,
+        IOutboxDispatchLock dispatchLock,
         ILogger<OutboxDispatcher<TContext>> logger)
     {
         _scopeFactory = scopeFactory;
         _publisher = publisher;
+        _dispatchLock = dispatchLock;
         _logger = logger;
     }
 
@@ -89,6 +97,21 @@ public sealed class OutboxDispatcher<TContext> : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<TContext>();
 
+        if (!await _dispatchLock.TryAcquireAsync(context, ct))
+            return;
+
+        try
+        {
+            await PublishPendingAsync(context, ct);
+        }
+        finally
+        {
+            await _dispatchLock.ReleaseAsync(context);
+        }
+    }
+
+    private async Task PublishPendingAsync(TContext context, CancellationToken ct)
+    {
         var pending = await context.Set<OutboxMessage>()
             .OrderBy(m => m.CreatedAt)
             .Take(BatchSize)

@@ -26,6 +26,56 @@ public class ProductOrganizationIdsQueryValidatorTests
         result.IsValid.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Validate_WithAWhitespaceOnlyValue_PassesAsNoFilter()
+    {
+        var result = await _validator.ValidateAsync(new ProductOrganizationIdsQuery { CategoryIds = "   " });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(",")]
+    [InlineData(" , ")]
+    [InlineData("1,,2")]
+    [InlineData("1,2,")]
+    [InlineData(",1")]
+    public async Task Validate_WithAnEmptyToken_Fails(string categoryIds)
+    {
+        // RemoveEmptyEntries used to drop these before validation, so "," was a non-blank value that
+        // parsed down to no ids and came back as an empty 200 instead of a 400.
+        var result = await _validator.ValidateAsync(new ProductOrganizationIdsQuery { CategoryIds = categoryIds });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.PropertyName.Should().Be(nameof(ProductOrganizationIdsQuery.CategoryIds));
+    }
+
+    [Fact]
+    public async Task Validate_WithExactlyTheCap_Passes()
+    {
+        var atCap = string.Join(',', Enumerable.Range(1, ProductOrganizationIdsQuery.MaxCategoryIds));
+
+        var result = await _validator.ValidateAsync(new ProductOrganizationIdsQuery { CategoryIds = atCap });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Tokens_KeepsEmptyTokensSoTheValidatorCanSeeThem()
+    {
+        new ProductOrganizationIdsQuery { CategoryIds = "1,,2" }.Tokens().Should().Equal("1", "", "2");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Tokens_WhenAbsentOrBlank_IsEmpty(string? categoryIds)
+    {
+        new ProductOrganizationIdsQuery { CategoryIds = categoryIds }.Tokens().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("abc")]
     [InlineData("1,abc")]

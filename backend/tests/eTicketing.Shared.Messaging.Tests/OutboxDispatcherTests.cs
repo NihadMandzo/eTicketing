@@ -3,6 +3,7 @@ using eTicketing.Shared.Messaging.Tests.TestFixtures;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace eTicketing.Shared.Messaging.Tests;
 
@@ -17,12 +18,19 @@ public class OutboxDispatcherTests : IDisposable
 {
     private readonly OutboxTestContext _fixture = new();
     private readonly RecordingRawPublisher _publisher = new();
+    private readonly Mock<IOutboxDispatchLock> _dispatchLock = new();
     private readonly OutboxDispatcher<OutboxTestDbContext> _sut;
 
     public OutboxDispatcherTests()
     {
+        // Granted by default: every test but the lock ones is about what a pass does once it runs.
+        _dispatchLock
+            .Setup(l => l.TryAcquireAsync(It.IsAny<DbContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
         _sut = new OutboxDispatcher<OutboxTestDbContext>(
-            _fixture.ScopeFactory, _publisher, NullLogger<OutboxDispatcher<OutboxTestDbContext>>.Instance);
+            _fixture.ScopeFactory, _publisher, _dispatchLock.Object,
+            NullLogger<OutboxDispatcher<OutboxTestDbContext>>.Instance);
     }
 
     /// <summary>Captures what reached the broker, and can be told to fail — the two things every
@@ -161,6 +169,73 @@ public class OutboxDispatcherTests : IDisposable
 
         _publisher.Published.Should().HaveCount(5);
         (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenAnotherDispatcherHoldsTheLock_SkipsThePassAndLeavesTheRows()
+    {
+        // Two replicas polling the same database used to both read and both publish every row. The
+        // one that loses the lock must not touch the rows at all — not publish, not bump attempts.
+        var message = await SeedAsync();
+        _dispatchLock
+            .Setup(l => l.TryAcquireAsync(It.IsAny<DbContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await DispatchAsync();
+
+        _publisher.Published.Should().BeEmpty();
+        var stored = await _fixture.DbContext.OutboxMessages.AsNoTracking().SingleAsync();
+        stored.Id.Should().Be(message.Id);
+        stored.AttemptCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenTheLockIsNotGranted_DoesNotReleaseIt()
+    {
+        // Releasing a lock this dispatcher never held would, for a session-owned SQL Server lock,
+        // raise an error on every skipped tick.
+        _dispatchLock
+            .Setup(l => l.TryAcquireAsync(It.IsAny<DbContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await DispatchAsync();
+
+        _dispatchLock.Verify(l => l.ReleaseAsync(It.IsAny<DbContext>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DispatchPending_AfterASuccessfulPass_ReleasesTheLockOnce()
+    {
+        await SeedAsync();
+
+        await DispatchAsync();
+
+        _dispatchLock.Verify(l => l.ReleaseAsync(It.IsAny<DbContext>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenPublishFails_StillReleasesTheLock()
+    {
+        // A lock kept after a failed pass would stall every other replica until this one's
+        // connection died — the broker outage would outlive itself.
+        await SeedAsync();
+        _publisher.FailWith = new InvalidOperationException("broker je nedostupan");
+
+        await DispatchAsync();
+
+        _dispatchLock.Verify(l => l.ReleaseAsync(It.IsAny<DbContext>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenTheDatabaseReadThrows_StillReleasesTheLock()
+    {
+        // Stands in for a database that fails mid-pass: the read itself throws.
+        await _fixture.DbContext.Database.ExecuteSqlRawAsync("DROP TABLE OutboxMessages");
+
+        var pass = DispatchAsync;
+
+        await pass.Should().ThrowAsync<Exception>();
+        _dispatchLock.Verify(l => l.ReleaseAsync(It.IsAny<DbContext>()), Times.Once);
     }
 
     public void Dispose() => _fixture.Dispose();

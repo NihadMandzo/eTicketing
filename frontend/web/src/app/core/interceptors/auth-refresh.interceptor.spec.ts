@@ -100,6 +100,53 @@ describe('authRefreshInterceptor', () => {
     expect(authService.currentUser()).toEqual(USER);
   });
 
+  it('does not sign the user back in when they log out while a refresh is still in flight', () => {
+    // Logout used to only drop the shared handle. The interceptor that started the refresh was
+    // still subscribed, so the late response's `tap` set `currentUser` again — the app looked
+    // signed in right after an explicit logout.
+    authService.currentUser.set(USER);
+    httpClient.get('/api/tickets').subscribe({ error: () => void 0 });
+    httpController.expectOne('/api/tickets').flush(null, unauthorized);
+    const staleRefresh = httpController.expectOne(`${AUTH}/refresh`);
+
+    authService.logout().subscribe();
+    httpController.expectOne(`${AUTH}/logout`).flush(null);
+    expect(authService.currentUser()).toBeNull();
+
+    staleRefresh.flush({ user: USER });
+    httpController.expectOne('/api/tickets').flush({ items: [] });
+
+    expect(authService.currentUser()).toBeNull();
+  });
+
+  it('keeps sharing a refresh started after logout when an older one settles late', () => {
+    // The older refresh's `finalize` used to clear the handle unconditionally, dropping the newer
+    // one — so the next 401 started a second rotation racing the first.
+    httpClient.get('/api/tickets').subscribe({ error: () => void 0 });
+    httpController.expectOne('/api/tickets').flush(null, unauthorized);
+    const staleRefresh = httpController.expectOne(`${AUTH}/refresh`);
+
+    authService.logout().subscribe();
+    httpController.expectOne(`${AUTH}/logout`).flush(null);
+
+    httpClient.get('/api/products').subscribe();
+    httpController.expectOne('/api/products').flush(null, unauthorized);
+    const currentRefresh = httpController.expectOne(`${AUTH}/refresh`);
+
+    staleRefresh.flush({ user: USER });
+    httpController.expectOne('/api/tickets').flush({ items: [] });
+
+    httpClient.get('/api/orders').subscribe();
+    httpController.expectOne('/api/orders').flush(null, unauthorized);
+    httpController.expectNone(`${AUTH}/refresh`);
+
+    currentRefresh.flush({ user: USER });
+    httpController.expectOne('/api/products').flush({ items: [] });
+    httpController.expectOne('/api/orders').flush({ items: [] });
+
+    expect(authService.currentUser()).toEqual(USER);
+  });
+
   it('signs the user out when the refresh itself fails', () => {
     authService.currentUser.set(USER);
     let failed = false;

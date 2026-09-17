@@ -30,6 +30,7 @@ public static class MessagingServiceCollectionExtensions
 
         // Scoped, because it writes into the request's own DbContext.
         services.AddScoped<IEventPublisher, OutboxEventPublisher<TContext>>();
+        services.AddSingleton<IOutboxDispatchLock, SqlServerOutboxDispatchLock>();
         services.AddHostedService<OutboxDispatcher<TContext>>();
 
         return services;
