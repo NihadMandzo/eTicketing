@@ -1,8 +1,4 @@
-using System.Text.Json;
 using eTicketing.Contracts.Events;
-using eTicketing.Ticketing.Business.Subscriptions;
-using eTicketing.Ticketing.Business.Integration;
-using eTicketing.Ticketing.Business.ReadModels;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -31,10 +27,14 @@ namespace eTicketing.Ticketing.Api.Infrastructure.Messaging;
 ///
 /// This is an ASP.NET Core app, so the handlers are scoped services: every message opens its own DI
 /// scope rather than capturing a DbContext for the process lifetime.
+///
+/// Every message goes through the transactional inbox (see <see cref="TicketingMessageRouter"/>), so a
+/// redelivery — which the outbox and the broker both make routine — is processed once.
 /// </summary>
 public sealed class TicketingRabbitMqConsumerService : BackgroundService
 {
-    private const string QueueName = "ticketing.inbound";
+    /// <summary>Also the consumer name the inbox records processed messages under.</summary>
+    public const string QueueName = "ticketing.inbound";
     private const string DeadLetterQueueName = "ticketing.inbound.deadletter";
     private const string RedeliveredHeader = "x-ticketing-redelivered";
 
@@ -129,10 +129,11 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
         // second attempt land in the unknown-key branch instead of re-running the real handler.
         // RepublishAsync stashes the original key in BasicProperties.Type for exactly this.
         var routingKey = delivery.BasicProperties.Type ?? delivery.RoutingKey;
+        var messageId = delivery.BasicProperties.MessageId;
 
         try
         {
-            await DispatchAsync(routingKey, delivery.Body, ct);
+            await DispatchAsync(routingKey, messageId, delivery.Body, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (Exception ex)
@@ -147,78 +148,27 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
             _logger.LogError(ex,
                 "Obrada poruke '{RoutingKey}' nije uspjela — premještam u red '{Queue}'.", routingKey, targetQueue);
 
-            await RepublishAsync(channel, targetQueue, routingKey, delivery.Body, ct);
+            await RepublishAsync(channel, targetQueue, routingKey, messageId, delivery.Body, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
     }
 
-    private async Task DispatchAsync(string routingKey, ReadOnlyMemory<byte> body, CancellationToken ct)
+    private async Task DispatchAsync(string routingKey, string? messageId, ReadOnlyMemory<byte> body, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
 
-        switch (routingKey)
+        var processed = await TicketingMessageRouter.RouteAsync(scope.ServiceProvider, routingKey, messageId, body, ct);
+
+        if (!processed)
         {
-            case EventNames.TicketPdfReady:
-                var pdfReady = Deserialize<TicketPdfReady>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<ITicketPdfCompletionService>().ApplyAsync(pdfReady, ct);
-                break;
-
-            case EventNames.ProductUpdated:
-                var productUpdated = Deserialize<ProductUpdated>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<IProductChangeNotifier>().NotifyBuyersAsync(productUpdated, ct);
-                break;
-
-            case EventNames.ProductSnapshotChanged:
-                var snapshot = Deserialize<ProductSnapshotChanged>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<IProductSnapshotProjector>().ApplyAsync(snapshot, ct);
-                break;
-
-            case EventNames.ProductDeleted:
-                var productDeleted = Deserialize<ProductDeleted>(body, routingKey);
-                // Projection first, notifications second. Dropping the snapshot is what actually
-                // stops the deleted product's sectors from selling; the emails can be retried, a
-                // sector that stayed on sale in the meantime cannot be un-sold.
-                await scope.ServiceProvider.GetRequiredService<IProductSnapshotProjector>()
-                    .RemoveAsync(productDeleted.ProductId, ct);
-                await scope.ServiceProvider.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(productDeleted, ct);
-                break;
-
-            case EventNames.OrganizationSnapshotChanged:
-                var organizationSnapshot = Deserialize<OrganizationSnapshotChanged>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<IOrganizationSnapshotProjector>()
-                    .ApplyAsync(organizationSnapshot, ct);
-                break;
-
-            case EventNames.OrganizationDeleted:
-                var organizationDeleted = Deserialize<OrganizationDeleted>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<IOrganizationSnapshotProjector>()
-                    .RemoveAsync(organizationDeleted.OrganizationId, ct);
-                break;
-
-            case EventNames.SubscriptionRenewed:
-                var renewed = Deserialize<SubscriptionRenewed>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().RenewAsync(renewed, ct);
-                break;
-
-            case EventNames.SubscriptionPaymentFailed:
-                var paymentFailed = Deserialize<SubscriptionPaymentFailed>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().MarkPastDueAsync(paymentFailed, ct);
-                break;
-
-            case EventNames.SubscriptionCancelled:
-                var cancelled = Deserialize<SubscriptionCancelled>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<ISubscriptionRenewalService>().CancelAsync(cancelled, ct);
-                break;
-
-            default:
-                // Only reachable if a binding is added above without a matching case — that's a
-                // deployment mistake worth seeing loudly, and the catch above parks the message.
-                throw new InvalidOperationException($"Nepoznat routing key: {routingKey}");
+            _logger.LogInformation(
+                "Poruka '{RoutingKey}' ({MessageId}) je već obrađena — preskačem ponovnu obradu.", routingKey, messageId);
         }
     }
 
     private static async Task RepublishAsync(
-        IChannel channel, string targetQueue, string routingKey, ReadOnlyMemory<byte> body, CancellationToken ct)
+        IChannel channel, string targetQueue, string routingKey, string? messageId, ReadOnlyMemory<byte> body,
+        CancellationToken ct)
     {
         var properties = new BasicProperties
         {
@@ -226,14 +176,14 @@ public sealed class TicketingRabbitMqConsumerService : BackgroundService
             // Preserved so the DLQ copy still says which event it was — the default exchange routes
             // by queue name, which would otherwise erase it.
             Type = routingKey,
+            // Preserved so the retry is still recognisably the same message to the inbox. Without it
+            // a message that failed once and was then also redelivered from the outbox would be
+            // processed twice.
+            MessageId = messageId,
             Headers = new Dictionary<string, object?> { [RedeliveredHeader] = 1 },
         };
 
         await channel.BasicPublishAsync(
             exchange: string.Empty, routingKey: targetQueue, mandatory: false, basicProperties: properties, body: body, cancellationToken: ct);
     }
-
-    private static T Deserialize<T>(ReadOnlyMemory<byte> body, string routingKey)
-        => JsonSerializer.Deserialize<T>(body.Span)
-           ?? throw new InvalidOperationException($"Prazan payload za event '{routingKey}'.");
 }

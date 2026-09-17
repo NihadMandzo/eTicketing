@@ -34,11 +34,12 @@ public class PurchaseInteractionRecorder
     }
 
     /// <summary>
-    /// Idempotent by construction, which is what makes an at-least-once broker safe here: the
-    /// upsert is keyed on (UserId, ProductId, Type), so a redelivered event bumps a counter rather
-    /// than inserting a duplicate. One order minting three tickets is likewise one purchase signal,
-    /// not three — the event is published per order, and interest in a product doesn't triple
-    /// because somebody brought friends.
+    /// Not idempotent on its own: the upsert is keyed on (UserId, ProductId, Type), so a repeat
+    /// cannot insert a duplicate row, but it does bump the counter again. What stops a redelivered
+    /// event being counted twice is the transactional inbox CatalogRabbitMqConsumerService runs this
+    /// through, not this method. One order minting three tickets is one purchase signal, not three —
+    /// the event is published per order, and interest in a product doesn't triple because somebody
+    /// brought friends.
     /// </summary>
     public async Task RecordAsync(TicketPurchased purchase, CancellationToken ct = default)
     {

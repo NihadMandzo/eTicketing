@@ -19,12 +19,18 @@ public class CatalogDbContext : DbContext, IUnitOfWork
     /// that produced them. Not a domain table — see eTicketing.Contracts.Messaging.OutboxMessage.</summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+    /// <summary>Inbound messages already processed, so a redelivered purchase is not counted twice.
+    /// Not a domain table — see eTicketing.Contracts.Messaging.InboxMessage.</summary>
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CatalogDbContext).Assembly);
 
-        // Lives in eTicketing.Contracts, so the assembly scan above does not reach it. Applied
-        // explicitly here rather than copied, so all three services' outbox tables stay identical.
+        // Both live in eTicketing.Contracts, so the assembly scan above does not reach them. Applied
+        // explicitly here rather than copied, so every service's outbox and inbox tables stay
+        // identical.
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
+        modelBuilder.ApplyConfiguration(new InboxMessageConfiguration());
     }
 }

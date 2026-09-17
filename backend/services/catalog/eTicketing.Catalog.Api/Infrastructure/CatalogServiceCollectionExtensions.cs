@@ -39,6 +39,9 @@ public static class CatalogServiceCollectionExtensions
         // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
         // publish-then-save now matters.
         builder.Services.AddOutboxMessaging<CatalogDbContext>(builder.Configuration);
+        // Its inbound counterpart: CatalogRabbitMqConsumerService records each processed purchase in
+        // the same transaction as the interaction it bumps, so a redelivery is not counted twice.
+        builder.Services.AddTransactionalInbox<CatalogDbContext>();
 
         // Recommendations. The model is a singleton because it is expensive to build and shared by
         // every request; everything around it is scoped like the rest of the service.

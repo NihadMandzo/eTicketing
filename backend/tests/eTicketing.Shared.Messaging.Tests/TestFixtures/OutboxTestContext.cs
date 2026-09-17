@@ -2,6 +2,7 @@ using eTicketing.Contracts.Messaging;
 using eTicketing.Contracts.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace eTicketing.Shared.Messaging.Tests.TestFixtures;
@@ -45,6 +46,14 @@ public sealed class OutboxTestContext : IDisposable
 
         DbContext.Database.EnsureCreated();
     }
+
+    /// <summary>A second context over the same database, with extra interceptors — for the tests that
+    /// need to make one specific save or transaction behave the way a concurrent writer would.</summary>
+    public OutboxTestDbContext NewDbContext(params IInterceptor[] interceptors) =>
+        new(new DbContextOptionsBuilder<OutboxTestDbContext>()
+            .UseSqlite(_connection)
+            .AddInterceptors([new AuditableEntitySaveChangesInterceptor(), .. interceptors])
+            .Options);
 
     public void Dispose()
     {

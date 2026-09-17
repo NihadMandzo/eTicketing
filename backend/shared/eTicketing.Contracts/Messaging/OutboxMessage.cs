@@ -19,11 +19,10 @@ namespace eTicketing.Contracts.Messaging;
 /// <para><b>Delivery becomes at-least-once.</b> A dispatcher that publishes, is confirmed, and dies
 /// before deleting the row will publish again on restart, under the same <see cref="Id"/>.
 /// eTicketing.Notifications recognises that repeat by the id (DeduplicatingDeliveryHandler), so a
-/// redelivery does not re-send the email. The other consumers have no general inbox. Most of what they
-/// do is safe to repeat anyway (snapshot upserts, status flips, and a renewal that checks whether its
-/// period was already minted), but two known gaps remain: Catalog's recommendation signal counts a
-/// redelivered purchase twice, and Ticketing's product-change and product-deletion fan-outs, if
-/// redelivered, write fresh rows under new ids that Notifications cannot recognise as repeats.</para>
+/// redelivery does not re-send the email. eTicketing.Ticketing and eTicketing.Catalog record the id
+/// in an <see cref="InboxMessage"/> in the same transaction as what processing the message changed,
+/// so a repeat is skipped before it can fan out a second set of buyer notifications or count a
+/// purchase twice.</para>
 /// </summary>
 public class OutboxMessage : BaseEntity
 {

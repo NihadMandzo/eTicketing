@@ -1,8 +1,10 @@
 using eTicketing.Catalog.Business.Recommendations;
 using eTicketing.Catalog.Business.Tests.TestFixtures;
+using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 using FluentAssertions;
 
 namespace eTicketing.Catalog.Business.Tests.Recommendations;
@@ -39,7 +41,7 @@ public class PurchaseInteractionRecorderTests : IDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_ForTheSameOrderTwice_IsIdempotent()
+    public async Task RecordAsync_ForTheSameOrderTwice_DoesNotDuplicateTheRow()
     {
         // RabbitMQ is at-least-once, so a redelivery is normal operation, not an anomaly.
         var purchase = PurchaseOf(_product);
@@ -49,6 +51,51 @@ public class PurchaseInteractionRecorderTests : IDisposable
 
         var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
         history.Should().ContainSingle("the upsert is keyed on (user, product, type), so a redelivery cannot duplicate a row");
+    }
+
+    [Fact]
+    public async Task RecordAsync_ForTheSameOrderTwice_OnItsOwnCountsItTwice()
+    {
+        // Pinned on purpose: this is why the consumer runs the recorder through the inbox. The row is
+        // not duplicated, but its counter is bumped again — so the method alone is not idempotent.
+        var purchase = PurchaseOf(_product);
+
+        await _sut.RecordAsync(purchase);
+        await _sut.RecordAsync(purchase);
+
+        var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
+        history.Should().ContainSingle().Which.Count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task RecordAsync_RedeliveredThroughTheInbox_CountsThePurchaseOnce()
+    {
+        // The path CatalogRabbitMqConsumerService takes: the same message id twice.
+        var inbox = new TransactionalInbox<CatalogDbContext>(_fixture.DbContext);
+        var purchase = PurchaseOf(_product);
+
+        var first = await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(purchase, ct));
+        _fixture.DbContext.ChangeTracker.Clear();
+        var repeat = await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(purchase, ct));
+
+        first.Should().BeTrue();
+        repeat.Should().BeFalse();
+        var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
+        history.Should().ContainSingle().Which.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RecordAsync_ForTwoDifferentPurchasesOfTheSameProduct_ThroughTheInbox_CountsBoth()
+    {
+        // A buyer who really did buy twice is a stronger signal, and must stay one.
+        var inbox = new TransactionalInbox<CatalogDbContext>(_fixture.DbContext);
+
+        await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(PurchaseOf(_product), ct));
+        _fixture.DbContext.ChangeTracker.Clear();
+        await inbox.ProcessOnceAsync("purchase-2", "catalog.recommendations", ct => _sut.RecordAsync(PurchaseOf(_product), ct));
+
+        var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
+        history.Should().ContainSingle().Which.Count.Should().Be(2);
     }
 
     [Fact]

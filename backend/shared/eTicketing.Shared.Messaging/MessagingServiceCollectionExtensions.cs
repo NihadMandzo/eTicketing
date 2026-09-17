@@ -37,6 +37,26 @@ public static class MessagingServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Transactional inbox. <see cref="IInbox"/> resolves to
+    /// <see cref="TransactionalInbox{TContext}"/>, so a consumer that routes its handlers through it
+    /// processes each message once, and <see cref="InboxCleanupService{TContext}"/> deletes the
+    /// records once they are old enough that no repeat can still arrive.
+    ///
+    /// <para>Separate from <see cref="AddOutboxMessaging{TContext}"/> because not every service with
+    /// an outbox consumes anything — eTicketing.Identity only publishes. Same requirement on the
+    /// context: apply <c>InboxMessageConfiguration</c> and add the migration.</para>
+    /// </summary>
+    public static IServiceCollection AddTransactionalInbox<TContext>(this IServiceCollection services)
+        where TContext : DbContext
+    {
+        // Scoped, because it must share the context the handler's repositories write through.
+        services.AddScoped<IInbox, TransactionalInbox<TContext>>();
+        services.AddHostedService<InboxCleanupService<TContext>>();
+
+        return services;
+    }
+
+    /// <summary>
     /// Publish straight to the broker, with no outbox.
     ///
     /// <para>eTicketing.Payment uses this deliberately rather than by omission: StripeWebhookService

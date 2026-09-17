@@ -138,6 +138,10 @@ public static class TicketingServiceCollectionExtensions
         // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
         // publish-then-save now matters.
         builder.Services.AddOutboxMessaging<TicketingDbContext>(builder.Configuration);
+        // Its inbound counterpart: TicketingRabbitMqConsumerService records each processed message
+        // in the same transaction as its effects, so a redelivered product.updated or
+        // product.deleted does not fan its buyer notifications out a second time.
+        builder.Services.AddTransactionalInbox<TicketingDbContext>();
         builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
         builder.Services.AddScoped<ISubscriptionRenewalService, SubscriptionRenewalService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ISectorService).Assembly);
