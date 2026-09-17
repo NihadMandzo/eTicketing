@@ -47,6 +47,7 @@ public sealed class NotificationDispatcher
         EventNames.TicketPdfReady => HandleTicketPdfReadyAsync(body, ct),
         EventNames.ProductChanged => HandleProductChangedAsync(body, ct),
         EventNames.ProductDeletedNotification => HandleProductDeletedAsync(body, ct),
+        EventNames.PaymentFailed => HandlePaymentFailedAsync(body, ct),
         _ => throw new PoisonMessageException($"Nepoznat routing key: {routingKey}")
     };
 
@@ -199,6 +200,27 @@ public sealed class NotificationDispatcher
         var message = new EmailMessageBuilder()
             .WithTo(evt.RecipientEmail)
             .WithTemplate(EmailTemplate.ProductDeleted, data)
+            .Build();
+
+        await _emailSender.SendAsync(message, ct);
+    }
+
+    /// <summary>The declined-card notice. Nothing was captured and the hold is already released by
+    /// the time this event exists, so the email says what happened and stops — no refund block, no
+    /// retry promise.</summary>
+    private async Task HandlePaymentFailedAsync(ReadOnlyMemory<byte> body, CancellationToken ct)
+    {
+        var evt = Deserialize<PaymentFailed>(body, EventNames.PaymentFailed);
+        // The raw provider code is logged and not emailed — see PaymentFailedTemplate.DescribeReason.
+        _logger.LogInformation(
+            "Šaljem obavještenje o neuspjelom plaćanju korisniku {UserId} (razlog: {Reason}).",
+            evt.UserId, evt.Reason);
+
+        var data = new PaymentFailedData(evt.OrderId, evt.SectorName, evt.Amount, evt.Reason, evt.FailedAt);
+
+        var message = new EmailMessageBuilder()
+            .WithTo(evt.UserEmail)
+            .WithTemplate(EmailTemplate.PaymentFailed, data)
             .Build();
 
         await _emailSender.SendAsync(message, ct);

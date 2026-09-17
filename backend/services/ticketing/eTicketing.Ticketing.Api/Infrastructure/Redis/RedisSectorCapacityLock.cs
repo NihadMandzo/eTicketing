@@ -69,6 +69,15 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         return tonumber(ARGV[1]) - used
         """;
 
+    /// <summary>
+    /// Marks a holdinfo value as carrying an owner. Versioned rather than simply changing the
+    /// format, because a deploy happens while holds are live: every hold minted by the previous
+    /// build stored the bare counter key, and those values keep arriving here for the remaining
+    /// five minutes of their TTL. A value without this prefix is therefore read as the old shape
+    /// with no owner, rather than as corruption — see TryParseHoldInfo.
+    /// </summary>
+    private const string HoldInfoVersionPrefix = "v2|";
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisSectorCapacityLock> _logger;
 
@@ -86,6 +95,51 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
             : $"sector:{sectorId}:date:{date:yyyy-MM-dd}:capacity";
 
     private static string BuildHoldInfoKey(string holdId) => $"holdinfo:{holdId}";
+
+    /// <summary>"v2|{ownerId}|{counterKey}", with an empty owner segment for a hold that has none.
+    /// The pipe is the separator because a counter key is built only from a Guid and an ISO date,
+    /// so it can never contain one — while it always contains the colon.</summary>
+    private static string BuildHoldInfoValue(string counterKey, Guid? ownerId) =>
+        $"{HoldInfoVersionPrefix}{ownerId?.ToString("N") ?? string.Empty}|{counterKey}";
+
+    /// <summary>Reverses <see cref="BuildHoldInfoValue"/>. A value with no version prefix is a
+    /// pre-upgrade hold: its counter key is the whole value and it has no recorded owner, which
+    /// callers treat as "anyone may release or spend this" for the rest of its TTL. Returns null
+    /// only for a value that is versioned but malformed — that is corruption rather than an old
+    /// hold, and resolving it as unowned would hand an attacker exactly the gap the version exists
+    /// to close, so it fails closed instead.</summary>
+    private (string CounterKey, Guid? OwnerId)? TryParseHoldInfo(string holdId, string value)
+    {
+        if (!value.StartsWith(HoldInfoVersionPrefix, StringComparison.Ordinal))
+            return (value, null);
+
+        var parts = value.Split('|', 3);
+        if (parts.Length != 3 || parts[2].Length == 0)
+        {
+            _logger.LogError(
+                "holdinfo:{HoldId} carries the {Prefix} version marker but is malformed", holdId, HoldInfoVersionPrefix);
+            return null;
+        }
+
+        if (parts[1].Length == 0)
+            return (parts[2], null);
+
+        if (!Guid.TryParseExact(parts[1], "N", out var ownerId))
+        {
+            _logger.LogError("holdinfo:{HoldId} carries an owner segment that is not a Guid", holdId);
+            return null;
+        }
+
+        return (parts[2], ownerId);
+    }
+
+    /// <summary>Reads holdinfo and resolves it to a counter key plus owner, or null if the hold is
+    /// unknown, expired or unparseable. The three holdId-only operations all start here.</summary>
+    private async Task<(string CounterKey, Guid? OwnerId)?> ReadHoldInfoAsync(string holdId)
+    {
+        var raw = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
+        return raw.IsNullOrEmpty ? null : TryParseHoldInfo(holdId, raw.ToString());
+    }
 
     /// <summary>Reverses BuildCounterKey — "sector:{sectorId}:capacity" or
     /// "sector:{sectorId}:date:{yyyy-MM-dd}:capacity" — back into (SectorId, Date). Returns null if
@@ -106,7 +160,8 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         return null;
     }
 
-    public async Task<HoldResult> TryHoldAsync(Guid sectorId, int capacity, int quantity, DateOnly? date, TimeSpan ttl, CancellationToken ct = default)
+    public async Task<HoldResult> TryHoldAsync(
+        Guid sectorId, int capacity, int quantity, DateOnly? date, TimeSpan ttl, Guid? ownerId, CancellationToken ct = default)
     {
         var counterKey = BuildCounterKey(sectorId, date);
         var holdId = Guid.NewGuid().ToString("N");
@@ -122,40 +177,46 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
             return new HoldResult(false, null, null);
 
         // Records which counter/hash this holdId belongs to, so ConfirmAsync/ReleaseAsync — which
-        // only ever see the holdId, not the sectorId/date — can find it again.
-        await Db.StringSetAsync(BuildHoldInfoKey(holdId), counterKey, ttl);
+        // only ever see the holdId, not the sectorId/date — can find it again, and who it belongs
+        // to, so a stolen hold id cannot be released or spent by a different account.
+        await Db.StringSetAsync(BuildHoldInfoKey(holdId), BuildHoldInfoValue(counterKey, ownerId), ttl);
 
         return new HoldResult(true, holdId, expiresAt.UtcDateTime);
     }
 
     public async Task<HeldReservation?> PeekAsync(string holdId, CancellationToken ct = default)
     {
-        var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
-        if (counterKey.IsNullOrEmpty)
+        var holdInfo = await ReadHoldInfoAsync(holdId);
+        if (holdInfo is null)
             return null;
 
-        var current = await Db.HashGetAsync(counterKey.ToString(), holdId);
+        var (counterKey, ownerId) = holdInfo.Value;
+
+        var current = await Db.HashGetAsync(counterKey, holdId);
         if (current.IsNullOrEmpty)
             return null;
 
-        var parsed = TryParseCounterKey(counterKey.ToString()!);
+        var parsed = TryParseCounterKey(counterKey);
         if (parsed is null)
         {
-            _logger.LogError("holdinfo:{HoldId} pointed at counter key {CounterKey}, which does not match either known shape", holdId, counterKey.ToString());
+            _logger.LogError(
+                "holdinfo:{HoldId} pointed at counter key {CounterKey}, which does not match either known shape", holdId, counterKey);
             return null;
         }
 
         var quantity = int.Parse(current.ToString().Split(':')[0], CultureInfo.InvariantCulture);
-        return new HeldReservation(parsed.Value.SectorId, parsed.Value.Date, quantity);
+        return new HeldReservation(parsed.Value.SectorId, parsed.Value.Date, quantity, ownerId);
     }
 
     public async Task ConfirmAsync(string holdId, CancellationToken ct = default)
     {
-        var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
-        if (counterKey.IsNullOrEmpty)
+        var holdInfo = await ReadHoldInfoAsync(holdId);
+        if (holdInfo is null)
             return; // hold already expired/unknown — nothing to confirm
 
-        var current = await Db.HashGetAsync(counterKey.ToString(), holdId);
+        var counterKey = holdInfo.Value.CounterKey;
+
+        var current = await Db.HashGetAsync(counterKey, holdId);
         if (current.IsNullOrEmpty)
             return;
 
@@ -164,14 +225,14 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
         // Purchase succeeded: the decrement becomes permanent — extend the hold's tracked expiry
         // far into the future so it keeps counting as "used" forever instead of being lazily
         // reclaimed by a later TryHoldAsync call.
-        await Db.HashSetAsync(counterKey.ToString(), holdId, $"{quantity}:{DateTimeOffset.MaxValue.ToUnixTimeSeconds()}");
+        await Db.HashSetAsync(counterKey, holdId, $"{quantity}:{DateTimeOffset.MaxValue.ToUnixTimeSeconds()}");
 
         // The hash *value* above is now permanent, but TryHoldAsync's Lua script always sets
         // EXPIRE <counterKey> 86400 regardless — if nothing else touches this counter within 24h
         // of the last hold, Redis would still expire the whole key and silently forget every
         // "permanently confirmed" hold, letting a later TryHoldAsync oversell already-sold
         // capacity. Remove the TTL on the counter key itself so a confirmed hold survives forever.
-        await Db.KeyPersistAsync(counterKey.ToString());
+        await Db.KeyPersistAsync(counterKey);
 
         // Once confirmed, this holdId must stop resolving via PeekAsync — otherwise a replayed
         // purchase request (same holdId re-submitted after the first attempt already charged and
@@ -206,11 +267,11 @@ public class RedisSectorCapacityLock : ISectorCapacityLock
 
     public async Task ReleaseAsync(string holdId, CancellationToken ct = default)
     {
-        var counterKey = await Db.StringGetAsync(BuildHoldInfoKey(holdId));
-        if (counterKey.IsNullOrEmpty)
+        var holdInfo = await ReadHoldInfoAsync(holdId);
+        if (holdInfo is null)
             return;
 
-        await Db.HashDeleteAsync(counterKey.ToString(), holdId);
+        await Db.HashDeleteAsync(holdInfo.Value.CounterKey, holdId);
         await Db.KeyDeleteAsync(BuildHoldInfoKey(holdId));
     }
 

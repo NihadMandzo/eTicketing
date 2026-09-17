@@ -10,6 +10,7 @@ import '../../models/enums/ticketing_mode.dart';
 import '../../models/requests/category_insert_request.dart';
 import '../../models/requests/category_update_request.dart';
 import '../../models/responses/category_response.dart';
+import '../../providers/api_exception.dart';
 import '../../providers/category_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utility/image_validation.dart';
@@ -41,6 +42,11 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
   String? _iconFileName;
   bool _isSaving = false;
   TicketingMode _ticketingMode = TicketingMode.singleOccurrence;
+
+  /// Uniqueness can only be answered by the server, so unlike the length rules below this one
+  /// arrives as a `category.name_already_exists` conflict after submitting. Held here so it can be
+  /// shown on the Naziv field itself rather than as a detached toast.
+  String? _nameConflictError;
 
   bool get _isEditing => widget.category != null;
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -162,6 +168,13 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
+
+        if (e is ApiException && e.apiError.code == 'category.name_already_exists') {
+          setState(() => _nameConflictError = e.apiError.displayMessage);
+          _formKey.currentState?.validate();
+          return;
+        }
+
         handleApiError(e);
       }
     }
@@ -269,7 +282,16 @@ class _CategoryUpsertDialogState extends State<CategoryUpsertDialog> {
                           controller: _nameController,
                           decoration: _inputDecoration('npr. Muzika, Sport, Tehnologija'),
                           style: const TextStyle(fontSize: 14),
+                          onChanged: (_) {
+                            // The name changed, so last save's conflict no longer applies.
+                            if (_nameConflictError != null) {
+                              setState(() => _nameConflictError = null);
+                            }
+                          },
                           validator: (v) {
+                            if (_nameConflictError != null) {
+                              return _nameConflictError;
+                            }
                             if (v == null || v.trim().isEmpty) {
                               return 'Naziv kategorije je obavezan';
                             }

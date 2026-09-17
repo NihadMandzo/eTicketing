@@ -5,6 +5,7 @@ using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Auth;
 using eTicketing.Identity.Business.Organizations.Validators;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
@@ -24,25 +25,29 @@ public class OrganizationService : IOrganizationService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBlobStorageService _blobStorageService;
     private readonly IEventPublisher _eventPublisher;
+    private readonly IOrganizationSnapshotPublisher _snapshotPublisher;
 
     public OrganizationService(
         IOrganizationRepository organizationRepository,
         IUserRepository userRepository,
         IUnitOfWork unitOfWork,
         IBlobStorageService blobStorageService,
-        IEventPublisher eventPublisher)
+        IEventPublisher eventPublisher,
+        IOrganizationSnapshotPublisher snapshotPublisher)
     {
         _organizationRepository = organizationRepository;
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
         _blobStorageService = blobStorageService;
         _eventPublisher = eventPublisher;
+        _snapshotPublisher = snapshotPublisher;
     }
 
     public async Task<Result<PagedResult<OrganizationResponse>>> GetAsync(OrganizationQuery query, CancellationToken ct = default)
     {
         var paged = await _organizationRepository.SearchAsync(query, query.OrganizationIds, ct);
         var items = paged.Items.Select(ToResponse).ToList();
+
         return Result<PagedResult<OrganizationResponse>>.Success(new PagedResult<OrganizationResponse>
         {
             Items = items,
@@ -52,8 +57,16 @@ public class OrganizationService : IOrganizationService
         });
     }
 
-    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, ClaimsPrincipal caller, CancellationToken ct = default)
     {
+        // Ownership is checked before the read, not after: an organizer asking for someone else's
+        // organization should get the same answer whether or not that organization exists.
+        if (!caller.IsPlatformStaff() && caller.GetOrganizationId() != id)
+        {
+            return Result<OrganizationResponse>.Failure(
+                Error.Unauthorized("organization.forbidden", "Nemate pristup ovoj organizaciji."));
+        }
+
         var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
 
         return organization is null
@@ -61,54 +74,13 @@ public class OrganizationService : IOrganizationService
             : Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
-    /// <summary>Upper bound on <see cref="GetInternalByIdsAsync"/>, mirroring Catalog's
-    /// MaxInternalByIdsCount: the id list arrives as a bare List&lt;Guid&gt; body rather than a
-    /// validated request DTO, so this is the only thing standing between a caller bug and an
-    /// unbounded IN (...) clause. 200 is far above the number of organizations a report will ever
-    /// name.</summary>
-    private const int MaxInternalByIdsCount = 200;
-
-    public async Task<Result<List<OrganizationInternalResponse>>> GetInternalByIdsAsync(
-        IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    public async Task<Result<OrganizationPublicResponse>> GetPublicByIdAsync(Guid id, CancellationToken ct = default)
     {
-        if (ids.Count == 0)
-            return Result<List<OrganizationInternalResponse>>.Success([]);
+        var organization = await _organizationRepository.GetByIdAsync(id, ct);
 
-        if (ids.Count > MaxInternalByIdsCount)
-        {
-            return Result<List<OrganizationInternalResponse>>.Failure(Error.Validation(
-                "organization.too_many_ids", $"Moguće je zatražiti najviše {MaxInternalByIdsCount} organizacija odjednom."));
-        }
-
-        var organizations = await _organizationRepository.GetByIdsAsync(ids, ct);
-        return Result<List<OrganizationInternalResponse>>.Success(organizations
-            .Select(o => new OrganizationInternalResponse(o.Id, o.Name, o.Address, o.IsActive))
-            .ToList());
-    }
-
-    public async Task<Result<OrganizationContactResponse>> GetInternalContactAsync(Guid id, CancellationToken ct = default)
-    {
-        // WithUsers, so the OrganizationSuperAdmin comes back in the same round trip rather than a
-        // second query — the caller needs both halves or neither.
-        var organization = await _organizationRepository.GetByIdWithUsersAsync(id, ct);
-        if (organization is null)
-        {
-            return Result<OrganizationContactResponse>.Failure(
-                Error.NotFound("organization.not_found", "Organizacija nije pronađena."));
-        }
-
-        // Exactly one per organization is enforced on creation, but this reads defensively: an
-        // organization whose super admin was deleted answers null rather than throwing, and the
-        // caller falls back to the organization's own address.
-        var superAdmin = organization.Users
-            .FirstOrDefault(u => u.Role == RoleType.OrganizationSuperAdmin);
-
-        return Result<OrganizationContactResponse>.Success(new OrganizationContactResponse(
-            organization.Id,
-            organization.Name,
-            organization.Email,
-            organization.PhoneNumber,
-            superAdmin?.Email));
+        return organization is null
+            ? Result<OrganizationPublicResponse>.Failure(Error.NotFound("organization.not_found", "Organizacija nije pronađena."))
+            : Result<OrganizationPublicResponse>.Success(ToPublicResponse(organization));
     }
 
     public async Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default)
@@ -128,13 +100,25 @@ public class OrganizationService : IOrganizationService
 
         await _userRepository.AddAsync(adminUser, ct);
 
-        // Jedan SaveChangesAsync poziv — organizacija i prvi organizator se upisuju u istoj transakciji.
-        await _unitOfWork.SaveChangesAsync(ct);
-
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         await _eventPublisher.PublishAsync(
             EventNames.OrganizationCreated,
             new OrganizationCreatedNotification(organization.Id, organization.Name, request.NotificationEmail),
             ct);
+
+        // The founding admin is the OrganizationSuperAdmin by construction, and is in the change
+        // tracker rather than the database at this point — so their address is handed over rather
+        // than queried for, which would come back null and leave Ticketing without a refund contact
+        // until the next republish sweep.
+        await _snapshotPublisher.PublishAsync(organization, adminUser.Email, ct);
+
+        // Jedan SaveChangesAsync poziv — organizacija, prvi organizator i outbox red se upisuju u
+        // istoj transakciji.
+        await _unitOfWork.SaveChangesAsync(ct);
 
         // EF's change-tracker fixup already put adminUser into organization.Users once both
         // entities were tracked (set via the Organization nav property above), so the mapped
@@ -153,6 +137,10 @@ public class OrganizationService : IOrganizationService
         // CreatedAt/Users/LogoBlobName untouched (logos are managed exclusively through the
         // dedicated logo endpoints).
         request.Adapt(organization);
+
+        // Name, address, email, phone and IsActive all live on this request, and all five are on
+        // the snapshot eTicketing.Ticketing prints from.
+        await _snapshotPublisher.PublishAsync(organization, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         var userCount = await _userRepository.CountByOrganizationAsync(id, ct);
@@ -184,6 +172,7 @@ public class OrganizationService : IOrganizationService
         }
 
         _organizationRepository.Remove(organization);
+        await _snapshotPublisher.PublishDeletedAsync(id, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         // DB delete first: if SaveChangesAsync above throws, the blob is left untouched rather
@@ -305,6 +294,7 @@ public class OrganizationService : IOrganizationService
         (user.PasswordHash, user.PasswordSalt) = PasswordHasher.Hash(request.Password);
 
         await _userRepository.AddAsync(user, ct);
+        await PublishSnapshotForUserChangeAsync(organizationId, user, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<UserResponse>.Success(user.Adapt<UserResponse>());
@@ -327,6 +317,7 @@ public class OrganizationService : IOrganizationService
         }
 
         request.Adapt(user);
+        await PublishSnapshotForUserChangeAsync(organizationId, user, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<UserResponse>.Success(user.Adapt<UserResponse>());
@@ -357,6 +348,35 @@ public class OrganizationService : IOrganizationService
         return Result.Success();
     }
 
+    /// <summary>
+    /// Republishes the organization snapshot when a user change can have moved
+    /// <c>SuperAdminEmail</c>.
+    ///
+    /// <para>That field is derived from the Users table, not stored on Organization, so a super
+    /// admin editing their own address would otherwise leave eTicketing.Ticketing printing the old
+    /// one on every cancellation email — a refund contact that silently stops working is worse than
+    /// none at all. Scoped to the OrganizationSuperAdmin role: an OrganizationAdmin's email is on no
+    /// snapshot, and republishing for them would put a row on the bus per staff edit for nothing.
+    /// RemoveUserAsync needs no equivalent — deleting an OrganizationSuperAdmin is refused outright
+    /// (exactly one per organization, always), so a removal can never move this field.</para>
+    ///
+    /// <para>The address comes from the in-memory <paramref name="user"/>, not from a fresh query:
+    /// this runs before the caller's SaveChangesAsync, so a query would read back the address that
+    /// is being replaced — publishing the very staleness the method exists to prevent.</para>
+    /// </summary>
+    private async Task PublishSnapshotForUserChangeAsync(
+        Guid organizationId, User user, CancellationToken ct)
+    {
+        if (user.Role != RoleType.OrganizationSuperAdmin)
+            return;
+
+        var organization = await _organizationRepository.GetByIdAsync(organizationId, ct);
+        if (organization is null)
+            return;
+
+        await _snapshotPublisher.PublishAsync(organization, user.Email, ct);
+    }
+
     /// <summary>Shared ownership/role check for AddUserAsync/UpdateUserAsync/RemoveUserAsync:
     /// platform staff (SuperAdmin/Admin) may manage any organization's users; anyone else must be
     /// that exact organization's OrganizationSuperAdmin — an OrganizationAdmin cannot manage
@@ -381,6 +401,16 @@ public class OrganizationService : IOrganizationService
     // — same reasoning as CategoryService.ToResponse in the Catalog service.
     private OrganizationResponse ToResponse(Organization organization) =>
         organization.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(organization) };
+
+    /// <summary>The list-path overload: same LogoUrl patch, but the user count comes from the SQL
+    /// projection rather than a loaded Users collection — see OrganizationRepository.SearchAsync.</summary>
+    private OrganizationResponse ToResponse(OrganizationWithUserCount row) =>
+        row.Adapt<OrganizationResponse>() with { LogoUrl = BuildLogoUrl(row.Organization) };
+
+    // Same derived-LogoUrl treatment as ToResponse; the narrower target record is what keeps the
+    // back-office fields off the anonymous route rather than any filtering here.
+    private OrganizationPublicResponse ToPublicResponse(Organization organization) =>
+        organization.Adapt<OrganizationPublicResponse>() with { LogoUrl = BuildLogoUrl(organization) };
 
     // Version-stamped: a logo replace reuses the same blob key, so without this the URL never
     // changes and every client keeps serving the old image from cache. See BlobUrlVersioning.

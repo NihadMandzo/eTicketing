@@ -24,6 +24,10 @@ public static class RabbitMqTopology
         EventNames.TicketPdfReady,
         EventNames.ProductChanged,
         EventNames.ProductDeletedNotification,
+        // Published by eTicketing.Ticketing when a card is declined. It had no binding anywhere
+        // until now, so the broker matched it against no queue and silently dropped every one —
+        // a published event with no consumer, which the review ruleset calls out as R07.
+        EventNames.PaymentFailed,
     ];
 
     public static async Task DeclareAsync(IChannel channel, CancellationToken ct = default)

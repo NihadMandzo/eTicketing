@@ -3,6 +3,8 @@ using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
+using eTicketing.Ticketing.Business.ReadModels;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
@@ -17,17 +19,23 @@ public class SectorService : ISectorService
     private static readonly TimeSpan HoldTtl = TimeSpan.FromMinutes(5);
 
     private readonly ISectorRepository _sectorRepository;
+    private readonly IProductSnapshotRepository _productSnapshots;
+    private readonly IProductSnapshotProjector _snapshotProjector;
     private readonly ICatalogClient _catalogClient;
     private readonly ISectorCapacityLock _capacityLock;
     private readonly IUnitOfWork _unitOfWork;
 
     public SectorService(
         ISectorRepository sectorRepository,
+        IProductSnapshotRepository productSnapshots,
+        IProductSnapshotProjector snapshotProjector,
         ICatalogClient catalogClient,
         ISectorCapacityLock capacityLock,
         IUnitOfWork unitOfWork)
     {
         _sectorRepository = sectorRepository;
+        _productSnapshots = productSnapshots;
+        _snapshotProjector = snapshotProjector;
         _catalogClient = catalogClient;
         _capacityLock = capacityLock;
         _unitOfWork = unitOfWork;
@@ -66,6 +74,7 @@ public class SectorService : ISectorService
         };
 
         await _sectorRepository.AddAsync(sector, ct);
+        await EnsureProductSnapshotAsync(product, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<SectorResponse>.Success(ToResponse(sector));
@@ -81,7 +90,7 @@ public class SectorService : ISectorService
         if (ownershipError is not null)
             return Result<SectorResponse>.Failure(ownershipError);
 
-        sector.Status = PublishStatus.Published;
+        sector.Publish();
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<SectorResponse>.Success(ToResponse(sector));
@@ -118,6 +127,7 @@ public class SectorService : ISectorService
         sector.OrganizationId = product.OrganizationId;
         sector.TicketingMode = product.TicketingMode;
 
+        await EnsureProductSnapshotAsync(product, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<SectorResponse>.Success(ToResponse(sector));
@@ -141,10 +151,11 @@ public class SectorService : ISectorService
 
     public async Task<Result<PagedResult<SectorResponse>>> GetPublishedAsync(SectorQuery query, CancellationToken ct = default)
     {
-        // Simplification for this pass: filters by Sector.Status only, not the owning Product's
-        // Status — an organizer is expected to only publish sectors for products they intend to
-        // make public. Revisit once the Purchase flow needs a stricter guarantee.
-        var paged = await _sectorRepository.SearchAsync(query, query.ProductId, null, PublishStatus.Published, ct);
+        // Both statuses, not just the sector's: a sector is only on sale if the product it belongs
+        // to is published too. The check reads the local ProductSnapshot rather than calling
+        // eTicketing.Catalog — this is the anonymous browse path, and it must not grow an HTTP hop.
+        var paged = await _sectorRepository.SearchAsync(
+            query, query.ProductId, null, PublishStatus.Published, requirePublishedProduct: true, ct);
 
         // The buyer path is the only one that reads the live counter: a client has to know a
         // sector is exhausted *before* offering it, otherwise the first the buyer hears of it is a
@@ -190,13 +201,18 @@ public class SectorService : ISectorService
         if (organizationId is null)
             return Result<PagedResult<SectorResponse>>.Failure(Error.Unauthorized("sector.no_organization", "Nalog nije vezan za organizaciju."));
 
-        var paged = await _sectorRepository.SearchAsync(query, query.ProductId, organizationId, query.Status, ct);
+        // requirePublishedProduct: false — this is the organizer's own list, and configuring
+        // sectors before publishing the product is the normal order of work.
+        var paged = await _sectorRepository.SearchAsync(
+            query, query.ProductId, organizationId, query.Status, requirePublishedProduct: false, ct);
         return ToPagedResult(paged);
     }
 
     public async Task<Result<PagedResult<SectorResponse>>> GetAllAsync(SectorQuery query, CancellationToken ct = default)
     {
-        var paged = await _sectorRepository.SearchAsync(query, query.ProductId, null, query.Status, ct);
+        // Platform staff see everything, drafts included — same reasoning as GetMineAsync.
+        var paged = await _sectorRepository.SearchAsync(
+            query, query.ProductId, null, query.Status, requirePublishedProduct: false, ct);
         return ToPagedResult(paged);
     }
 
@@ -208,6 +224,15 @@ public class SectorService : ISectorService
 
         if (sector.Status != PublishStatus.Published)
             return Result<HoldSectorResponse>.Failure(Error.Validation("sector.not_published", "Sektor još nije objavljen."));
+
+        // The product half of the same question. A product unpublished or deleted in
+        // eTicketing.Catalog leaves its sectors Published here forever — Sector.Status is written
+        // in exactly one place in this service and never by a consumer — so without this a
+        // cancelled event keeps taking money. A missing snapshot counts as unavailable: see
+        // ProductSnapshot for why erring that way round is the right one.
+        var productSnapshot = await _productSnapshots.GetByIdNoTrackingAsync(sector.ProductId, ct);
+        if (productSnapshot is null || productSnapshot.Status != PublishStatus.Published)
+            return Result<HoldSectorResponse>.Failure(ProductUnavailable());
 
         if (request.Quantity < 1)
             return Result<HoldSectorResponse>.Failure(Error.Validation("sector.invalid_quantity", "Količina mora biti najmanje 1."));
@@ -225,15 +250,26 @@ public class SectorService : ISectorService
             return Result<HoldSectorResponse>.Failure(Error.Validation("sector.date_not_applicable", "Datum se ne unosi za ovaj tip sektora."));
         }
 
-        var hold = await _capacityLock.TryHoldAsync(sector.Id, sector.Capacity, request.Quantity, request.Date, HoldTtl, ct);
+        var hold = await _capacityLock.TryHoldAsync(
+            sector.Id, sector.Capacity, request.Quantity, request.Date, HoldTtl, user.TryGetUserId(), ct);
         if (!hold.Success)
             return Result<HoldSectorResponse>.Failure(Error.Conflict("sector.no_capacity", "Nema dovoljno slobodnog kapaciteta."));
 
         return Result<HoldSectorResponse>.Success(new HoldSectorResponse(hold.HoldId!, hold.ExpiresAt!.Value));
     }
 
-    public async Task<Result> ReleaseHoldAsync(string holdId, CancellationToken ct = default)
+    public async Task<Result> ReleaseHoldAsync(string holdId, ClaimsPrincipal user, CancellationToken ct = default)
     {
+        var reservation = await _capacityLock.PeekAsync(holdId, ct);
+
+        // Success, not 404/403, for a hold that is unknown, expired, or somebody else's. A hold id
+        // is an unguessable 128-bit value, so the only caller who can present one they do not own
+        // is an attacker who obtained it — and answering them differently from "no such hold" would
+        // confirm the id is live. The honest caller cannot tell the difference either way: both
+        // frontends fire release and ignore the response.
+        if (reservation is null || (reservation.OwnerId is not null && reservation.OwnerId != user.TryGetUserId()))
+            return Result.Success();
+
         await _capacityLock.ReleaseAsync(holdId, ct);
         return Result.Success();
     }
@@ -300,4 +336,19 @@ public class SectorService : ISectorService
         });
 
     private static SectorResponse ToResponse(Sector sector) => sector.Adapt<SectorResponse>();
+
+    /// <summary>The one error every "the product behind this sector is gone or not live" path
+    /// returns, in Sectors and in Purchases alike. Validation rather than NotFound: the sector
+    /// itself exists and the caller is looking at it — what changed is that it stopped being for
+    /// sale.</summary>
+    internal static Error ProductUnavailable() =>
+        Error.Validation("sector.product_unavailable", "Proizvod više nije dostupan za kupovinu.");
+
+    /// <summary>Fills the local snapshot for a product this service had never heard of, using the
+    /// copy ValidateAsync already fetched over the whitelisted Ticketing→Catalog call. Free — the
+    /// HTTP round trip happened either way — and it means an organizer's first sector for a product
+    /// makes that product listable immediately instead of waiting on the next event or backfill
+    /// pass. Never overwrites an existing row; see IProductSnapshotProjector.EnsureAsync.</summary>
+    private Task EnsureProductSnapshotAsync(CatalogProductResponse product, CancellationToken ct) =>
+        _snapshotProjector.EnsureAsync(ProductSnapshotProjector.FromCatalog(product, DateTime.UtcNow), ct);
 }

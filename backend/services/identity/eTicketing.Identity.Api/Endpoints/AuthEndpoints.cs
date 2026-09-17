@@ -1,6 +1,8 @@
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
+using eTicketing.Identity.Api.Infrastructure;
 using eTicketing.Identity.Business.Auth;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Shared.Auth;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,8 +15,10 @@ public static class AuthEndpoints
     {
         var group = app.MapGroup("/auth").WithTags("Auth");
 
-        group.MapPost("/register", Register).AllowAnonymous().WithValidation<RegisterRequest>();
-        group.MapPost("/login", Login).AllowAnonymous().WithValidation<LoginRequest>();
+        group.MapPost("/register", Register).AllowAnonymous().WithValidation<RegisterRequest>()
+            .RequireRateLimiting(AuthRateLimitPolicies.AuthAttempts);
+        group.MapPost("/login", Login).AllowAnonymous().WithValidation<LoginRequest>()
+            .RequireRateLimiting(AuthRateLimitPolicies.AuthAttempts);
         group.MapPost("/refresh", Refresh).AllowAnonymous();
         group.MapPost("/logout", Logout).AllowAnonymous();
         group.MapGet("/me", Me).RequireAuthorization();
@@ -24,8 +28,8 @@ public static class AuthEndpoints
         // Both send an outbound email with no other cooldown — rate-limited (see
         // IdentityServiceCollectionExtensions' "email-sending" policy) so a script can't flood a
         // victim's inbox or burn through the platform's email-send quota.
-        group.MapPost("/resend-verification-email", ResendVerificationEmail).RequireAuthorization().RequireRateLimiting("email-sending");
-        group.MapPost("/forgot-password", ForgotPassword).AllowAnonymous().WithValidation<ForgotPasswordRequest>().RequireRateLimiting("email-sending");
+        group.MapPost("/resend-verification-email", ResendVerificationEmail).RequireAuthorization().RequireRateLimiting(AuthRateLimitPolicies.EmailSending);
+        group.MapPost("/forgot-password", ForgotPassword).AllowAnonymous().WithValidation<ForgotPasswordRequest>().RequireRateLimiting(AuthRateLimitPolicies.EmailSending);
         group.MapPost("/reset-password", ResetPassword).AllowAnonymous().WithValidation<ResetPasswordRequest>();
         group.MapPost("/set-new-password", SetNewPassword).RequireAuthorization().WithValidation<SetNewPasswordRequest>();
     }

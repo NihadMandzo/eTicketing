@@ -292,15 +292,10 @@ public class TicketGateAdmissionTests : IDisposable
 
     private Guid SeedSubscription(Guid sectorId)
     {
-        var subscription = new Subscription
-        {
-            Id = Guid.NewGuid(),
-            SectorId = sectorId,
-            UserId = Guid.NewGuid(),
-            Status = SubscriptionStatus.Active,
-            CurrentPeriodStart = Today.AddDays(-10),
-            CurrentPeriodEnd = Today.AddDays(10),
-        };
+        var subscription = Subscription.Create(
+            sectorId, Guid.NewGuid(), "kupac@example.com",
+            Today.AddDays(-10), Today.AddDays(10),
+            paymentReference: null, capacityHoldId: null);
         _fixture.DbContext.Subscriptions.Add(subscription);
         return subscription.Id;
     }

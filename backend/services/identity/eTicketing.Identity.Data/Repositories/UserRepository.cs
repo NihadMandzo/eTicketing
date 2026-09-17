@@ -28,11 +28,19 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
     public Task<bool> ExistsByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default)
         => Query().AnyAsync(u => u.OrganizationId == organizationId && u.Role == role, ct);
 
+    public Task<string?> GetEmailByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default)
+        => Query()
+            .AsNoTracking()
+            .Where(u => u.OrganizationId == organizationId && u.Role == role)
+            .Select(u => (string?)u.Email)
+            .FirstOrDefaultAsync(ct);
+
     public Task<User?> GetByIdWithOrganizationAsync(Guid id, CancellationToken ct = default)
         => Query().Include(u => u.Organization).FirstOrDefaultAsync(u => u.Id == id, ct);
 
     public Task<PagedResult<User>> SearchStaffAsync(IReadOnlyList<RoleType>? roleFilters, BaseSearchObject query, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Include(u => u.Organization)
             .Where(u => u.Role != RoleType.User)
             // Minimal APIs bind an absent array-typed query param to an empty array, not null —
@@ -42,17 +50,18 @@ public class UserRepository : Repository<User, Guid>, IUserRepository
             .Where(u => string.IsNullOrEmpty(query.FTS)
                 || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<PagedResult<User>> SearchByOrganizationAsync(Guid organizationId, BaseSearchObject query, RoleType? role, CancellationToken ct = default)
         => Query()
+            .AsNoTracking()
             .Include(u => u.Organization)
             .Where(u => u.OrganizationId == organizationId)
             .Where(u => role == null || u.Role == role)
             .Where(u => string.IsNullOrEmpty(query.FTS)
                 || u.FirstName.Contains(query.FTS) || u.LastName.Contains(query.FTS) || u.Email.Contains(query.FTS))
             .OrderBy(u => u.LastName)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<int> CountByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => Query().CountAsync(u => u.OrganizationId == organizationId, ct);

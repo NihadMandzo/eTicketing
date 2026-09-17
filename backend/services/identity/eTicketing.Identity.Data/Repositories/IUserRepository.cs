@@ -24,6 +24,12 @@ public interface IUserRepository : IRepository<User, Guid>
     /// "exactly one OrganizationSuperAdmin per organization" before inserting a second one.</summary>
     Task<bool> ExistsByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default);
 
+    /// <summary>The address of an organization's user in the given role, or null if it has none —
+    /// in practice the OrganizationSuperAdmin, whose email goes on the organization snapshot
+    /// published to eTicketing.Ticketing. One column, not a whole User row, because that is all the
+    /// snapshot carries.</summary>
+    Task<string?> GetEmailByOrganizationAndRoleAsync(Guid organizationId, RoleType role, CancellationToken ct = default);
+
     /// <summary>Same as the base <see cref="eTicketing.Contracts.Persistence.IRepository{T,TKey}.GetByIdAsync"/>
     /// but with <c>Organization</c> included, for the call sites that actually surface
     /// <see cref="eTicketing.Identity.Business.Auth.UserResponse.OrganizationName"/> to a caller

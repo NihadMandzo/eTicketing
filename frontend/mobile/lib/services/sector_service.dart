@@ -32,6 +32,7 @@ class SectorService {
   Future<PagedResult<SectorResponse>> getSectors(String productId, {DateTime? date}) async {
     final response = await apiClient.get('Sectors', queryParameters: {
       'productId': productId,
+      'page': 0,
       'pageSize': 100,
       if (date != null) 'date': _formatDate(date),
     });

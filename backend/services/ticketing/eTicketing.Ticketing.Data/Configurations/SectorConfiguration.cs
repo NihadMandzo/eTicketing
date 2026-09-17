@@ -19,5 +19,11 @@ public class SectorConfiguration : IEntityTypeConfiguration<Sector>
         // DailyEntry lookups: "does a Sector for this Product+month already exist" and the
         // preview/create validation that resolves PeriodYear/PeriodMonth.
         builder.HasIndex(s => new { s.ProductId, s.PeriodYear, s.PeriodMonth });
+
+        // Every "this product's published sectors" read — the anonymous buy path
+        // (SectorService.GetPublishedAsync), the organizer's print-options screen
+        // (SectorRepository.GetPublishedByProductWithTicketTypesAsync) and the report
+        // denominator (GetPublishedCapacityByProductAsync) all filter on exactly this pair.
+        builder.HasIndex(s => new { s.ProductId, s.Status });
     }
 }

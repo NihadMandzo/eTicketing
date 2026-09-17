@@ -67,8 +67,3 @@ public sealed class BrevoEmailSender : IEmailSender
     /// sent inline arrived normally (verified live against Brevo on 2026-08-24).</summary>
     private sealed record BrevoAttachment(string Content, string Name);
 }
-
-/// <summary>Just the two values BrevoEmailSender needs to build the "sender" field of a Brevo
-/// request — deliberately not the full BrevoOptions (which also carries ApiKey), so this class
-/// has no path to the API key value at all, not even through a shared options object.</summary>
-public sealed record BrevoOptionsSnapshot(string SenderEmail, string SenderName);

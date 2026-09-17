@@ -78,9 +78,9 @@ public static class SectorEndpoints
         return result.ToHttpResult();
     }
 
-    private static async Task<IResult> ReleaseHold(string holdId, ISectorService service, CancellationToken ct)
+    private static async Task<IResult> ReleaseHold(string holdId, ISectorService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.ReleaseHoldAsync(holdId, ct);
+        var result = await service.ReleaseHoldAsync(holdId, http.User, ct);
         return result.ToHttpResult(StatusCodes.Status204NoContent);
     }
 }

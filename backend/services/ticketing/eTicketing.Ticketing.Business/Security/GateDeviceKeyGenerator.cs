@@ -39,7 +39,3 @@ public sealed class GateDeviceKeyGenerator
     public static string Hash(string apiKey) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey)));
 }
-
-/// <summary><paramref name="ApiKey"/> is the only time the plaintext exists — it is returned to the
-/// organizer once and then only its hash survives.</summary>
-public sealed record GateDeviceKey(string ApiKey, string KeyHash, string KeyPrefix);

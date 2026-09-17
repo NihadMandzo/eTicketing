@@ -322,12 +322,3 @@ public class ReportDocument : IDocument
         _ => TextPrimary
     };
 }
-
-internal static class ReportDocumentExtensions
-{
-    /// <summary>Numeric columns read right-aligned; the name column that opens every table reads
-    /// left. Applied in one place so the header, the body and the totals row can never disagree
-    /// about a column's alignment.</summary>
-    public static IContainer AlignmentFor(this IContainer container, ReportPdfColumn column)
-        => column.RightAligned ? container.AlignRight() : container.AlignLeft();
-}

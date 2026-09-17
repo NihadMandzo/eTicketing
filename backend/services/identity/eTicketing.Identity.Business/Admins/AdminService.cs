@@ -3,6 +3,7 @@ using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Identity.Business.Auth;
+using eTicketing.Contracts.Security;
 using eTicketing.Identity.Business.Security;
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
@@ -126,8 +127,12 @@ public class AdminService : IAdminService
         var deletedFullName = $"{user.FirstName} {user.LastName}";
 
         _userRepository.Remove(user);
-        await _unitOfWork.SaveChangesAsync(ct);
 
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         if (organizationId is not null)
         {
             await _eventPublisher.PublishAsync(
@@ -136,6 +141,8 @@ public class AdminService : IAdminService
                     organizationId.Value, organizationName ?? string.Empty, deletedFullName, recipientEmail!, reason!),
                 ct);
         }
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result.Success();
     }
@@ -158,12 +165,18 @@ public class AdminService : IAdminService
         // The SuperAdmin-assigned password immediately invalidates any session the account
         // already had — same reasoning as every other password-changing path in this service.
         await _refreshTokenRepository.RevokeAllActiveForUserAsync(user.Id, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
 
+        // Before the save, not after: the publish writes an outbox row into this same
+        // SaveChangesAsync (see eTicketing.Shared.Messaging.OutboxEventPublisher), so the event and
+        // the data it describes now commit together or not at all. That is what the old
+        // "after the commit, never before" ordering was reaching for and could not actually
+        // guarantee — it left the event to be lost if the process died in between.
         await _eventPublisher.PublishAsync(
             EventNames.AdminPasswordChanged,
             new AdminPasswordChangedNotification(user.Id, user.Email, user.FirstName),
             ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return Result.Success();
     }

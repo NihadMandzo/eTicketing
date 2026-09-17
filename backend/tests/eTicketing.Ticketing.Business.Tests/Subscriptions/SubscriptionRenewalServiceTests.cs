@@ -41,18 +41,9 @@ public class SubscriptionRenewalServiceTests : IDisposable
         };
         await _fixture.SectorRepository.AddAsync(sector);
 
-        var subscription = new Subscription
-        {
-            Id = Guid.NewGuid(),
-            SectorId = sector.Id,
-            UserId = Buyer,
-            UserEmail = "kupac@example.com",
-            Status = SubscriptionStatus.Active,
-            CurrentPeriodStart = new DateOnly(2026, 9, 1),
-            CurrentPeriodEnd = new DateOnly(2026, 9, 30),
-            PaymentReference = SubscriptionRef,
-            CapacityHoldId = HoldId,
-        };
+        var subscription = Subscription.Create(
+            sector.Id, Buyer, "kupac@example.com",
+            new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), SubscriptionRef, HoldId);
         await _fixture.SubscriptionRepository.AddAsync(subscription);
         await _fixture.UnitOfWork.SaveChangesAsync();
 
@@ -61,6 +52,53 @@ public class SubscriptionRenewalServiceTests : IDisposable
 
     private static SubscriptionRenewed Renewal(DateOnly start, DateOnly end) =>
         new(SubscriptionRef, 60m, "eur", start, end, DateTime.UtcNow);
+
+    /// <summary>The single TicketPurchased this renewal published.</summary>
+    private TicketPurchased CapturedPurchase() =>
+        _fixture.EventPublisher.Invocations
+            .Where(i => (string)i.Arguments[0] == EventNames.TicketPurchased)
+            .Select(i => (TicketPurchased)i.Arguments[1])
+            .Single();
+
+    [Fact]
+    public async Task RenewAsync_StampsTheProductDetailsOntoTheEvent()
+    {
+        // Same reason as the purchase path: eTicketing.PdfGeneration has no catalogue client any
+        // more, so a renewal that does not carry these prints a generic heading on next month's
+        // parking ticket.
+        var (sector, _) = await SeedActiveSubscriptionAsync();
+        await _fixture.SeedProductSnapshotAsync(
+            sector.ProductId, name: "Parking Skenderija", ticketingMode: TicketingMode.RecurringReservation);
+
+        await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
+
+        CapturedPurchase().ProductName.Should().Be("Parking Skenderija");
+    }
+
+    [Fact]
+    public async Task RenewAsync_ForAProductThatIsNoLongerPublished_StillMintsTheTicket()
+    {
+        // Deliberately not gated the way a purchase is. The provider has already taken this month's
+        // money on its own schedule; refusing to mint would leave a paying subscriber with a charge
+        // and no parking space.
+        var (sector, subscription) = await SeedActiveSubscriptionAsync();
+        await _fixture.SeedProductSnapshotAsync(sector.ProductId, PublishStatus.Draft);
+
+        await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
+
+        _fixture.TicketRepository.Query().Count(t => t.SubscriptionId == subscription.Id).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RenewAsync_WithNoSnapshotForTheProduct_StillMintsTheTicketWithoutProductDetails()
+    {
+        var (_, subscription) = await SeedActiveSubscriptionAsync();
+
+        await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
+
+        _fixture.TicketRepository.Query().Count(t => t.SubscriptionId == subscription.Id).Should().Be(1);
+        CapturedPurchase().ProductName.Should().BeNull();
+    }
 
     [Fact]
     public async Task RenewAsync_AdvancesThePeriodAndMintsTheNextTicket()
@@ -112,7 +150,7 @@ public class SubscriptionRenewalServiceTests : IDisposable
 
         _fixture.CapacityLock.Verify(
             l => l.TryHoldAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateOnly?>(),
-                It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+                It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _fixture.CapacityLock.Verify(
             l => l.ReleaseConfirmedAsync(It.IsAny<Guid>(), It.IsAny<DateOnly?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -139,13 +177,47 @@ public class SubscriptionRenewalServiceTests : IDisposable
     {
         var (_, subscription) = await SeedActiveSubscriptionAsync();
         var tracked = (await _fixture.SubscriptionRepository.GetByIdAsync(subscription.Id))!;
-        tracked.Status = SubscriptionStatus.PastDue;
+        tracked.MarkPastDue();
         await _fixture.UnitOfWork.SaveChangesAsync();
 
         await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
 
         (await _fixture.SubscriptionRepository.GetByIdAsync(subscription.Id))!
             .Status.Should().Be(SubscriptionStatus.Active);
+    }
+
+    [Fact]
+    public async Task RenewAsync_ForACancelledSubscription_MintsNothingAndLeavesItCancelled()
+    {
+        // Cancelling released this bay back to the sector's capacity, so it may already belong to
+        // somebody else. A late renewal event must not quietly reissue a ticket for it — which is
+        // exactly what happened before Subscription.Renew grew its guard.
+        var (_, subscription) = await SeedActiveSubscriptionAsync();
+        await _sut.CancelAsync(new SubscriptionCancelled(SubscriptionRef, DateTime.UtcNow));
+
+        await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
+
+        _fixture.TicketRepository.Query().Count(t => t.SubscriptionId == subscription.Id).Should().Be(0);
+        var stored = (await _fixture.SubscriptionRepository.GetByIdAsync(subscription.Id))!;
+        stored.Status.Should().Be(SubscriptionStatus.Cancelled);
+        stored.CurrentPeriodEnd.Should().Be(new DateOnly(2026, 9, 30));
+    }
+
+    [Fact]
+    public async Task CancelAsync_Redelivered_ReleasesTheSpaceExactlyOnce()
+    {
+        // Releasing twice hands the same bay back to the counter twice, so the sector oversells by
+        // one for every redelivery. The entity's Cancel returning false is what stops the second
+        // release running at all.
+        var (sector, _) = await SeedActiveSubscriptionAsync();
+        var cancelled = new SubscriptionCancelled(SubscriptionRef, DateTime.UtcNow);
+
+        await _sut.CancelAsync(cancelled);
+        await _sut.CancelAsync(cancelled);
+
+        _fixture.CapacityLock.Verify(
+            l => l.ReleaseConfirmedAsync(sector.Id, null, HoldId, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>A stale reference must not dead-letter-storm the consumer forever.</summary>

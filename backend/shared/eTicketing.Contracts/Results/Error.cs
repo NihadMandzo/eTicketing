@@ -1,15 +1,5 @@
 namespace eTicketing.Contracts.Results;
 
-public enum ErrorType
-{
-    None,
-    Validation,
-    NotFound,
-    Conflict,
-    Unauthorized,
-    Failure
-}
-
 public sealed class Error
 {
     public string Code { get; }

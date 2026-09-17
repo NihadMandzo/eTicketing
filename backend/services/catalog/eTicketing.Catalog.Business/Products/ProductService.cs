@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using eTicketing.Catalog.Business.Products.Mapping;
 using eTicketing.Catalog.Business.Products.Validators;
-using eTicketing.Catalog.Business.Security;
+using eTicketing.Contracts.Security;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Events;
@@ -81,6 +81,7 @@ public class ProductService : IProductService
         };
 
         await _productRepository.AddAsync(product, ct);
+        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         product.Category = validation.Value;
@@ -97,7 +98,11 @@ public class ProductService : IProductService
         if (ownershipError is not null)
             return Result<ProductResponse>.Failure(ownershipError);
 
-        product.Status = PublishStatus.Published;
+        product.Publish();
+
+        // The transition eTicketing.Ticketing cares about most: until its snapshot says Published,
+        // this product's sectors are not listed and cannot be held.
+        await PublishSnapshotAsync(product, product.Category!.TicketingMode, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));
@@ -134,11 +139,12 @@ public class ProductService : IProductService
         product.Longitude = request.Longitude!.Value;
         product.City = request.City!.Value;
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        // Published after the commit, never before: a buyer must not be emailed "the date moved"
-        // about a save that then failed. eTicketing.Ticketing consumes this and fans it out to the
-        // actual ticket holders — Catalog has no idea who they are.
+        // Published *into* the commit now, not after it. The concern behind the old ordering —
+        // a buyer emailed "the date moved" about a save that then failed — is what the outbox
+        // actually settles: the row is part of this SaveChangesAsync, so a failed save takes the
+        // event with it. See eTicketing.Shared.Messaging.OutboxEventPublisher.
+        // eTicketing.Ticketing consumes this and fans it out to the actual ticket holders —
+        // Catalog has no idea who they are.
         if (changes.Count > 0)
         {
             await _eventPublisher.PublishAsync(
@@ -147,8 +153,33 @@ public class ProductService : IProductService
                 ct);
         }
 
+        // Unconditional, unlike the notification above: a projection that only hears about changes
+        // somebody decided were worth emailing about is a projection that quietly goes stale. A
+        // draft edit produces no email and still produces a snapshot.
+        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+
         return Result<ProductResponse>.Success(ToResponse(product));
     }
+
+    /// <summary>
+    /// Publishes the product's current state for eTicketing.Ticketing's ProductSnapshot read model,
+    /// on every create, publish and edit. Into the caller's transaction, like every other publish
+    /// here — the snapshot must not claim a state this database then failed to commit.
+    ///
+    /// <para>Separate from <see cref="EventNames.ProductUpdated"/> on purpose. That one is an email
+    /// trigger: published products only, only when a human-visible field changed, carrying Bosnian
+    /// display strings. This one is state: always, typed. Folding them together would mean either
+    /// emailing buyers about draft edits or letting the projection miss half of them.</para>
+    /// </summary>
+    private Task PublishSnapshotAsync(Product product, TicketingMode ticketingMode, CancellationToken ct) =>
+        _eventPublisher.PublishAsync(
+            EventNames.ProductSnapshotChanged,
+            new ProductSnapshotChanged(
+                product.Id, product.OrganizationId, product.Name, product.Date, product.City,
+                product.Status, ticketingMode, DateTime.UtcNow),
+            ct);
 
     public async Task<Result> DeleteAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
     {
@@ -176,14 +207,16 @@ public class ProductService : IProductService
             DeletedByPlatformStaff: user.IsPlatformStaff() && user.GetOrganizationId() != product.OrganizationId);
 
         _productRepository.Remove(product);
-        await _unitOfWork.SaveChangesAsync(ct);
 
-        // After the commit, never before — the same rule UpdateAsync follows. Nobody may be told
-        // their event is cancelled on the strength of a delete that then failed to commit.
+        // Into the commit, the same rule UpdateAsync follows. Nobody may be told their event is
+        // cancelled on the strength of a delete that then failed — and with the outbox that is
+        // guaranteed rather than merely sequenced, because the row shares this transaction.
         // eTicketing.Ticketing consumes this and fans it out: Catalog has no idea who bought a
         // ticket. Published for drafts too, which have no buyers but whose owning organization
         // still needs telling when platform staff removed one.
         await _eventPublisher.PublishAsync(EventNames.ProductDeleted, deleted, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         // DB delete first (cascades ProductImage rows too, see ProductImageConfiguration): if
         // SaveChangesAsync above throws, every blob is left untouched rather than orphaned while
@@ -271,7 +304,7 @@ public class ProductService : IProductService
 
     public async Task<Result<ProductResponse>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        var product = await _productRepository.GetByIdWithCategoryNoTrackingAsync(id, ct);
         if (product is null || product.Status != PublishStatus.Published)
             return Result<ProductResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
@@ -296,13 +329,18 @@ public class ProductService : IProductService
 
     public async Task<Result<List<Guid>>> GetOrganizationIdsAsync(IReadOnlyList<int> categoryIds, CancellationToken ct = default)
     {
+        // No categories selected is a legitimate "filter nothing", not an error or a full scan —
+        // this short-circuit used to live in the endpoint handler.
+        if (categoryIds.Count == 0)
+            return Result<List<Guid>>.Success([]);
+
         var ids = await _productRepository.GetOrganizationIdsByCategoryIdsAsync(categoryIds, ct);
         return Result<List<Guid>>.Success(ids);
     }
 
     public async Task<Result<ProductInternalResponse>> GetInternalAsync(Guid id, CancellationToken ct = default)
     {
-        var product = await _productRepository.GetByIdWithCategoryAsync(id, ct);
+        var product = await _productRepository.GetByIdWithCategoryNoTrackingAsync(id, ct);
         if (product is null)
             return Result<ProductInternalResponse>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
@@ -357,15 +395,14 @@ public class ProductService : IProductService
     public async Task<Result<List<OrganizationProductStatsResponse>>> GetOrganizationStatsAsync(CancellationToken ct = default)
     {
         var stats = await _productRepository.GetOrganizationStatsAsync(ct);
-        return Result<List<OrganizationProductStatsResponse>>.Success(stats
-            .Select(s => new OrganizationProductStatsResponse(
-                s.OrganizationId, s.Total, s.Published, s.Draft, s.WithoutImage))
-            .ToList());
+        return Result<List<OrganizationProductStatsResponse>>.Success(
+            stats.Adapt<List<OrganizationProductStatsResponse>>());
     }
 
+    /// <summary>Requires Product.Category to be loaded — see ProductMappingConfig for what happens
+    /// to TicketingMode if it is not.</summary>
     private static ProductInternalResponse ToInternalResponse(Product product) =>
-        new(product.Id, product.OrganizationId, product.Status, product.Category!.TicketingMode,
-            product.Name, product.Date, product.City);
+        product.Adapt<ProductInternalResponse>();
 
     /// <summary>Shared by PreviewAsync/CreateAsync/UpdateAsync so preview and the real write path
     /// always agree on the same validation message (per SPRINT_2 US-2.2's acceptance criteria).

@@ -2,8 +2,6 @@ using System.Net;
 
 namespace eTicketing.Notifications.Email.Templates;
 
-public sealed record OrganizationAdminDeletedData(string OrganizationName, string DeletedAdminFullName, string Reason);
-
 public static class OrganizationAdminDeletedTemplate
 {
     public static (string Subject, string Html) Render(OrganizationAdminDeletedData data)

@@ -38,8 +38,13 @@
          promises that a dead or slow LLM can never fail a report, and the code that has to keep
          that promise is OpenAiCompatibleNarrativeWriter — which lives in .Api because HTTP wiring
          is a hosting concern. The other HTTP clients there are mocked rather than tested; this one
-         is not, because "returns null instead of throwing" is the guarantee itself. -->
+         is not, because "returns null instead of throwing" is the guarantee itself.
+         RedisSectorCapacityLock is the second class here for the same kind of reason: it owns the
+         holdinfo string that records a hold's owner, every ownership check in SectorService and
+         PurchaseService reads that string, and getting its format wrong fails open — see
+         Infrastructure/RedisSectorCapacityLockTests. -->
     <ProjectReference Include="..\..\services\ticketing\eTicketing.Ticketing.Api\eTicketing.Ticketing.Api.csproj" />
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Messaging\eTicketing.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

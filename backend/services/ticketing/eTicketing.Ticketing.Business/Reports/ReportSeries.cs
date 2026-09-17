@@ -3,56 +3,6 @@ using eTicketing.Ticketing.Data.Repositories;
 
 namespace eTicketing.Ticketing.Business.Reports;
 
-/// <summary>
-/// A validated report range, resolved once into every form the pipeline needs: the local dates for
-/// labels, the half-open UTC window for SQL, and the bucket unit the chart is drawn in.
-///
-/// Shared by ReportService and AnalyticsService — the AI Uvidi tab forecasts the very series the
-/// Prodaja chart draws, so the two must resolve a range identically or the forecast would continue
-/// a line the user is not looking at.
-/// </summary>
-internal readonly record struct ReportRange(
-    DateOnly From, DateOnly To, DateTime FromUtc, DateTime ToUtcExclusive, PlatformClock Clock)
-{
-    public int Days => To.DayNumber - From.DayNumber + 1;
-
-    public static ReportRange Create(DateOnly from, DateOnly to, PlatformClock clock) => new(
-        from,
-        to,
-        clock.ToUtcStartOfDay(from),
-        // Exclusive upper bound at the start of the day *after* To, so the whole of the last
-        // day is included without any 23:59:59.999 rounding games.
-        clock.ToUtcStartOfDay(to.AddDays(1)),
-        clock);
-
-    /// <summary>Any request carrying a range — ReportQuery, ReportExportQuery or InsightsQuery.</summary>
-    public static ReportRange Create(IReportRange query, PlatformClock clock)
-        => Create(query.From, query.To, clock);
-
-    /// <summary>The equal-length range immediately before this one — the growth comparison
-    /// baseline.</summary>
-    public ReportRange Preceding() => Create(From.AddDays(-Days), From.AddDays(-1), Clock);
-
-    /// <summary>Daily bars up to a fortnight, weekly up to a quarter, monthly beyond. Chosen
-    /// here rather than by the client so the PDF and all three frontends can never disagree
-    /// about what a bar means.</summary>
-    public ReportBucketUnit Unit => Days switch
-    {
-        <= 14 => ReportBucketUnit.Day,
-        <= 92 => ReportBucketUnit.Week,
-        _ => ReportBucketUnit.Month
-    };
-
-    public ReportPeriod ToPeriod() => new(From, To, Days, Unit);
-}
-
-/// <summary>
-/// Sales for one local calendar day. The Data layer cannot produce this — it has no time zone
-/// (see PlatformClock.ToLocal) — so it hands back UTC hours and ToLocalDays folds them here.
-/// </summary>
-internal readonly record struct LocalDaySales(
-    int Sold, decimal Revenue, int Cancelled, decimal CancelledAmount, int OnlineSold, int PrintedSold);
-
 /// <summary>Turning UTC-hour repository rows into the labelled local-day series that every report
 /// and the analytics blocks share.</summary>
 internal static class ReportSeries
@@ -162,24 +112,4 @@ internal static class ReportSeries
     /// <summary>Day label, always — the forecast is drawn in days no matter which unit the tab
     /// chart happens to be bucketed in.</summary>
     public static string DayLabel(DateOnly date) => Label(date, ReportBucketUnit.Day);
-}
-
-/// <summary>One day of the gap-free series the analytics blocks are computed over. Public, unlike
-/// its neighbours here, because it is the input type of ISalesForecaster/IAnomalyDetector, which
-/// the Api project has to name to register them.</summary>
-public readonly record struct DailyPoint(DateOnly Date, decimal Revenue, int Sold);
-
-/// <summary>Arithmetic shared by every report and by the analytics blocks, so a percentage means
-/// the same thing and is rounded the same way wherever it is computed.</summary>
-internal static class ReportMath
-{
-    /// <summary>Division that answers 0 instead of throwing on an empty period. Every ratio in
-    /// these reports has a legitimately-zero denominator (a range with no sales, a product with no
-    /// check-ins), so guarding at each call site would be noise.</summary>
-    public static decimal Divide(decimal numerator, decimal denominator)
-        => denominator == 0 ? 0m : numerator / denominator;
-
-    /// <summary>Percentages and averages are rounded once, here, so the clients can render what
-    /// they are given rather than each rounding a long decimal their own way.</summary>
-    public static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 }

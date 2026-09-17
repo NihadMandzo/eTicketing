@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using Mapster;
 using PaymentEntity = eTicketing.Payment.Data.Entities.Payment;
 
 namespace eTicketing.Payment.Business.Payments;
@@ -375,9 +376,7 @@ public class PaymentService : IPaymentService
         _ => PaymentStatus.Pending,
     };
 
-    private static PaymentResponse ToResponse(PaymentEntity payment) =>
-        new(payment.Id, payment.Amount, payment.Status, payment.OrderRef,
-            payment.Currency, payment.FailureCode, payment.CreatedAt);
+    private static PaymentResponse ToResponse(PaymentEntity payment) => payment.Adapt<PaymentResponse>();
 
     private static SubscriptionChargeResponse ToSubscriptionResponse(
         PaymentResponse payment, string subscriptionReference, GatewaySubscriptionResult? result) =>

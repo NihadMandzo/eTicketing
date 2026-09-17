@@ -8,6 +8,15 @@ public static class EventNames
     public const string VerificationEmailRequested = "verification-email.requested";
     public const string PaymentFailed = "payment.failed";
     public const string OrganizationCreated = "organization.created";
+
+    /// <summary>eTicketing.Identity → eTicketing.Ticketing. The organization's contact details after
+    /// any change to them, feeding the OrganizationSnapshot read model that replaced the
+    /// Ticketing→Identity HTTP call. Note this is a different thing from
+    /// <see cref="OrganizationCreated"/>, which is an email to the founding admin.</summary>
+    public const string OrganizationSnapshotChanged = "organization.changed";
+
+    /// <summary>eTicketing.Identity → eTicketing.Ticketing. Drop the organization's snapshot row.</summary>
+    public const string OrganizationDeleted = "organization.deleted";
     public const string OrganizationAdminDeleted = "organization-admin.deleted";
     public const string PasswordResetRequested = "password-reset.requested";
     public const string AdminPasswordChanged = "admin-password.changed";
@@ -28,8 +37,15 @@ public static class EventNames
 
     /// <summary>eTicketing.Catalog → eTicketing.Ticketing. Same hop as <see cref="ProductUpdated"/>
     /// and for the same reason — Catalog deletes the product but has no idea who bought a ticket
-    /// for it.</summary>
+    /// for it. Also hard-deletes Ticketing's ProductSnapshot row, which is what stops a deleted
+    /// product's sectors from going on selling forever.</summary>
     public const string ProductDeleted = "product.deleted";
+
+    /// <summary>eTicketing.Catalog → eTicketing.Ticketing. The product's current state after any
+    /// change to it, feeding the ProductSnapshot read model. Distinct from
+    /// <see cref="ProductUpdated"/> on purpose — see
+    /// <see cref="Events.ProductSnapshotChanged"/> for why one cannot serve both jobs.</summary>
+    public const string ProductSnapshotChanged = "product.changed";
 
     /// <summary>eTicketing.Ticketing → eTicketing.Notifications. One event per recipient
     /// (each affected buyer, plus the organization itself when platform staff did the deleting),

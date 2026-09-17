@@ -58,6 +58,13 @@ public class SectorServiceTests : IDisposable
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
     }
 
+    /// <summary>A plain buyer whose user id the test chooses, so it can assert which account a hold
+    /// was recorded against — BuildCaller mints a fresh NameIdentifier on every call.</summary>
+    private static ClaimsPrincipal BuyerCaller(Guid userId) =>
+        new(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(ClaimTypes.Role, "User")],
+            "TestAuth"));
+
     private ClaimsPrincipal OrgACaller() => BuildCaller("OrganizationSuperAdmin", _orgA);
     private ClaimsPrincipal OrgBCaller() => BuildCaller("OrganizationSuperAdmin", _orgB);
     private static ClaimsPrincipal PlatformStaffCaller() => BuildCaller("SuperAdmin");
@@ -499,7 +506,7 @@ public class SectorServiceTests : IDisposable
         await _sut.PublishAsync(created.Value!.Id, OrgACaller());
 
         _fixture.CapacityLock
-            .Setup(l => l.TryHoldAsync(created.Value.Id, 100, 2, null, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(l => l.TryHoldAsync(created.Value.Id, 100, 2, null, It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HoldResult(true, "hold-1", DateTime.UtcNow.AddMinutes(5)));
 
         var result = await _sut.HoldAsync(created.Value.Id, new HoldSectorRequest { Quantity = 2 }, OrgACaller());
@@ -541,7 +548,7 @@ public class SectorServiceTests : IDisposable
         var date = new DateOnly(2026, 8, 15);
 
         _fixture.CapacityLock
-            .Setup(l => l.TryHoldAsync(created.Value.Id, 300, 1, date, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(l => l.TryHoldAsync(created.Value.Id, 300, 1, date, It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HoldResult(true, "hold-2", DateTime.UtcNow.AddMinutes(5)));
 
         var result = await _sut.HoldAsync(created.Value.Id, new HoldSectorRequest { Quantity = 1, Date = date }, OrgACaller());
@@ -556,7 +563,7 @@ public class SectorServiceTests : IDisposable
         await _sut.PublishAsync(created.Value!.Id, OrgACaller());
 
         _fixture.CapacityLock
-            .Setup(l => l.TryHoldAsync(created.Value.Id, 100, 999, null, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(l => l.TryHoldAsync(created.Value.Id, 100, 999, null, It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HoldResult(false, null, null));
 
         var result = await _sut.HoldAsync(created.Value.Id, new HoldSectorRequest { Quantity = 999 }, OrgACaller());
@@ -586,12 +593,73 @@ public class SectorServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ReleaseHoldAsync_ForLiveHold_CallsCapacityLockReleaseAndSucceeds()
+    public async Task HoldAsync_RecordsTheCallingAccountAsTheHoldOwner()
     {
-        var result = await _sut.ReleaseHoldAsync("hold-1");
+        var created = await _sut.CreateAsync(SingleOccurrenceRequest(), OrgACaller());
+        await _sut.PublishAsync(created.Value!.Id, OrgACaller());
+        var buyerId = Guid.NewGuid();
+
+        _fixture.CapacityLock
+            .Setup(l => l.TryHoldAsync(
+                created.Value.Id, 100, 1, null, It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HoldResult(true, "hold-1", DateTime.UtcNow.AddMinutes(5)));
+
+        await _sut.HoldAsync(created.Value.Id, new HoldSectorRequest { Quantity = 1 }, BuyerCaller(buyerId));
+
+        // The owner is the whole point: without it a leaked hold id is enough for anyone to release
+        // or spend this reservation.
+        _fixture.CapacityLock.Verify(
+            l => l.TryHoldAsync(created.Value.Id, 100, 1, null, It.IsAny<TimeSpan>(), buyerId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // --- ReleaseHoldAsync ---
+
+    /// <summary>Points PeekAsync at a hold owned by <paramref name="ownerId"/> (null = a hold with
+    /// no recorded owner: a system hold, or one minted before the owner was recorded).</summary>
+    private void MockPeek(string holdId, Guid? ownerId) =>
+        _fixture.CapacityLock
+            .Setup(l => l.PeekAsync(holdId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HeldReservation(Guid.NewGuid(), null, 1, ownerId));
+
+    [Fact]
+    public async Task ReleaseHoldAsync_ForOwnHold_CallsCapacityLockReleaseAndSucceeds()
+    {
+        var buyerId = Guid.NewGuid();
+        MockPeek("hold-1", buyerId);
+
+        var result = await _sut.ReleaseHoldAsync("hold-1", BuyerCaller(buyerId));
 
         result.IsSuccess.Should().BeTrue();
         _fixture.CapacityLock.Verify(l => l.ReleaseAsync("hold-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReleaseHoldAsync_ForAnotherAccountsHold_DoesNotRelease_ButStillReportsSuccess()
+    {
+        MockPeek("hold-1", Guid.NewGuid());
+
+        var result = await _sut.ReleaseHoldAsync("hold-1", BuyerCaller(Guid.NewGuid()));
+
+        // Success, not 403: a distinct answer would confirm to whoever presented the id that it
+        // names a live hold. What matters is that the victim's capacity is not handed back.
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReleaseHoldAsync_ForHoldWithNoRecordedOwner_StillReleases()
+    {
+        // A hold minted by the previous deploy, before the owner was stored. Those keep arriving
+        // for the remaining five minutes of their TTL and must stay releasable, or a buyer who
+        // held a seat across the deploy cannot give it back — see RedisSectorCapacityLock's
+        // HoldInfoVersionPrefix.
+        MockPeek("legacy-hold", null);
+
+        var result = await _sut.ReleaseHoldAsync("legacy-hold", BuyerCaller(Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync("legacy-hold", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -599,10 +667,11 @@ public class SectorServiceTests : IDisposable
     {
         // Mirrors ISectorCapacityLock.ReleaseAsync's own no-op-on-unknown-holdId semantics — the
         // caller only ever wants "make sure this hold isn't holding capacity any more", never
-        // confirmation that it existed in the first place.
-        var result = await _sut.ReleaseHoldAsync(Guid.NewGuid().ToString("N"));
+        // confirmation that it existed in the first place. The loose mock's PeekAsync returns null.
+        var result = await _sut.ReleaseHoldAsync(Guid.NewGuid().ToString("N"), BuyerCaller(Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
+        _fixture.CapacityLock.Verify(l => l.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     public void Dispose() => _fixture.Dispose();

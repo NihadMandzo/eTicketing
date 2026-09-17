@@ -9,17 +9,18 @@ namespace eTicketing.Identity.Business.Organizations;
 public interface IOrganizationService
 {
     Task<Result<PagedResult<OrganizationResponse>>> GetAsync(OrganizationQuery query, CancellationToken ct = default);
-    Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Batch, internal-only lookup for eTicketing.Ticketing's Izvještaji reports — never
-    /// routed through the Gateway. Unknown ids are simply absent from the result rather than an
-    /// error: an organization deleted between a sale and the report that counts it should not fail
-    /// the whole page.</summary>
-    Task<Result<List<OrganizationInternalResponse>>> GetInternalByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
+    /// <summary>caller drives the ownership check, same rule as <see cref="GetUsersAsync"/>:
+    /// platform staff may view any organization, anyone else only their own. The back-office
+    /// shape (user count, active flag, created date) is why this needs a caller at all — the
+    /// storefront's anonymous view is <see cref="GetPublicByIdAsync"/> instead.</summary>
+    Task<Result<OrganizationResponse>> GetByIdAsync(Guid id, ClaimsPrincipal caller, CancellationToken ct = default);
 
-    /// <summary>Contact details for one organization — see <see cref="OrganizationContactResponse"/>
-    /// for why this is separate from the by-ids lookup above.</summary>
-    Task<Result<OrganizationContactResponse>> GetInternalContactAsync(Guid id, CancellationToken ct = default);
+    /// <summary>The anonymous storefront read behind GET /organizations/{id}/public. Returns
+    /// <see cref="OrganizationPublicResponse"/> — the organization's published business details
+    /// only, never the back-office fields. No caller parameter by design: this one is public.</summary>
+    Task<Result<OrganizationPublicResponse>> GetPublicByIdAsync(Guid id, CancellationToken ct = default);
+
     Task<Result<OrganizationResponse>> CreateAsync(CreateOrganizationRequest request, CancellationToken ct = default);
     Task<Result<OrganizationResponse>> UpdateAsync(Guid id, UpdateOrganizationRequest request, CancellationToken ct = default);
     Task<Result> DeleteAsync(Guid id, CancellationToken ct = default);

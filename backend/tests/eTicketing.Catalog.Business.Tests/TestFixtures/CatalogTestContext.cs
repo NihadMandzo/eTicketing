@@ -1,15 +1,17 @@
-using eTicketing.Catalog.Business.Categories;
-using eTicketing.Catalog.Business.Products;
-using eTicketing.Catalog.Business.Products.Mapping;
-using eTicketing.Catalog.Business.Recommendations;
-using eTicketing.Catalog.Data;
-using eTicketing.Catalog.Data.Repositories;
-using eTicketing.Contracts.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using eTicketing.Catalog.Business.Categories;
+using eTicketing.Catalog.Business.Products.Mapping;
+using eTicketing.Catalog.Business.Products;
+using eTicketing.Catalog.Business.Recommendations;
+using eTicketing.Catalog.Data.Repositories;
+using eTicketing.Catalog.Data;
+using eTicketing.Contracts.Events;
+using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 
 namespace eTicketing.Catalog.Business.Tests.TestFixtures;
 
@@ -81,10 +83,16 @@ public sealed class CatalogTestContext : IDisposable
     public ICategoryService CreateCategoryService() =>
         new CategoryService(CategoryRepository, ProductRepository, UnitOfWork, BlobStorage);
 
-    public IProductService CreateProductService() =>
+
+    /// <summary>The real outbox publisher over this fixture's own DbContext, for the tests that
+    /// need to see an actual OutboxMessage row rather than a satisfied mock. Every other test uses
+    /// the mock, which cannot tell a publish that writes a row from one that writes nothing.</summary>
+    public IEventPublisher OutboxPublisher => new OutboxEventPublisher<CatalogDbContext>(DbContext);
+
+    public IProductService CreateProductService(IEventPublisher? eventPublisher = null) =>
         new ProductService(
             ProductRepository, ProductImageRepository, CategoryRepository, UnitOfWork, BlobStorage,
-            EventPublisher.Object, CreateResponseFactory());
+            eventPublisher ?? EventPublisher.Object, CreateResponseFactory());
 
     public ProductResponseFactory CreateResponseFactory() => new(BlobStorage);
 

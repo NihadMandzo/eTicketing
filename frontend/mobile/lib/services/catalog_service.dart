@@ -33,7 +33,7 @@ class CatalogService {
   /// ever a handful of categories and this call should just return all of
   /// them, not the default page size of 10.
   Future<List<CategoryResponse>> getCategories() async {
-    final response = await apiClient.get('Categories', queryParameters: {'pageSize': 100});
+    final response = await apiClient.get('Categories', queryParameters: {'page': 0, 'pageSize': 100});
     if (!_isSuccess(response.statusCode)) _handleError(response);
     return PagedResult.fromJson(response.data as Map<String, dynamic>, CategoryResponse.fromJson).items;
   }

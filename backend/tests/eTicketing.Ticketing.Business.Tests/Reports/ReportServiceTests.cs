@@ -267,13 +267,8 @@ public class ReportServiceTests : IDisposable
     [Fact]
     public async Task GetSalesAsync_ForSuperAdmin_SplitsRevenueByOrganizationHighestFirst()
     {
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(
-            [
-                new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", IsActive: true),
-                new IdentityOrganizationResponse(_orgB, "Vardar Sport", "Skopje", IsActive: true),
-            ]);
+        await _fixture.SeedOrganizationSnapshotAsync(_orgA, "Sunset Events", "Mostar");
+        await _fixture.SeedOrganizationSnapshotAsync(_orgB, "Vardar Sport", "Skopje");
         SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
         SeedTicket(_sectorA, _productA, 50m, new DateTime(2026, 8, 11, 12, 0, 0, DateTimeKind.Utc));
         SeedTicket(_sectorB, _productB, 25m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
@@ -324,11 +319,12 @@ public class ReportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetSalesAsync_ForAnOrganizationIdentityCannotName_StillReportsItsSales()
+    public async Task GetSalesAsync_ForAnOrganizationWithNoSnapshot_StillReportsItsSales()
     {
-        // The fixture's IdentityClient answers with an empty list by default. Dropping the row
-        // would silently unbalance the breakdown against the headline total, so it is kept under
-        // a placeholder name — same fallback as the Organizacije tab.
+        // No snapshot row seeded, which is how a deleted organization — or one whose event has not
+        // arrived yet — reads locally. Dropping the row would silently unbalance the breakdown
+        // against the headline total, so it is kept under a placeholder name. Identical degradation
+        // to the HTTP lookup this replaced, which also answered short rather than failing.
         SeedTicket(_sectorA, _productA, 40m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
 
         var result = await _sut.GetSalesAsync(Range(), Caller("SuperAdmin"));
@@ -746,9 +742,7 @@ public class ReportServiceTests : IDisposable
         _fixture.CatalogClient
             .Setup(c => c.GetOrganizationProductStatsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CatalogOrganizationProductStats(_orgA, Total: 3, Published: 2, Draft: 1, WithoutImage: 1)]);
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", IsActive: true)]);
+        await _fixture.SeedOrganizationSnapshotAsync(_orgA, "Sunset Events", "Mostar");
         SeedTicket(_sectorA, _productA, 80m, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc));
 
         var result = await _sut.GetOrganizationsAsync(Range(), Caller("SuperAdmin"));
@@ -893,9 +887,7 @@ public class ReportServiceTests : IDisposable
             .ReturnsAsync([new CatalogProductResponse(
                 _productA, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
                 "Ljetni Festival", new DateTime(2026, 9, 10, 20, 0, 0, DateTimeKind.Utc), City.Mostar)]);
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", IsActive: true)]);
+        await _fixture.SeedOrganizationSnapshotAsync(_orgA, "Sunset Events", "Mostar");
 
         var result = await _sut.GetUpcomingEventsAsync(4, Caller("SuperAdmin"));
 

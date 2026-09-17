@@ -1,6 +1,6 @@
 /// The organizer behind a product, as shown in the "Organizator" card on
 /// EventDetailsScreen/MuseumTicketScreen/ParkingSpotScreen. Mirrors
-/// `OrganizationResponse` on the backend and
+/// `OrganizationPublicResponse` on the backend and
 /// `core/models/organization.models.ts` on the web — widen all three together.
 ///
 /// `userCount` and `isActive` are deliberately left out: they are back-office

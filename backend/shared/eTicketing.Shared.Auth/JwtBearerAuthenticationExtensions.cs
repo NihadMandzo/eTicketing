@@ -53,8 +53,16 @@ public static class JwtBearerAuthenticationExtensions
                         if (context.Request.Cookies.TryGetValue(AuthCookieNames.AccessToken, out var token))
                         {
                             context.Token = token;
+                            return Task.CompletedTask;
                         }
 
+                        // No cookie means unauthenticated — full stop. Simply returning here (or
+                        // assigning an empty token) would let JwtBearerHandler fall through to its
+                        // default Authorization: Bearer header read, since it only reaches for the
+                        // header when context.Token is null-or-empty. That fallback is exactly the
+                        // bearer-in-header path this platform replaced with httpOnly cookies, so it
+                        // has to be closed explicitly rather than left to the handler's default.
+                        context.NoResult();
                         return Task.CompletedTask;
                     }
                 };

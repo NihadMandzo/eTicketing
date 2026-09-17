@@ -1,24 +1,4 @@
 ﻿using eTicketing.Contracts.Persistence;
-using eTicketing.Ticketing.Business.Analytics;
-using eTicketing.Ticketing.Business.Analytics.Anomalies;
-using eTicketing.Ticketing.Business.Analytics.Forecasting;
-using eTicketing.Ticketing.Business.Analytics.Insights;
-using eTicketing.Ticketing.Business.Analytics.Narrative;
-using eTicketing.Ticketing.Business.Analytics.Segmentation;
-using eTicketing.Ticketing.Business.External;
-using eTicketing.Ticketing.Business.GateDevices;
-using eTicketing.Ticketing.Business.Integration;
-using eTicketing.Ticketing.Business.Purchases;
-using eTicketing.Ticketing.Business.Reports;
-using eTicketing.Ticketing.Business.Security;
-using eTicketing.Shared.TicketPdf;
-using eTicketing.Ticketing.Business.Sectors;
-using eTicketing.Ticketing.Business.TicketPrint;
-using eTicketing.Ticketing.Business.Subscriptions;
-using eTicketing.Ticketing.Business.Tickets;
-using eTicketing.Ticketing.Business.Time;
-using eTicketing.Ticketing.Data;
-using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -26,6 +6,30 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using MsOptions = Microsoft.Extensions.Options.Options;
+using eTicketing.Contracts.Events;
+using eTicketing.Shared.Messaging;
+using eTicketing.Shared.TicketPdf;
+using eTicketing.Ticketing.Business.Analytics.Anomalies;
+using eTicketing.Ticketing.Business.Analytics.Forecasting;
+using eTicketing.Ticketing.Business.Analytics.Insights;
+using eTicketing.Ticketing.Business.Analytics.Narrative;
+using eTicketing.Ticketing.Business.Analytics.Segmentation;
+using eTicketing.Ticketing.Business.Analytics;
+using eTicketing.Ticketing.Business.External;
+using eTicketing.Ticketing.Business.GateDevices;
+using eTicketing.Ticketing.Business.Integration;
+using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.ReadModels;
+using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Ticketing.Business.Sectors;
+using eTicketing.Ticketing.Business.Security;
+using eTicketing.Ticketing.Business.Subscriptions;
+using eTicketing.Ticketing.Business.TicketPrint;
+using eTicketing.Ticketing.Business.Tickets;
+using eTicketing.Ticketing.Business.Time;
+using eTicketing.Ticketing.Data.Entities;
+using eTicketing.Ticketing.Data.Repositories;
+using eTicketing.Ticketing.Data;
 
 namespace eTicketing.Ticketing.Business.Tests.TestFixtures;
 
@@ -48,6 +52,8 @@ public sealed class TicketingTestContext : IDisposable
 
     public TicketingDbContext DbContext { get; }
     public ISectorRepository SectorRepository { get; }
+    public IProductSnapshotRepository ProductSnapshotRepository { get; }
+    public IOrganizationSnapshotRepository OrganizationSnapshotRepository { get; }
     public ITicketTypeRepository TicketTypeRepository { get; }
     public ITicketRepository TicketRepository { get; }
     public ISubscriptionRepository SubscriptionRepository { get; }
@@ -56,9 +62,6 @@ public sealed class TicketingTestContext : IDisposable
     public IUnitOfWork UnitOfWork { get; }
     public Mock<ICatalogClient> CatalogClient { get; } = new();
 
-    /// <summary>Only the Izvještaji reports call Identity; every other org-scoped decision reads
-    /// the claim off the token. Mocked like every other cross-service HTTP client here.</summary>
-    public Mock<IIdentityClient> IdentityClient { get; } = new();
     public Mock<ISectorCapacityLock> CapacityLock { get; } = new();
     public Mock<IPaymentClient> PaymentClient { get; } = new();
     public Mock<IEventPublisher> EventPublisher { get; } = new();
@@ -104,6 +107,8 @@ public sealed class TicketingTestContext : IDisposable
         DbContext.Database.EnsureCreated();
 
         SectorRepository = new SectorRepository(DbContext);
+        ProductSnapshotRepository = new ProductSnapshotRepository(DbContext);
+        OrganizationSnapshotRepository = new OrganizationSnapshotRepository(DbContext);
         TicketTypeRepository = new TicketTypeRepository(DbContext);
         TicketRepository = new TicketRepository(DbContext);
         SubscriptionRepository = new SubscriptionRepository(DbContext);
@@ -115,13 +120,6 @@ public sealed class TicketingTestContext : IDisposable
             .Setup(l => l.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("test-lock-token");
 
-        // Reports label their rows with organization names, but no report *depends* on the label
-        // being resolvable — an unknown id falls back to a placeholder. Defaulting to an empty
-        // list keeps every test that isn't about labelling free of Identity setup.
-        IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-
         CatalogClient
             .Setup(c => c.GetOrganizationProductStatsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -130,7 +128,42 @@ public sealed class TicketingTestContext : IDisposable
     public TicketResponseFactory ResponseFactory => new(QrCodec);
 
     public ISectorService CreateSectorService() =>
-        new SectorService(SectorRepository, CatalogClient.Object, CapacityLock.Object, UnitOfWork);
+        new SectorService(
+            SectorRepository, ProductSnapshotRepository, CreateProductSnapshotProjector(),
+            CatalogClient.Object, CapacityLock.Object, UnitOfWork);
+
+    /// <summary>The real projector over this fixture's own context — it is a projection onto a
+    /// table, so a mock would assert nothing about whether the table ends up right.</summary>
+    public IProductSnapshotProjector CreateProductSnapshotProjector() =>
+        new ProductSnapshotProjector(
+            ProductSnapshotRepository, CatalogClient.Object, UnitOfWork,
+            NullLogger<ProductSnapshotProjector>.Instance);
+
+    /// <summary>Records a product as Published in the local read model, which is what the buy path
+    /// checks before listing, holding or selling a sector. Sector tests that are not *about* product
+    /// status call this so their sector is actually on sale.</summary>
+    public async Task<ProductSnapshot> SeedProductSnapshotAsync(
+        Guid productId, PublishStatus status = PublishStatus.Published, Guid? organizationId = null,
+        string name = "Testni proizvod", DateTime? date = null,
+        TicketingMode ticketingMode = TicketingMode.SingleOccurrence)
+    {
+        var snapshot = new ProductSnapshot
+        {
+            ProductId = productId,
+            OrganizationId = organizationId ?? Guid.NewGuid(),
+            Name = name,
+            Date = date,
+            City = City.Sarajevo,
+            Status = status,
+            TicketingMode = ticketingMode,
+            ChangedAt = Clock.GetUtcNow().UtcDateTime,
+        };
+
+        DbContext.ProductSnapshots.Add(snapshot);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        return snapshot;
+    }
 
     public ITicketTypeService CreateTicketTypeService() =>
         new TicketTypeService(SectorRepository, TicketTypeRepository, UnitOfWork);
@@ -152,8 +185,8 @@ public sealed class TicketingTestContext : IDisposable
 
     public ISubscriptionRenewalService CreateSubscriptionRenewalService() =>
         new SubscriptionRenewalService(
-            SubscriptionRepository, TicketRepository, SectorRepository, CapacityLock.Object,
-            EventPublisher.Object, UnitOfWork, QrCodec, NullLogger<SubscriptionRenewalService>.Instance);
+            SubscriptionRepository, TicketRepository, SectorRepository, ProductSnapshotRepository, CapacityLock.Object,
+            EventPublisher.Object, UnitOfWork, QrCodec, PlatformClock, NullLogger<SubscriptionRenewalService>.Instance);
 
     public ITicketValidationService CreateTicketValidationService() =>
         new TicketValidationService(
@@ -164,12 +197,43 @@ public sealed class TicketingTestContext : IDisposable
         new TicketPdfCompletionService(TicketRepository, UnitOfWork, NullLogger<TicketPdfCompletionService>.Instance);
 
     public IProductChangeNotifier CreateProductChangeNotifier() =>
-        new ProductChangeNotifier(TicketRepository, EventPublisher.Object, PlatformClock, NullLogger<ProductChangeNotifier>.Instance);
+        new ProductChangeNotifier(
+            TicketRepository, EventPublisher.Object, UnitOfWork, PlatformClock,
+            NullLogger<ProductChangeNotifier>.Instance);
 
     public IProductDeletionNotifier CreateProductDeletionNotifier() =>
         new ProductDeletionNotifier(
-            TicketRepository, IdentityClient.Object, EventPublisher.Object, PlatformClock,
+            TicketRepository, OrganizationSnapshotRepository, EventPublisher.Object, UnitOfWork, PlatformClock,
             NullLogger<ProductDeletionNotifier>.Instance);
+
+    public IOrganizationSnapshotProjector CreateOrganizationSnapshotProjector() =>
+        new OrganizationSnapshotProjector(
+            OrganizationSnapshotRepository, UnitOfWork, NullLogger<OrganizationSnapshotProjector>.Instance);
+
+    /// <summary>Records an organization in the local read model — the reports label their rows from
+    /// it, and the cancellation notice takes its refund contact from it.</summary>
+    public async Task<OrganizationSnapshot> SeedOrganizationSnapshotAsync(
+        Guid organizationId, string name = "Testna organizacija", string address = "Ferhadija 1",
+        string email = "kontakt@organizacija.ba", string phoneNumber = "+387 33 000 000",
+        string? superAdminEmail = null)
+    {
+        var snapshot = new OrganizationSnapshot
+        {
+            OrganizationId = organizationId,
+            Name = name,
+            Address = address,
+            Email = email,
+            PhoneNumber = phoneNumber,
+            SuperAdminEmail = superAdminEmail,
+            IsActive = true,
+            ChangedAt = Clock.GetUtcNow().UtcDateTime,
+        };
+
+        DbContext.OrganizationSnapshots.Add(snapshot);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        return snapshot;
+    }
 
     /// <summary>Records what the service asked to render without doing any of it, so a print test
     /// can assert on the queue hand-off and drive the renderer itself when it wants to.</summary>
@@ -188,7 +252,7 @@ public sealed class TicketingTestContext : IDisposable
             UnitOfWork, PlatformClock, NullLogger<TicketPrintRenderer>.Instance);
 
     public IReportService CreateReportService() =>
-        new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, IdentityClient.Object, PlatformClock);
+        new ReportService(TicketRepository, SectorRepository, CatalogClient.Object, OrganizationSnapshotRepository, PlatformClock);
 
     /// <summary>The AI Uvidi service with the real ML.NET components — SSA and K-Means are
     /// milliseconds on test-sized data, and stubbing them would leave the source ladder (Model /
@@ -221,23 +285,21 @@ public sealed class TicketingTestContext : IDisposable
             GateDeviceRepository, CatalogClient.Object, KeyGenerator, UnitOfWork, Clock,
             NullLogger<GateDeviceService>.Instance);
 
-    public IPurchaseService CreatePurchaseService() =>
+
+    /// <summary>The real outbox publisher over this fixture's own DbContext, for the tests that
+    /// need to see an actual OutboxMessage row rather than a satisfied mock. Every other test uses
+    /// the mock, which cannot tell a publish that writes a row from one that writes nothing.</summary>
+    public IEventPublisher OutboxPublisher => new OutboxEventPublisher<TicketingDbContext>(DbContext);
+
+    public IPurchaseService CreatePurchaseService(IEventPublisher? eventPublisher = null) =>
         new PurchaseService(
-            SectorRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
-            EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock, NullLogger<PurchaseService>.Instance);
+            SectorRepository, ProductSnapshotRepository, TicketRepository, SubscriptionRepository, CapacityLock.Object, PaymentClient.Object,
+            eventPublisher ?? EventPublisher.Object, UnitOfWork, QrCodec, ResponseFactory, PlatformClock,
+            NullLogger<PurchaseService>.Instance);
 
     public void Dispose()
     {
         DbContext.Dispose();
         _connection.Dispose();
     }
-}
-
-/// <summary>The real queue is a Channel drained by a hosted service; tests only need to know which
-/// batch ids were handed to it.</summary>
-public sealed class RecordingTicketPrintQueue : ITicketPrintQueue
-{
-    public List<Guid> Enqueued { get; } = [];
-
-    public void Enqueue(Guid batchId) => Enqueued.Add(batchId);
 }

@@ -27,6 +27,17 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// ProductService.ToResponse's ImageUrls and the image upload/delete/product-delete paths.</summary>
     Task<Product?> GetByIdWithCategoryAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>The read-only sibling of <see cref="GetByIdWithCategoryAsync"/>, for the three
+    /// callers that only shape a response out of it: ProductService.GetByIdAsync,
+    /// ProductService.GetInternalAsync and RecommendationService's anchor lookup.
+    ///
+    /// Two methods rather than AsNoTracking on the one, because the other five callers write
+    /// through the instance they get back. UploadImageAsync is the sharp case: it adds a
+    /// ProductImage and relies on EF relationship fix-up to append it to the loaded Images
+    /// collection before mapping the response — untracked, the upload would answer with a product
+    /// missing the image it just accepted.</summary>
+    Task<Product?> GetByIdWithCategoryNoTrackingAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Batch form of <see cref="GetByIdWithCategoryAsync"/> without Images — backs the
     /// internal POST /internal/products/by-ids lookup eTicketing.Ticketing uses to label the
     /// organizer's gate-validation list. Images are deliberately not included: that caller only
@@ -62,9 +73,3 @@ public interface IProductRepository : IRepository<Product, Guid>
     /// whatever the catalogue's size.</summary>
     Task<List<OrganizationProductStats>> GetOrganizationStatsAsync(CancellationToken ct = default);
 }
-
-/// <summary>Projection, not an entity — catalogue counts for one organization.
-/// <paramref name="WithoutImage"/> counts products with no gallery photo at all, which is the
-/// operational gap an Admin scans that column for.</summary>
-public record OrganizationProductStats(
-    Guid OrganizationId, int Total, int Published, int Draft, int WithoutImage);

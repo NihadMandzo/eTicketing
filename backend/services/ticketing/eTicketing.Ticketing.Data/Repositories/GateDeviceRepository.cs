@@ -29,7 +29,7 @@ public class GateDeviceRepository : Repository<GateDevice, Guid>, IGateDeviceRep
             .Where(d => organizationId == null || d.OrganizationId == organizationId)
             .Where(d => productId == null || d.ProductId == productId)
             .OrderByDescending(d => d.CreatedAt)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<GateDevice?> GetByIdWithSectorsAsync(Guid id, CancellationToken ct = default)
         => Query()

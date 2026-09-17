@@ -2,8 +2,6 @@ using System.Net;
 
 namespace eTicketing.Notifications.Email.Templates;
 
-public sealed record VerificationEmailData(string FirstName, string VerificationCode);
-
 public static class VerificationEmailTemplate
 {
     public static (string Subject, string Html) Render(VerificationEmailData data)

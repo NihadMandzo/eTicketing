@@ -1,6 +1,6 @@
 /**
  * The organizer behind a product, as shown in the "Organizator" card on the
- * product-details page. Mirrors `OrganizationResponse` on the backend and
+ * product-details page. Mirrors `OrganizationPublicResponse` on the backend and
  * `lib/models/responses/organization_response.dart` on mobile — widen all three
  * together.
  *

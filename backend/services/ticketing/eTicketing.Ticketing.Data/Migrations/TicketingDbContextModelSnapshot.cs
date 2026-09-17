@@ -22,6 +22,41 @@ namespace eTicketing.Ticketing.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("eTicketing.Contracts.Messaging.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RoutingKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("OutboxMessages");
+                });
+
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.GateDevice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -108,6 +143,93 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.ToTable("GateDeviceSectors");
                 });
 
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.OrganizationSnapshot", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("SuperAdminEmail")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("OrganizationId");
+
+                    b.ToTable("OrganizationSnapshots");
+                });
+
+            modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.ProductSnapshot", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("City")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TicketingMode")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ProductId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ProductSnapshots");
+                });
+
             modelBuilder.Entity("eTicketing.Ticketing.Data.Entities.Sector", b =>
                 {
                     b.Property<Guid>("Id")
@@ -154,6 +276,8 @@ namespace eTicketing.Ticketing.Data.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductId", "Status");
 
                     b.HasIndex("ProductId", "PeriodYear", "PeriodMonth");
 
@@ -316,9 +440,16 @@ namespace eTicketing.Ticketing.Data.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("ValidatedAt")
+                        .HasFilter("[ValidatedAt] IS NOT NULL");
+
+                    b.HasIndex("CreatedAt", "Status");
+
                     b.HasIndex("ProductId", "SerialNumber")
                         .IsUnique()
                         .HasFilter("[SerialNumber] IS NOT NULL");
+
+                    b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("Tickets");
                 });
