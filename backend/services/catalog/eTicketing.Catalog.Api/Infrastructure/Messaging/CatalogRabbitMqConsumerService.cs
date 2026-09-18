@@ -26,7 +26,8 @@ namespace eTicketing.Catalog.Api.Infrastructure.Messaging;
 /// </summary>
 public sealed class CatalogRabbitMqConsumerService : BackgroundService
 {
-    private const string QueueName = "catalog.recommendations";
+    /// <summary>Also the consumer name the inbox records processed messages under.</summary>
+    public const string QueueName = "catalog.recommendations";
     private const string DeadLetterQueueName = "catalog.recommendations.deadletter";
     private const string RedeliveredHeader = "x-catalog-redelivered";
 

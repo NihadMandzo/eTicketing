@@ -20,17 +20,35 @@ public class DeduplicatingDeliveryHandlerTests
 {
     private readonly Mock<IEmailSender> _emailSender = new();
     private readonly Mock<IProcessedMessageStore> _store = new();
-    private readonly HashSet<string> _processedKeys = [];
     private readonly DeduplicatingDeliveryHandler _sut;
+
+    /// <summary>What each key holds, so a test can deliver the same event twice and watch the second
+    /// one be recognised rather than scripting the answer it expects. Mirrors the Redis key: absent,
+    /// claimed, or processed.</summary>
+    private readonly Dictionary<string, string> _keys = [];
 
     public DeduplicatingDeliveryHandlerTests()
     {
-        // Backed by a real set, so a test can deliver the same event twice and watch the second one
-        // be recognised, rather than scripting the answer it expects.
-        _store.Setup(s => s.IsProcessedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string key, CancellationToken _) => _processedKeys.Contains(key));
+        _store.Setup(s => s.TryClaimAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, TimeSpan _, CancellationToken _) =>
+            {
+                if (_keys.TryGetValue(key, out var held))
+                    return held == "processing" ? DeliveryClaim.InProgress : DeliveryClaim.AlreadyProcessed;
+
+                _keys[key] = "processing";
+                return DeliveryClaim.Claimed;
+            });
+
         _store.Setup(s => s.MarkProcessedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback((string key, CancellationToken _) => _processedKeys.Add(key))
+            .Callback((string key, CancellationToken _) => _keys[key] = "done")
+            .Returns(Task.CompletedTask);
+
+        _store.Setup(s => s.ReleaseClaimAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((string key, CancellationToken _) =>
+            {
+                if (_keys.TryGetValue(key, out var held) && held == "processing")
+                    _keys.Remove(key);
+            })
             .Returns(Task.CompletedTask);
 
         var dispatcher = new NotificationDispatcher(
@@ -59,7 +77,8 @@ public class DeduplicatingDeliveryHandlerTests
 
         handled.Should().BeTrue();
         VerifySent(Times.Once());
-        _processedKeys.Should().ContainSingle().Which.Should().Be("message:msg-1");
+        _keys.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new KeyValuePair<string, string>("message:msg-1", "done"));
     }
 
     [Fact]
@@ -98,9 +117,14 @@ public class DeduplicatingDeliveryHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_MarksTheMessageOnlyAfterTheSendSucceeded()
+    public async Task HandleAsync_ClaimsTheKeyBeforeSendingAndMarksItAfterwards()
     {
+        // The order is the whole guarantee: claiming after the send would let a second replica send
+        // alongside this one, and marking before it would lose the email if the send failed.
         var order = new List<string>();
+        _store.Setup(s => s.TryClaimAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("claim"))
+            .ReturnsAsync(DeliveryClaim.Claimed);
         _emailSender.Setup(s => s.SendAsync(It.IsAny<EmailMessage>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("send"))
             .Returns(Task.CompletedTask);
@@ -110,21 +134,38 @@ public class DeduplicatingDeliveryHandlerTests
 
         await _sut.HandleAsync(EventNames.VerificationEmailRequested, "msg-1", VerificationBody());
 
-        order.Should().Equal("send", "mark");
+        order.Should().Equal("claim", "send", "mark");
     }
 
     [Fact]
-    public async Task HandleAsync_WhenTheSendFails_DoesNotMarkTheMessageSoTheRetryStillSends()
+    public async Task HandleAsync_WhileAnotherConsumerIsSendingTheSameMessage_AsksToBeRetriedInsteadOfSending()
     {
-        // Marking before a failed send would have the retry ladder skip the message as "already
-        // processed" — the email would be lost, not merely late.
-        _emailSender.Setup(s => s.SendAsync(It.IsAny<EmailMessage>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("Brevo nedostupan"));
+        // Two replicas handed copies of one message. Skipping here would gamble that the other one's
+        // send succeeds; if it fails, nobody would ever send the email.
+        _keys["message:msg-1"] = "processing";
+
+        var handle = () => _sut.HandleAsync(EventNames.VerificationEmailRequested, "msg-1", VerificationBody());
+
+        await handle.Should().ThrowAsync<DeliveryInProgressException>();
+        VerifySent(Times.Never());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenTheSendFails_ReleasesTheClaimSoTheRetryCanSendIt()
+    {
+        _emailSender.SetupSequence(s => s.SendAsync(It.IsAny<EmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Brevo nedostupan"))
+            .Returns(Task.CompletedTask);
 
         var handle = () => _sut.HandleAsync(EventNames.VerificationEmailRequested, "msg-1", VerificationBody());
 
         await handle.Should().ThrowAsync<HttpRequestException>();
-        _processedKeys.Should().BeEmpty();
+        _keys.Should().BeEmpty("a claim left behind would stall the retry until its lease expired");
+
+        var retried = await handle();
+
+        retried.Should().BeTrue();
+        VerifySent(Times.Exactly(2));
     }
 
     [Fact]
@@ -134,14 +175,14 @@ public class DeduplicatingDeliveryHandlerTests
         var handle = () => _sut.HandleAsync("nepoznat.dogadjaj", "msg-1", "{}"u8.ToArray());
 
         await handle.Should().ThrowAsync<PoisonMessageException>();
-        _processedKeys.Should().BeEmpty();
+        _keys.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task HandleAsync_WhenTheStoreCannotBeRead_SendsTheEmailAnyway()
+    public async Task HandleAsync_WhenTheClaimCannotBeTaken_SendsTheEmailAnyway()
     {
         // Fails open: a Redis outage must not block verification codes and purchase confirmations.
-        _store.Setup(s => s.IsProcessedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.TryClaimAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TimeoutException("Redis nedostupan"));
 
         var handled = await _sut.HandleAsync(EventNames.VerificationEmailRequested, "msg-1", VerificationBody());
@@ -164,12 +205,27 @@ public class DeduplicatingDeliveryHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_WhenReleasingTheClaimFails_StillReportsTheOriginalSendFailure()
+    {
+        // The send's exception is what the consumer routes on; a failed release must not replace it.
+        _emailSender.Setup(s => s.SendAsync(It.IsAny<EmailMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Brevo nedostupan"));
+        _store.Setup(s => s.ReleaseClaimAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("Redis nedostupan"));
+
+        var handle = () => _sut.HandleAsync(EventNames.VerificationEmailRequested, "msg-1", VerificationBody());
+
+        await handle.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
     public async Task HandleAsync_WithNoMessageId_SendsWithoutTouchingTheStore()
     {
         await _sut.HandleAsync(EventNames.VerificationEmailRequested, messageId: null, VerificationBody());
 
         VerifySent(Times.Once());
-        _store.Verify(s => s.IsProcessedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(
+            s => s.TryClaimAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
         _store.Verify(s => s.MarkProcessedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

@@ -115,6 +115,19 @@ public sealed class RabbitMqConsumerService : BackgroundService
             await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, messageId, delivery.Body, retryCount: null, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
+        // Not a failure: another consumer holds the claim on this delivery and is sending it right
+        // now. It takes the same retry ladder as anything else, but at information level, because
+        // nothing went wrong — see DeliveryInProgressException.
+        catch (DeliveryInProgressException ex)
+        {
+            var retryCount = ReadRetryCount(delivery) + 1;
+            var targetQueue = RetryQueueNames.ForAttempt(retryCount);
+            _logger.LogInformation(
+                "{Message} Ponovni pokušaj u redu '{Queue}' (pokušaj {RetryCount}).",
+                ex.Message, targetQueue, retryCount);
+            await RepublishAsync(channel, targetQueue, routingKey, messageId, delivery.Body, retryCount, ct);
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+        }
         catch (Exception ex)
         {
             var retryCount = ReadRetryCount(delivery) + 1;

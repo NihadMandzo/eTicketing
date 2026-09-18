@@ -23,7 +23,12 @@ namespace eTicketing.Shared.Messaging;
 /// <para><b>Anything outside the database is outside the transaction.</b> A handler that also
 /// touches Redis or calls another service does that part immediately and cannot have it rolled
 /// back. Such a step has to be safe to repeat on its own, as it already had to be before the inbox
-/// existed.</para>
+/// existed. It also costs something the other direction: the transaction — and every lock it holds,
+/// including the one on its own record's key — stays open for as long as that call takes, so a
+/// degraded Redis or a slow HTTP hop now lengthens a database transaction that used to have
+/// committed already. Keep such calls short, and where a step cannot be made cleanly repeatable, run
+/// it outside the inbox instead, the way TicketingMessageRouter removes a deleted product's snapshot
+/// before entering it.</para>
 ///
 /// <para>Generic over the context for the same reason <see cref="OutboxEventPublisher{TContext}"/>
 /// is: DI resolves the service's own scoped context, which the handler's repositories share.</para>

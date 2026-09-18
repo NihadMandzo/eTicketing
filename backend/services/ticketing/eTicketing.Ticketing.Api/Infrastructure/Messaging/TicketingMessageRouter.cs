@@ -23,19 +23,29 @@ public static class TicketingMessageRouter
     /// failed would roll the removal back with it, and a deleted product would stay on sale until
     /// someone replayed the message from the dead-letter queue. Outside, the removal is simply
     /// repeated on a redelivery, which is harmless: removing a snapshot that is already gone does
-    /// nothing.</para>
+    /// nothing. It is also why that event never reaches <see cref="HandleAsync"/>: its two halves are
+    /// dispatched from here, off one parse of the payload.</para>
     /// </summary>
     public static async Task<bool> RouteAsync(
         IServiceProvider services, string routingKey, string? messageId, ReadOnlyMemory<byte> body,
         CancellationToken ct)
     {
+        var inbox = services.GetRequiredService<IInbox>();
+
         if (routingKey == EventNames.ProductDeleted)
         {
             var deleted = Deserialize<ProductDeleted>(body, routingKey);
             await services.GetRequiredService<IProductSnapshotProjector>().RemoveAsync(deleted.ProductId, ct);
+
+            // Handled here rather than in HandleAsync so the payload is parsed once, not once per half.
+            return await inbox.ProcessOnceAsync(
+                messageId,
+                TicketingRabbitMqConsumerService.QueueName,
+                handlerCt => services.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(deleted, handlerCt),
+                ct);
         }
 
-        return await services.GetRequiredService<IInbox>().ProcessOnceAsync(
+        return await inbox.ProcessOnceAsync(
             messageId,
             TicketingRabbitMqConsumerService.QueueName,
             handlerCt => HandleAsync(services, routingKey, body, handlerCt),
@@ -60,12 +70,6 @@ public static class TicketingMessageRouter
             case EventNames.ProductSnapshotChanged:
                 var snapshot = Deserialize<ProductSnapshotChanged>(body, routingKey);
                 await services.GetRequiredService<IProductSnapshotProjector>().ApplyAsync(snapshot, ct);
-                break;
-
-            case EventNames.ProductDeleted:
-                // The snapshot was already removed in RouteAsync — see there for why not here.
-                var productDeleted = Deserialize<ProductDeleted>(body, routingKey);
-                await services.GetRequiredService<IProductDeletionNotifier>().NotifyAsync(productDeleted, ct);
                 break;
 
             case EventNames.OrganizationSnapshotChanged:

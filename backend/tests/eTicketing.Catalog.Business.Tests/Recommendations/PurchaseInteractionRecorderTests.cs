@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Business.Recommendations;
+using eTicketing.Catalog.Api.Infrastructure.Messaging;
 using eTicketing.Catalog.Business.Tests.TestFixtures;
 using eTicketing.Catalog.Data;
 using eTicketing.Catalog.Data.Entities;
@@ -15,6 +16,10 @@ namespace eTicketing.Catalog.Business.Tests.Recommendations;
 /// </summary>
 public class PurchaseInteractionRecorderTests : IDisposable
 {
+    /// <summary>The queue name the consumer records processed messages under — taken from the
+    /// consumer itself rather than repeated here, so the two cannot drift apart.</summary>
+    private const string Consumer = CatalogRabbitMqConsumerService.QueueName;
+
     private readonly CatalogTestContext _fixture = new();
     private readonly PurchaseInteractionRecorder _sut;
 
@@ -74,9 +79,9 @@ public class PurchaseInteractionRecorderTests : IDisposable
         var inbox = new TransactionalInbox<CatalogDbContext>(_fixture.DbContext);
         var purchase = PurchaseOf(_product);
 
-        var first = await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(purchase, ct));
+        var first = await inbox.ProcessOnceAsync("purchase-1", Consumer, ct => _sut.RecordAsync(purchase, ct));
         _fixture.DbContext.ChangeTracker.Clear();
-        var repeat = await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(purchase, ct));
+        var repeat = await inbox.ProcessOnceAsync("purchase-1", Consumer, ct => _sut.RecordAsync(purchase, ct));
 
         first.Should().BeTrue();
         repeat.Should().BeFalse();
@@ -90,9 +95,9 @@ public class PurchaseInteractionRecorderTests : IDisposable
         // A buyer who really did buy twice is a stronger signal, and must stay one.
         var inbox = new TransactionalInbox<CatalogDbContext>(_fixture.DbContext);
 
-        await inbox.ProcessOnceAsync("purchase-1", "catalog.recommendations", ct => _sut.RecordAsync(PurchaseOf(_product), ct));
+        await inbox.ProcessOnceAsync("purchase-1", Consumer, ct => _sut.RecordAsync(PurchaseOf(_product), ct));
         _fixture.DbContext.ChangeTracker.Clear();
-        await inbox.ProcessOnceAsync("purchase-2", "catalog.recommendations", ct => _sut.RecordAsync(PurchaseOf(_product), ct));
+        await inbox.ProcessOnceAsync("purchase-2", Consumer, ct => _sut.RecordAsync(PurchaseOf(_product), ct));
 
         var history = await _fixture.UserInteractionRepository.GetByUserAsync(_buyer);
         history.Should().ContainSingle().Which.Count.Should().Be(2);
