@@ -32,5 +32,8 @@ public class CatalogDbContext : DbContext, IUnitOfWork
         // identical.
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new InboxMessageConfiguration());
+        // Lives in eTicketing.Contracts, so the assembly scan above does not reach it. Applied
+        // explicitly here rather than copied, so all three services' outbox tables stay identical.
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
     }
 }

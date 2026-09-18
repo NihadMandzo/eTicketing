@@ -43,16 +43,7 @@ jobs:
 
       - name: Deploy to Container App
         run: |
-          # GATEWAY_INTERNAL_URL replaces the old NG_APP_API_BASE_URL build arg, and is set here
-          # rather than baked in at build time on purpose: the browser no longer calls the Gateway
-          # directly, it calls this app's own /api, which server.ts proxies onward. That makes the
-          # two same-origin, which is what allows SameSite=Strict session cookies.
-          #
-          # Point the secret at the Gateway container app. Its *internal* FQDN is the right answer
-          # when both apps share an environment — the hop never leaves Azure's network — and the
-          # public one works too if they do not.
           az containerapp update \
             -n web \
             -g eticketing-dev \
             --image ${{ steps.acr.outputs.server }}/web:${{ github.sha }} \
-            --set-env-vars GATEWAY_INTERNAL_URL="${{ secrets.GATEWAY_INTERNAL_URL }}"
