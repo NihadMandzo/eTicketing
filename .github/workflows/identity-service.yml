@@ -43,5 +43,5 @@ jobs:
           az containerapp update \
             -n identity-service \
             -g eticketing-dev \
-            --image ${{ steps.acr.outputs.server }}/identity:${{ github.sha }} \
+            --image ${{ steps.acr.outputs.server }}/identity:${{ github.sha }} 
             

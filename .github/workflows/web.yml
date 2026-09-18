@@ -46,4 +46,4 @@ jobs:
           az containerapp update \
             -n web \
             -g eticketing-dev \
-            --image ${{ steps.acr.outputs.server }}/web:${{ github.sha }} \
+            --image ${{ steps.acr.outputs.server }}/web:${{ github.sha }} 
