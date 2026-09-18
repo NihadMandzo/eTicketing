@@ -40,15 +40,8 @@ jobs:
 
       - name: Deploy to Container App
         run: |
-          # ForwardedHeaders__ForwardLimit is the trust boundary for the per-IP login/email rate
-          # limiter, and it has to be set here because it differs per deployment: local compose is
-          # one hop and uses the code's default of 1. Production is sized to its *shortest* chain,
-          # the Flutter clients' two (ingress -> Gateway -> identity), not the web tier's three.
-          # A higher value lets a caller on the shorter path prepend a forged X-Forwarded-For entry
-          # and be believed; the cost of 2 is that browser users are bucketed by an internal proxy
-          # address and share one limit between them. See ForwardedHeadersExtensions.
           az containerapp update \
             -n identity-service \
             -g eticketing-dev \
             --image ${{ steps.acr.outputs.server }}/identity:${{ github.sha }} \
-            --set-env-vars ForwardedHeaders__ForwardLimit=2
+            
