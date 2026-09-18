@@ -40,9 +40,7 @@ public class AnalyticsServiceTests : IDisposable
         _fixture.CatalogClient
             .Setup(c => c.GetProductsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _fixture.IdentityClient
-            .Setup(c => c.GetOrganizationsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new IdentityOrganizationResponse(_orgA, "Sunset Events", "Mostar", true)]);
+        _fixture.SeedOrganizationSnapshotAsync(_orgA, "Sunset Events", "Mostar").GetAwaiter().GetResult();
 
         _sectorA = SeedSector(_orgA, _productA);
         _sectorB = SeedSector(_orgB, _productB);

@@ -29,7 +29,7 @@ export class CatalogService {
    */
   getCategories(): Observable<Category[]> {
     return this.http
-      .get<PagedResult<Category>>(`${this.baseUrl}/categories`, { params: { pageSize: '100' } })
+      .get<PagedResult<Category>>(`${this.baseUrl}/categories`, { params: { page: '0', pageSize: '100' } })
       .pipe(map((result) => result.items.map(normalizeCategory)));
   }
 

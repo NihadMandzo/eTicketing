@@ -1,13 +1,14 @@
-using eTicketing.Contracts.Persistence;
-using eTicketing.Payment.Business.Payments;
-using eTicketing.Payment.Business.Payments.Gateways;
-using eTicketing.Payment.Business.Payments.Webhooks;
-using eTicketing.Payment.Data;
-using eTicketing.Payment.Data.Repositories;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Stripe;
+using eTicketing.Contracts.Persistence;
+using eTicketing.Payment.Business.Payments.Gateways;
+using eTicketing.Payment.Business.Payments.Webhooks;
+using eTicketing.Payment.Business.Payments;
+using eTicketing.Payment.Data.Repositories;
+using eTicketing.Payment.Data;
+using eTicketing.Shared.Messaging;
 
 namespace eTicketing.Payment.Api.Infrastructure;
 
@@ -51,7 +52,11 @@ public static class PaymentServiceCollectionExtensions
         });
 
         builder.Services.AddSingleton<IStripeSignatureVerifier, StripeSignatureVerifier>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Direct to the broker, no outbox — deliberately. StripeWebhookService publishes *before*
+        // it records the delivery, so a failure means Stripe redelivers the whole webhook and the
+        // event is produced again. An outbox would invert that ordering and break the property it
+        // relies on. See MessagingServiceCollectionExtensions.AddDirectMessaging.
+        builder.Services.AddDirectMessaging(builder.Configuration);
         builder.Services.AddScoped<IStripeWebhookService, StripeWebhookService>();
         builder.Services.AddScoped<IPaymentService, PaymentService>();
         builder.Services.AddValidatorsFromAssembly(typeof(IPaymentService).Assembly);

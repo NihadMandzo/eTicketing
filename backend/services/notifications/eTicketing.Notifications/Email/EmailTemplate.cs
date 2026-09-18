@@ -9,5 +9,6 @@ public enum EmailTemplate
     AdminPasswordChanged,
     TicketsReady,
     ProductChanged,
-    ProductDeleted
+    ProductDeleted,
+    PaymentFailed
 }

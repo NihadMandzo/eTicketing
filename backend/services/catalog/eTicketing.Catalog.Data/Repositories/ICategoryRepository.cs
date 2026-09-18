@@ -12,4 +12,10 @@ public interface ICategoryRepository : IRepository<Category, int>
     /// eTicketing.Identity.Data.Repositories.IOrganizationRepository.SearchAsync for the same
     /// pattern in the sibling service.</summary>
     Task<PagedResult<Category>> SearchAsync(BaseSearchObject query, CancellationToken ct = default);
+
+    /// <summary>Case-insensitive name-uniqueness check, mirroring
+    /// eTicketing.Identity's IUserRepository.ExistsByEmailOrUsernameAsync.</summary>
+    /// <param name="excludeId">The category being edited, so renaming it to its own name is not a
+    /// conflict with itself. Omit when creating.</param>
+    Task<bool> ExistsByNameAsync(string name, int? excludeId = null, CancellationToken ct = default);
 }

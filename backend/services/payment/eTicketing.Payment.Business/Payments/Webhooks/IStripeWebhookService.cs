@@ -2,14 +2,6 @@ using eTicketing.Contracts.Results;
 
 namespace eTicketing.Payment.Business.Payments.Webhooks;
 
-/// <summary>Mirrors the per-service inline IEventPublisher convention used by
-/// eTicketing.Ticketing's PurchaseService and eTicketing.Identity's AuthService -- duplicated by
-/// design rather than promoted to Contracts (see RabbitMqEventPublisher's own doc comment).</summary>
-public interface IEventPublisher
-{
-    Task PublishAsync<T>(string routingKey, T message, CancellationToken ct = default);
-}
-
 public interface IStripeWebhookService
 {
     /// <summary>

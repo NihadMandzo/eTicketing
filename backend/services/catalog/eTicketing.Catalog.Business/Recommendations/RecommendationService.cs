@@ -1,11 +1,12 @@
 using System.Security.Claims;
 using eTicketing.Catalog.Business.Products;
 using eTicketing.Catalog.Business.Products.Mapping;
-using eTicketing.Catalog.Business.Security;
+using eTicketing.Contracts.Security;
 using eTicketing.Catalog.Data.Entities;
 using eTicketing.Catalog.Data.Repositories;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
+using Mapster;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -117,7 +118,7 @@ public class RecommendationService : IRecommendationService
     public async Task<Result<List<ProductResponse>>> GetSimilarAsync(
         Guid productId, SimilarProductsQuery query, CancellationToken ct = default)
     {
-        var anchor = await _products.GetByIdWithCategoryAsync(productId, ct);
+        var anchor = await _products.GetByIdWithCategoryNoTrackingAsync(productId, ct);
         if (anchor is null || anchor.Status != PublishStatus.Published)
             return Result<List<ProductResponse>>.Failure(Error.NotFound("product.not_found", "Proizvod nije pronađen."));
 
@@ -408,6 +409,5 @@ public class RecommendationService : IRecommendationService
         totals.Count == 0 ? 1.0 : Math.Max(1.0, totals.Values.Max());
 
     private static ModelSnapshotResponse ToSnapshotResponse(RecommendationModelSnapshot snapshot) =>
-        new(snapshot.Id, snapshot.TrainedAt, snapshot.InteractionCount, snapshot.UserCount,
-            snapshot.ProductCount, snapshot.TrainingDurationMs, snapshot.IsActive);
+        snapshot.Adapt<ModelSnapshotResponse>();
 }

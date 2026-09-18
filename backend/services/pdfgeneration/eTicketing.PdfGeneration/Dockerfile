@@ -2,11 +2,13 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY shared/eTicketing.Contracts/*.csproj shared/eTicketing.Contracts/
+COPY shared/eTicketing.Shared.Messaging/*.csproj shared/eTicketing.Shared.Messaging/
 COPY shared/eTicketing.Shared.TicketPdf/*.csproj shared/eTicketing.Shared.TicketPdf/
 COPY services/pdfgeneration/eTicketing.PdfGeneration/*.csproj services/pdfgeneration/eTicketing.PdfGeneration/
 RUN dotnet restore services/pdfgeneration/eTicketing.PdfGeneration/eTicketing.PdfGeneration.csproj
 
 COPY shared/eTicketing.Contracts/ shared/eTicketing.Contracts/
+COPY shared/eTicketing.Shared.Messaging/ shared/eTicketing.Shared.Messaging/
 COPY shared/eTicketing.Shared.TicketPdf/ shared/eTicketing.Shared.TicketPdf/
 COPY services/pdfgeneration/ services/pdfgeneration/
 RUN dotnet publish services/pdfgeneration/eTicketing.PdfGeneration/eTicketing.PdfGeneration.csproj -c Release -o /app

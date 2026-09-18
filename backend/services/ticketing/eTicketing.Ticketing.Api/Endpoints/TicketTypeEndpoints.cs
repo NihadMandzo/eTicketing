@@ -16,9 +16,12 @@ public static class TicketTypeEndpoints
         group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
     }
 
-    private static async Task<IResult> GetBySector(Guid sectorId, ITicketTypeService service, CancellationToken ct)
+    // AllowAnonymous, but the handler still reads http.User: UseAuthentication populates it from
+    // the auth cookie whatever the endpoint's authorization requirements are, so a signed-in
+    // organizer is recognized here and can read their own Draft sector's tiers.
+    private static async Task<IResult> GetBySector(Guid sectorId, ITicketTypeService service, HttpContext http, CancellationToken ct)
     {
-        var result = await service.GetBySectorAsync(sectorId, ct);
+        var result = await service.GetBySectorAsync(sectorId, http.User, ct);
         return result.ToHttpResult();
     }
 

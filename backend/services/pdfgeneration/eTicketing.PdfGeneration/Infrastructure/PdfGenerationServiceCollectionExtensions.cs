@@ -1,11 +1,9 @@
+using QuestPDF.Infrastructure;
 using eTicketing.PdfGeneration.Documents;
-using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Messaging;
 using eTicketing.PdfGeneration.Options;
+using eTicketing.Shared.Messaging;
 using eTicketing.Shared.TicketPdf;
-using Microsoft.Extensions.Http.Resilience;
-using Polly;
-using QuestPDF.Infrastructure;
 
 namespace eTicketing.PdfGeneration.Infrastructure;
 
@@ -32,18 +30,12 @@ public static class PdfGenerationServiceCollectionExtensions
         builder.Services.AddOptions<TicketSupportOptions>()
             .Bind(builder.Configuration.GetSection(TicketSupportOptions.SectionName));
 
-        // Retry + timeout, no circuit breaker: this is an async consumer with its own backoff
-        // ladder behind it, not a synchronous critical path that needs to fail fast.
-        builder.Services.AddHttpClient<ICatalogClient, HttpCatalogClient>(c =>
-                c.BaseAddress = new Uri(builder.Configuration["Services:Catalog"]!))
-            .AddResilienceHandler("catalog-pipeline", pb =>
-            {
-                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 3 });
-                pb.AddTimeout(TimeSpan.FromSeconds(5));
-            });
-
+        // No HTTP client of any kind here any more: this service talks to the broker and to blob
+        // storage, and nothing else. The product details the sheet needs arrive on TicketPurchased.
         builder.Services.AddSingleton<ITicketPdfGenerator, TicketPdfGenerator>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Direct to the broker, no outbox — this service has no database to put one in. It
+        // republishes from a message it is still holding, so a failure nacks and redelivers.
+        builder.Services.AddDirectMessaging(builder.Configuration);
         builder.Services.AddSingleton<TicketPurchasedDispatcher>();
         builder.Services.AddHostedService<RabbitMqConsumerService>();
 

@@ -47,4 +47,14 @@ public class Sector : BaseEntity
     // see TicketType's own doc comment. Empty for most Sectors, which keep today's single-price
     // behavior unchanged.
     public ICollection<TicketType> TicketTypes { get; set; } = new List<TicketType>();
+
+    /// <summary>The Draft → Published transition, named. Idempotent: publishing an already-published
+    /// sector is what a double-click on the button does, and it has always been a no-op success.
+    ///
+    /// <para>Unlike <see cref="Subscription"/>, Status keeps its public setter here — it has one
+    /// legal transition and no other field that has to move with it, so sealing it would cost every
+    /// object initializer in the seeders and tests for no invariant actually at risk. What this buys
+    /// is a place for a future rule to live (a sector with no ticket types, say) instead of that
+    /// rule landing in whichever service happened to need it.</para></summary>
+    public void Publish() => Status = PublishStatus.Published;
 }

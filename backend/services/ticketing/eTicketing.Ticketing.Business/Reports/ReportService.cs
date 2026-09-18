@@ -2,8 +2,10 @@
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
+using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
 using static eTicketing.Ticketing.Business.Reports.ReportMath;
 
@@ -15,20 +17,20 @@ public class ReportService : IReportService
     private readonly ITicketRepository _tickets;
     private readonly ISectorRepository _sectors;
     private readonly ICatalogClient _catalog;
-    private readonly IIdentityClient _identity;
+    private readonly IOrganizationSnapshotRepository _organizations;
     private readonly PlatformClock _clock;
 
     public ReportService(
         ITicketRepository tickets,
         ISectorRepository sectors,
         ICatalogClient catalog,
-        IIdentityClient identity,
+        IOrganizationSnapshotRepository organizations,
         PlatformClock clock)
     {
         _tickets = tickets;
         _sectors = sectors;
         _catalog = catalog;
-        _identity = identity;
+        _organizations = organizations;
         _clock = clock;
     }
 
@@ -149,7 +151,7 @@ public class ReportService : IReportService
         // theirs describes the product's shape instead.
         var organizations = access.OrganizationId is null
             ? await ResolveOrganizationsAsync(products.Values.Select(p => p.OrganizationId), ct)
-            : new Dictionary<Guid, IdentityOrganizationResponse>();
+            : new Dictionary<Guid, OrganizationSnapshot>();
 
         var rows = new List<ProductReportRow>(facts.Count);
         foreach (var fact in facts)
@@ -347,7 +349,7 @@ public class ReportService : IReportService
         // GetProductsAsync's Meta column uses.
         var organizations = access.OrganizationId is null
             ? await ResolveOrganizationsAsync(products.Select(p => p.OrganizationId), ct)
-            : new Dictionary<Guid, IdentityOrganizationResponse>();
+            : new Dictionary<Guid, OrganizationSnapshot>();
 
         var result = products.Select(p =>
         {
@@ -383,21 +385,24 @@ public class ReportService : IReportService
         if (organizationId is null)
             return "Platforma";
 
-        var organizations = await _identity.GetOrganizationsAsync([organizationId.Value], ct);
-        return organizations.FirstOrDefault()?.Name ?? "Vaša organizacija";
+        var organization = await _organizations.GetByIdNoTrackingAsync(organizationId.Value, ct);
+        return organization?.Name ?? "Vaša organizacija";
     }
 
     /// <summary>Resolves the organizations a report has rows for, keyed by id. Unknown ids are
-    /// absent rather than an error — see IIdentityClient.</summary>
-    private async Task<Dictionary<Guid, IdentityOrganizationResponse>> ResolveOrganizationsAsync(
+    /// absent rather than an error, and the callers label those rows "Nepoznata organizacija" —
+    /// the identical degradation the old HTTP lookup had when eTicketing.Identity answered short
+    /// or not at all. Local now, so there is no batch cap to respect and no round trip to fail.
+    /// </summary>
+    private async Task<Dictionary<Guid, OrganizationSnapshot>> ResolveOrganizationsAsync(
         IEnumerable<Guid> organizationIds, CancellationToken ct)
     {
         var ids = organizationIds.Distinct().ToList();
         if (ids.Count == 0)
-            return new Dictionary<Guid, IdentityOrganizationResponse>();
+            return new Dictionary<Guid, OrganizationSnapshot>();
 
-        var organizations = await FetchInBatchesAsync(ids, _identity.GetOrganizationsAsync, ct);
-        return organizations.ToDictionary(o => o.Id);
+        var organizations = await _organizations.GetByIdsNoTrackingAsync(ids, ct);
+        return organizations.ToDictionary(o => o.OrganizationId);
     }
 
     /// <summary>Product lookup, batched. Split out so both the Proizvodi and the Iskorištenost

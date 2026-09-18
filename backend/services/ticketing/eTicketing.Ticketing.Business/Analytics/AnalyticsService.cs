@@ -6,6 +6,7 @@ using eTicketing.Ticketing.Business.Analytics.Insights;
 using eTicketing.Ticketing.Business.Analytics.Narrative;
 using eTicketing.Ticketing.Business.Analytics.Segmentation;
 using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Repositories;

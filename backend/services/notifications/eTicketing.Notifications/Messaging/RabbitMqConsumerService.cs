@@ -14,20 +14,21 @@ namespace eTicketing.Notifications.Messaging;
 /// retry-count header to the next backoff tier (see RetryQueueNames.ForAttempt) — capped at a
 /// steady 30-minute cadence, never abandoned. Every republish is confirmed durably queued
 /// (publisher confirms) BEFORE the original delivery is acked, so a crash between the two steps
-/// self-heals via redelivery instead of losing the message.</summary>
+/// self-heals via redelivery instead of losing the message. The same redelivery that makes loss
+/// impossible makes repeats possible, which DeduplicatingDeliveryHandler absorbs.</summary>
 public sealed class RabbitMqConsumerService : BackgroundService
 {
-    private const string RetryCountHeader = "x-retry-count";
-
     private readonly RabbitMqOptions _options;
-    private readonly NotificationDispatcher _dispatcher;
+    private readonly DeduplicatingDeliveryHandler _deliveryHandler;
     private readonly ILogger<RabbitMqConsumerService> _logger;
 
     public RabbitMqConsumerService(
-        IOptions<RabbitMqOptions> options, NotificationDispatcher dispatcher, ILogger<RabbitMqConsumerService> logger)
+        IOptions<RabbitMqOptions> options,
+        DeduplicatingDeliveryHandler deliveryHandler,
+        ILogger<RabbitMqConsumerService> logger)
     {
         _options = options.Value;
-        _dispatcher = dispatcher;
+        _deliveryHandler = deliveryHandler;
         _logger = logger;
     }
 
@@ -89,16 +90,17 @@ public sealed class RabbitMqConsumerService : BackgroundService
         // A retried delivery arrives under the queue name, not the event's routing key — see
         // RoutingKeyResolver for why, and RepublishAsync for where the original is stashed.
         var routingKey = RoutingKeyResolver.Resolve(delivery.BasicProperties.Type, delivery.RoutingKey);
+        var messageId = delivery.BasicProperties.MessageId;
 
         try
         {
-            await _dispatcher.DispatchAsync(routingKey, delivery.Body, ct);
+            await _deliveryHandler.HandleAsync(routingKey, messageId, delivery.Body, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (PoisonMessageException ex)
         {
             _logger.LogError(ex, "Poruka za '{RoutingKey}' se ne može obraditi — premještam u dead-letter red.", routingKey);
-            await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, delivery.Body, retryCount: null, ct);
+            await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, messageId, delivery.Body, retryCount: null, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         // EmailMessageBuilder.WithTemplate documents itself as throwing exactly these two types
@@ -110,7 +112,20 @@ public sealed class RabbitMqConsumerService : BackgroundService
         catch (Exception ex) when (ex is InvalidCastException or ArgumentOutOfRangeException)
         {
             _logger.LogError(ex, "Poruka za '{RoutingKey}' se ne može obraditi (trajna greška) — premještam u dead-letter red.", routingKey);
-            await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, delivery.Body, retryCount: null, ct);
+            await RepublishAsync(channel, RetryQueueNames.DeadLetter, routingKey, messageId, delivery.Body, retryCount: null, ct);
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+        }
+        // Not a failure: another consumer holds the claim on this delivery and is sending it right
+        // now. It takes the same retry ladder as anything else, but at information level, because
+        // nothing went wrong — see DeliveryInProgressException.
+        catch (DeliveryInProgressException ex)
+        {
+            var retryCount = ReadRetryCount(delivery) + 1;
+            var targetQueue = RetryQueueNames.ForAttempt(retryCount);
+            _logger.LogInformation(
+                "{Message} Ponovni pokušaj u redu '{Queue}' (pokušaj {RetryCount}).",
+                ex.Message, targetQueue, retryCount);
+            await RepublishAsync(channel, targetQueue, routingKey, messageId, delivery.Body, retryCount, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (Exception ex)
@@ -120,21 +135,19 @@ public sealed class RabbitMqConsumerService : BackgroundService
             _logger.LogWarning(ex,
                 "Slanje emaila za '{RoutingKey}' nije uspjelo (pokušaj {RetryCount}) — zakazujem ponovni pokušaj u redu '{Queue}'.",
                 routingKey, retryCount, targetQueue);
-            await RepublishAsync(channel, targetQueue, routingKey, delivery.Body, retryCount, ct);
+            await RepublishAsync(channel, targetQueue, routingKey, messageId, delivery.Body, retryCount, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
     }
 
     private static async Task RepublishAsync(
-        IChannel channel, string targetQueue, string routingKey, ReadOnlyMemory<byte> body, int? retryCount, CancellationToken ct)
+        IChannel channel, string targetQueue, string routingKey, string? messageId, ReadOnlyMemory<byte> body,
+        int? retryCount, CancellationToken ct)
     {
         // Type carries the original routing key across the republish + dead-letter hops, both of
-        // which overwrite delivery.RoutingKey with a queue name.
-        var properties = new BasicProperties { Persistent = true, Type = routingKey };
-        if (retryCount is not null)
-        {
-            properties.Headers = new Dictionary<string, object?> { [RetryCountHeader] = retryCount.Value };
-        }
+        // which overwrite delivery.RoutingKey with a queue name; MessageId keeps the copy
+        // recognisable as the same delivery. See RetryMessageProperties.
+        var properties = RetryMessageProperties.Create(routingKey, messageId, retryCount);
 
         // Default exchange ("") routes purely by routing key == queue name — no custom exchange
         // needed to reach a specific retry/dead-letter queue directly.
@@ -144,7 +157,7 @@ public sealed class RabbitMqConsumerService : BackgroundService
 
     private static int ReadRetryCount(BasicDeliverEventArgs delivery)
     {
-        if (delivery.BasicProperties.Headers is not { } headers || !headers.TryGetValue(RetryCountHeader, out var raw) || raw is null)
+        if (delivery.BasicProperties.Headers is not { } headers || !headers.TryGetValue(RetryMessageProperties.RetryCountHeader, out var raw) || raw is null)
             return 0;
 
         // RabbitMQ's AMQP field-table decoding can hand back different CLR numeric types

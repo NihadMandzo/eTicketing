@@ -457,8 +457,8 @@ public class RecommendationServiceTests : IDisposable
 
     private async Task SeedAsync()
     {
-        _music = new Category { Name = "Muzika", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
-        _sport = new Category { Name = "Sport", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _music = new Category { Name = "Pozorište", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
+        _sport = new Category { Name = "Kino", IsActive = true, TicketingMode = TicketingMode.SingleOccurrence };
         _museum = new Category { Name = "Muzej", IsActive = true, TicketingMode = TicketingMode.DailyEntry };
         await _fixture.CategoryRepository.AddAsync(_music);
         await _fixture.CategoryRepository.AddAsync(_sport);

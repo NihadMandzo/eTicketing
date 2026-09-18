@@ -1,6 +1,5 @@
 using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
-using eTicketing.PdfGeneration.External;
 using eTicketing.PdfGeneration.Options;
 using eTicketing.Shared.TicketPdf;
 using Microsoft.Extensions.Options;
@@ -8,17 +7,16 @@ using QuestPDF.Fluent;
 
 namespace eTicketing.PdfGeneration.Documents;
 
-public interface ITicketPdfGenerator
-{
-    /// <summary>Renders one PDF per ticket in the order and returns the <see cref="TicketPdfReady"/>
-    /// carrying them. Returns null when the order can't be rendered at all (the product no longer
-    /// exists), which the caller treats as a poison message.</summary>
-    Task<TicketPdfReady?> GenerateAsync(TicketPurchased order, CancellationToken ct = default);
-}
-
 /// <summary>
-/// The whole of SPRINT_4 US-4.2 in one place: resolve the product, render a page per ticket, and
-/// hand back the event that carries them to eTicketing.Notifications.
+/// The whole of SPRINT_4 US-4.2 in one place: render a page per ticket and hand back the event that
+/// carries them to eTicketing.Notifications.
+///
+/// No client of its own any more. The product's name, date and city ride on
+/// <see cref="TicketPurchased"/>, read from eTicketing.Ticketing's own ProductSnapshot at the moment
+/// of purchase — which removed an undocumented synchronous dependency on eTicketing.Catalog, and
+/// with it the branch where a product deleted between purchase and render turned a paid-for order
+/// into a dead-lettered message. The values are also more correct than a lookup: a ticket should
+/// say what was bought, not what the product was renamed to afterwards.
 ///
 /// One PDF per ticket rather than one per order: each is handed to a different person at the gate,
 /// which a single stapled document could not be.
@@ -30,31 +28,32 @@ public interface ITicketPdfGenerator
 /// </summary>
 public class TicketPdfGenerator : ITicketPdfGenerator
 {
-    private readonly ICatalogClient _catalogClient;
+    /// <summary>What goes on the sheet when the event carries no product name — only possible for
+    /// a <see cref="TicketPurchased"/> published by the deployment before these fields existed, and
+    /// still in flight. A generic heading beats dead-lettering somebody's paid-for ticket.</summary>
+    private const string UnknownProductName = "Ulaznica";
+
     private readonly TicketSupportInfo _support;
     private readonly ILogger<TicketPdfGenerator> _logger;
 
     public TicketPdfGenerator(
-        ICatalogClient catalogClient,
         IOptions<TicketSupportOptions> support,
         ILogger<TicketPdfGenerator> logger)
     {
-        _catalogClient = catalogClient;
         _support = new TicketSupportInfo(support.Value.Email, support.Value.Phone);
         _logger = logger;
     }
 
-    public async Task<TicketPdfReady?> GenerateAsync(TicketPurchased order, CancellationToken ct = default)
+    public Task<TicketPdfReady> GenerateAsync(TicketPurchased order, CancellationToken ct = default)
     {
-        var product = await _catalogClient.GetProductAsync(order.ProductId, ct);
-        if (product is null)
+        var productName = string.IsNullOrWhiteSpace(order.ProductName) ? UnknownProductName : order.ProductName;
+        var productCity = order.ProductCity?.ToDisplayName() ?? string.Empty;
+
+        if (order.ProductName is null)
         {
-            // Not retryable: a deleted product never comes back, so re-attempting this forever
-            // would just keep one message circulating. The caller dead-letters it.
-            _logger.LogError(
-                "Proizvod {ProductId} iz narudžbe {OrderId} ne postoji — PDF se ne može generisati.",
-                order.ProductId, order.OrderId);
-            return null;
+            _logger.LogWarning(
+                "Narudžba {OrderId} ne nosi podatke o proizvodu — vjerovatno je objavljena prije nadogradnje; koristim generički naziv.",
+                order.OrderId);
         }
 
         var generated = new List<TicketPdf>(order.Tickets.Count);
@@ -65,9 +64,9 @@ public class TicketPdfGenerator : ITicketPdfGenerator
                 ticket.TicketId,
                 order.OrderId,
                 ticket.QrPayload,
-                product.Name,
-                product.Date,
-                product.City.ToDisplayName(),
+                productName,
+                order.ProductDate,
+                productCity,
                 order.SectorName,
                 ticket.TicketTypeName,
                 ticket.PricePaid,
@@ -90,8 +89,8 @@ public class TicketPdfGenerator : ITicketPdfGenerator
         _logger.LogInformation(
             "Generisano {Count} PDF ulaznica za narudžbu {OrderId}.", generated.Count, order.OrderId);
 
-        return new TicketPdfReady(
+        return Task.FromResult(new TicketPdfReady(
             order.OrderId, order.ProductId, order.UserId, order.UserEmail,
-            product.Name, product.Date, product.City.ToDisplayName(), order.TotalPaid, generated);
+            productName, order.ProductDate, productCity, order.TotalPaid, generated));
     }
 }

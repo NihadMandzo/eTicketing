@@ -3,6 +3,7 @@ using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.External;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Sectors;
 using eTicketing.Ticketing.Business.Tickets;
@@ -12,22 +13,6 @@ using eTicketing.Ticketing.Data.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Ticketing.Business.Purchases;
-
-/// <summary>Mirrors eTicketing.Identity.Business.Auth.AuthService's own inline IEventPublisher —
-/// duplicated per-service by design (see RabbitMqEventPublisher's doc comment), not shared/promoted
-/// to Contracts.</summary>
-public interface IEventPublisher
-{
-    Task PublishAsync<T>(string routingKey, T message, CancellationToken ct = default);
-}
-
-/// <summary>What a hold actually entitles the caller to buy, resolved server-side. Every field here
-/// comes from Redis and the database, never from the request.</summary>
-public record ResolvedOrder(
-    HeldReservation Reservation,
-    Sector Sector,
-    IReadOnlyDictionary<Guid, TicketType> TicketTypesById,
-    decimal TotalPrice);
 
 /// <summary>
 /// Orchestrates the purchase critical path from .claude/rules/01-domain.md, in two calls.
@@ -39,9 +24,10 @@ public record ResolvedOrder(
 ///
 /// Both calls begin with the same ResolveOrderAsync prelude:
 ///  1. Resolve the hold's actual reservation from Redis via ISectorCapacityLock.PeekAsync — never
-///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why). Also
-///     the guard against a replayed HoldId: PeekAsync returns null once ConfirmAsync has already
-///     run for it (see RedisSectorCapacityLock.ConfirmAsync).
+///     trust a client-supplied SectorId/quantity (see PeekAsync's own doc comment for why), and
+///     refuse a hold owned by a different account. Also the guard against a replayed HoldId:
+///     PeekAsync returns null once ConfirmAsync has already run for it (see
+///     RedisSectorCapacityLock.ConfirmAsync).
 ///  2. Validate the request's line-item quantities sum to exactly what was held.
 ///  3. Load the held Sector (with TicketTypes) — must still exist and be Published.
 ///  4. Validate each line's TicketTypeId against the Sector's TicketTypes (all-or-nothing: either
@@ -76,6 +62,7 @@ public record ResolvedOrder(
 public class PurchaseService : IPurchaseService
 {
     private readonly ISectorRepository _sectorRepository;
+    private readonly IProductSnapshotRepository _productSnapshots;
     private readonly ITicketRepository _ticketRepository;
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly ISectorCapacityLock _capacityLock;
@@ -89,6 +76,7 @@ public class PurchaseService : IPurchaseService
 
     public PurchaseService(
         ISectorRepository sectorRepository,
+        IProductSnapshotRepository productSnapshots,
         ITicketRepository ticketRepository,
         ISubscriptionRepository subscriptionRepository,
         ISectorCapacityLock capacityLock,
@@ -101,6 +89,7 @@ public class PurchaseService : IPurchaseService
         ILogger<PurchaseService> logger)
     {
         _sectorRepository = sectorRepository;
+        _productSnapshots = productSnapshots;
         _ticketRepository = ticketRepository;
         _subscriptionRepository = subscriptionRepository;
         _capacityLock = capacityLock;
@@ -119,10 +108,17 @@ public class PurchaseService : IPurchaseService
     /// rewritten, precisely so those stayed identical.
     /// </summary>
     private async Task<Result<ResolvedOrder>> ResolveOrderAsync(
-        string holdId, IReadOnlyList<PurchaseLineItemRequest> lineItems, CancellationToken ct)
+        string holdId, IReadOnlyList<PurchaseLineItemRequest> lineItems, Guid callerId, CancellationToken ct)
     {
         var reservation = await _capacityLock.PeekAsync(holdId, ct);
-        if (reservation is null)
+
+        // A hold belongs to the account that took it: spending someone else's is the same theft as
+        // releasing it (see SectorService.ReleaseHoldAsync), except the thief walks away with the
+        // seat. Deliberately the *same* error as an expired hold rather than a distinct "not
+        // yours" — a different answer would confirm to whoever presented the id that it is live.
+        // OwnerId is null for a hold with no owner: a system hold, or one minted before the owner
+        // was recorded, which stays spendable for the rest of its five-minute TTL.
+        if (reservation is null || (reservation.OwnerId is not null && reservation.OwnerId != callerId))
             return Result<ResolvedOrder>.Failure(Error.Validation("purchase.hold_expired", "Rezervacija je istekla ili ne postoji. Pokušajte ponovo."));
 
         var requestedQuantity = lineItems.Sum(li => li.Quantity);
@@ -132,6 +128,14 @@ public class PurchaseService : IPurchaseService
         var sector = await _sectorRepository.GetByIdWithTicketTypesAsync(reservation.SectorId, ct);
         if (sector is null || sector.Status != PublishStatus.Published)
             return Result<ResolvedOrder>.Failure(Error.NotFound("sector.not_found", "Sektor nije pronađen."));
+
+        // Re-checked here and not only at hold time: a hold lives five minutes, and the product can
+        // be unpublished or deleted inside that window. Held capacity is not a right to buy
+        // something that has since been taken off sale. Read from the local snapshot — the purchase
+        // critical path gets no new synchronous dependency.
+        var product = await _productSnapshots.GetByIdNoTrackingAsync(sector.ProductId, ct);
+        if (product is null || product.Status != PublishStatus.Published)
+            return Result<ResolvedOrder>.Failure(SectorService.ProductUnavailable());
 
         var ticketTypesById = sector.TicketTypes.ToDictionary(t => t.Id);
         if (ticketTypesById.Count > 0)
@@ -147,13 +151,13 @@ public class PurchaseService : IPurchaseService
         var totalPrice = lineItems.Sum(li =>
             li.Quantity * (li.TicketTypeId is null ? sector.Price : ticketTypesById[li.TicketTypeId.Value].Price));
 
-        return Result<ResolvedOrder>.Success(new ResolvedOrder(reservation, sector, ticketTypesById, totalPrice));
+        return Result<ResolvedOrder>.Success(new ResolvedOrder(reservation, sector, product, ticketTypesById, totalPrice));
     }
 
     public async Task<Result<PurchaseIntentResponse>> CreatePaymentIntentAsync(
         CreatePaymentIntentRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, ct);
+        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, user.GetUserId(), ct);
         if (resolved.IsFailure)
             return Result<PurchaseIntentResponse>.Failure(resolved.Error);
 
@@ -196,7 +200,7 @@ public class PurchaseService : IPurchaseService
 
     public async Task<Result<PurchaseResponse>> PurchaseAsync(PurchaseRequest request, ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, ct);
+        var resolved = await ResolveOrderAsync(request.HoldId, request.LineItems, user.GetUserId(), ct);
         if (resolved.IsFailure)
         {
             // The buyer has already confirmed at this point, so an authorization (or, for a
@@ -250,10 +254,21 @@ public class PurchaseService : IPurchaseService
         if (charge.Status != PaymentChargeStatus.Succeeded)
         {
             await _capacityLock.ReleaseAsync(request.HoldId, ct);
+            // Everything on this event is already in hand — the order, what they were buying and
+            // for how much — and without it eTicketing.Notifications could only send a buyer a
+            // decline notice that does not say which attempt it was about.
             await _eventPublisher.PublishAsync(
                 EventNames.PaymentFailed,
-                new PaymentFailed(userId, userEmail, charge.FailureCode ?? "card_declined", _clock.UtcNow),
+                new PaymentFailed(
+                    userId, userEmail, charge.FailureCode ?? "card_declined", _clock.UtcNow,
+                    orderId, sector.Name, totalPrice),
                 ct);
+
+            // The declined path writes nothing else — no Ticket, no Subscription — so this is the
+            // one save that commits the outbox row. Without it the publish above would add a row to
+            // the change tracker that nothing ever persists, and the event would silently not
+            // happen. See eTicketing.Shared.Messaging.OutboxEventPublisher.
+            await _unitOfWork.SaveChangesAsync(ct);
 
             return Result<PurchaseResponse>.Failure(Error.Validation("payment.declined", "Plaćanje je odbijeno. Provjerite podatke kartice."));
         }
@@ -281,25 +296,18 @@ public class PurchaseService : IPurchaseService
                     case TicketingMode.RecurringReservation:
                         // Sector.Capacity is always 1 for this mode, so reservation.Quantity is
                         // always 1 too — this branch runs at most once per purchase.
-                        subscription ??= new Subscription
-                        {
-                            Id = Guid.NewGuid(),
-                            SectorId = sector.Id,
-                            UserId = userId,
-                            UserEmail = userEmail,
-                            Status = SubscriptionStatus.Active,
+                        subscription ??= Subscription.Create(
+                            sector.Id, userId, userEmail,
                             // The provider's own billing period, not a locally computed one: it is
                             // what the buyer's card statement will say, and every renewal webhook
                             // reports periods on the same schedule. Falling back to the local
                             // business day only covers a provider that reported none.
-                            CurrentPeriodStart = periodStart ?? _clock.Today(),
-                            CurrentPeriodEnd = periodEnd ?? _clock.Today().AddMonths(1).AddDays(-1),
-                            PaymentReference = request.PaymentIntentId,
+                            periodStart ?? _clock.Today(),
+                            periodEnd ?? _clock.Today().AddMonths(1).AddDays(-1),
+                            request.PaymentIntentId,
                             // Kept so cancelling this subscription can hand the space back; the hold
                             // is confirmed (permanent) and cannot be resolved from Redis afterwards.
-                            CapacityHoldId = request.HoldId,
-                        };
-                        subscription.NextRenewalAt = subscription.CurrentPeriodEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
+                            request.HoldId);
 
                         ticket = Ticket.ForRecurringReservation(
                             sector.Id, ticketType?.Id, orderId, sector.ProductId, userId, userEmail, unitPrice,
@@ -321,6 +329,35 @@ public class PurchaseService : IPurchaseService
         foreach (var ticket in tickets)
             await _ticketRepository.AddAsync(ticket, ct);
 
+        // Read from the clock rather than from tickets[0].CreatedAt, which the audit interceptor
+        // only fills in *during* SaveChangesAsync — and the publish below now happens before it.
+        // Same instant for the event and the response, so a buyer and their confirmation email
+        // never disagree about when the purchase happened.
+        var purchasedAt = _clock.UtcNow;
+
+        // Published into the same transaction as the tickets, and therefore before the save rather
+        // than after it. Ticket ids are client-generated Guids (see Ticket.ForXxx), so the payload
+        // and its signed QR codes are fully known at this point. This is the publish the outbox
+        // matters most for: it is the only notice eTicketing.PdfGeneration and
+        // eTicketing.Notifications ever get that a real person paid for something.
+        // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
+        // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
+        await _eventPublisher.PublishAsync(
+            EventNames.TicketPurchased,
+            new TicketPurchased(
+                orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
+                userId, userEmail, totalPrice, purchasedAt,
+                tickets.Select(t => new PurchasedTicket(
+                    t.Id,
+                    _qrCodec.Sign(t.Id),
+                    TicketTypeNameOf(t, ticketTypesById),
+                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList(),
+                // Carried on the event so eTicketing.PdfGeneration can print a real event name,
+                // date and city without a catalogue lookup of its own — and carried as of *now*,
+                // which is what a ticket should show even if the product is renamed later.
+                order.Product.Name, order.Product.Date, order.Product.City),
+            ct);
+
         try
         {
             await _unitOfWork.SaveChangesAsync(ct);
@@ -338,22 +375,8 @@ public class PurchaseService : IPurchaseService
             throw;
         }
 
-        // tickets is never empty here: request.LineItems is non-empty (PurchaseRequestValidator)
-        // and every line's Quantity > 0, so the nested loop above always adds at least one Ticket.
-        await _eventPublisher.PublishAsync(
-            EventNames.TicketPurchased,
-            new TicketPurchased(
-                orderId, sector.ProductId, sector.Id, sector.Name, sector.TicketingMode,
-                userId, userEmail, totalPrice, tickets[0].CreatedAt,
-                tickets.Select(t => new PurchasedTicket(
-                    t.Id,
-                    _qrCodec.Sign(t.Id),
-                    TicketTypeNameOf(t, ticketTypesById),
-                    t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList()),
-            ct);
-
         var response = new PurchaseResponse(
-            orderId, sector.ProductId, sector.Id, totalPrice, tickets[0].CreatedAt,
+            orderId, sector.ProductId, sector.Id, totalPrice, purchasedAt,
             tickets.Select(t => _responseFactory.Create(t, sector.Name, TicketTypeNameOf(t, ticketTypesById))).ToList());
 
         return Result<PurchaseResponse>.Success(response);

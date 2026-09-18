@@ -1,7 +1,9 @@
 ﻿using System.Net.Http.Headers;
 using eTicketing.Contracts.Persistence;
+using eTicketing.Shared.Messaging;
 using eTicketing.Ticketing.Api.Infrastructure.Auth;
 using eTicketing.Ticketing.Api.Infrastructure.Messaging;
+using eTicketing.Ticketing.Api.Infrastructure.ReadModels;
 using eTicketing.Ticketing.Api.Infrastructure.Redis;
 using eTicketing.Ticketing.Api.Infrastructure.TicketPrint;
 using eTicketing.Ticketing.Business.Analytics;
@@ -14,7 +16,9 @@ using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.GateDevices;
 using eTicketing.Ticketing.Business.Integration;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Ticketing.Business.ReadModels;
 using eTicketing.Ticketing.Business.Reports;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Shared.TicketPdf;
 using eTicketing.Ticketing.Business.Sectors;
@@ -48,6 +52,8 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         builder.Services.AddScoped<ITicketPrintBatchRepository, TicketPrintBatchRepository>();
         builder.Services.AddScoped<IGateDeviceRepository, GateDeviceRepository>();
+        builder.Services.AddScoped<IProductSnapshotRepository, ProductSnapshotRepository>();
+        builder.Services.AddScoped<IOrganizationSnapshotRepository, OrganizationSnapshotRepository>();
 
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
@@ -92,16 +98,11 @@ public static class TicketingServiceCollectionExtensions
                 pb.AddTimeout(TimeSpan.FromSeconds(5));
             });
 
-        // Ticketing → Identity: same shape as the Catalog client above. Only the Izvještaji
-        // reports need it — every other org-scoped decision in this service reads organizationId
-        // straight off the caller's token and never has to ask Identity anything.
-        builder.Services.AddHttpClient<IIdentityClient, HttpIdentityClient>(c =>
-                c.BaseAddress = new Uri(builder.Configuration["Services:Identity"]!))
-            .AddResilienceHandler("identity-pipeline", pb =>
-            {
-                pb.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 3 });
-                pb.AddTimeout(TimeSpan.FromSeconds(5));
-            });
+        // There is deliberately no Ticketing → Identity client. The organization names, addresses
+        // and contact details the reports and the cancellation notice need come from the local
+        // OrganizationSnapshot read model, fed by organization.changed / organization.deleted —
+        // which puts this service back inside the two-call whitelist in
+        // .claude/rules/01-domain.md. Everything else org-scoped reads the claim off the token.
 
         builder.Services.AddScoped<ISectorService, SectorService>();
         builder.Services.AddScoped<ITicketTypeService, TicketTypeService>();
@@ -110,6 +111,8 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddScoped<ITicketPdfService, TicketPdfService>();
         builder.Services.AddScoped<IPurchaseService, PurchaseService>();
         builder.Services.AddScoped<ITicketPdfCompletionService, TicketPdfCompletionService>();
+        builder.Services.AddScoped<IProductSnapshotProjector, ProductSnapshotProjector>();
+        builder.Services.AddScoped<IOrganizationSnapshotProjector, OrganizationSnapshotProjector>();
         builder.Services.AddScoped<IProductChangeNotifier, ProductChangeNotifier>();
         builder.Services.AddScoped<IProductDeletionNotifier, ProductDeletionNotifier>();
         builder.Services.AddScoped<ITicketPrintService, TicketPrintService>();
@@ -127,7 +130,18 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddSingleton<ITicketPrintQueue>(sp => sp.GetRequiredService<TicketPrintQueue>());
         builder.Services.AddHostedService<TicketPrintRenderWorker>();
         builder.Services.AddHostedService<TicketingRabbitMqConsumerService>();
-        builder.Services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        // Catches up the ProductSnapshot read model for products whose events this service never
+        // saw — the rows that predate the projection, and anything lost during a long outage.
+        builder.Services.AddHostedService<ProductSnapshotBackfillWorker>();
+        // Transactional outbox: a publish from the business layer becomes a row in the same
+        // SaveChangesAsync as the data that caused it, and a hosted dispatcher moves those rows to
+        // the broker. See eTicketing.Shared.Messaging.OutboxEventPublisher for why the ordering of
+        // publish-then-save now matters.
+        builder.Services.AddOutboxMessaging<TicketingDbContext>(builder.Configuration);
+        // Its inbound counterpart: TicketingRabbitMqConsumerService records each processed message
+        // in the same transaction as its effects, so a redelivered product.updated or
+        // product.deleted does not fan its buyer notifications out a second time.
+        builder.Services.AddTransactionalInbox<TicketingDbContext>();
         builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
         builder.Services.AddScoped<ISubscriptionRenewalService, SubscriptionRenewalService>();
         builder.Services.AddValidatorsFromAssembly(typeof(ISectorService).Assembly);

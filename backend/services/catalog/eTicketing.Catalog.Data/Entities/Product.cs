@@ -44,4 +44,12 @@ public class Product : BaseEntity
     // /products/{id}/images endpoints, never bundled into Create/Update (same convention as
     // Category.IconBlobName / Organization.LogoBlobName).
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
+
+    /// <summary>The Draft → Published transition, named — the mirror of Sector.Publish in
+    /// eTicketing.Ticketing, and for the same reasons, including why Status keeps its public setter.
+    ///
+    /// <para>It matters more on this side than it looks: since the ProductSnapshot read model
+    /// landed, this is the transition that makes a product's sectors listable and sellable in
+    /// another service entirely.</para></summary>
+    public void Publish() => Status = PublishStatus.Published;
 }

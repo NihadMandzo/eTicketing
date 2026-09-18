@@ -2,8 +2,6 @@ using System.Net;
 
 namespace eTicketing.Notifications.Email.Templates;
 
-public sealed record AdminPasswordChangedData(string FirstName);
-
 public static class AdminPasswordChangedTemplate
 {
     public static (string Subject, string Html) Render(AdminPasswordChangedData data)

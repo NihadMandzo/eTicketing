@@ -61,6 +61,9 @@ namespace eTicketing.Catalog.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Name")
+                        .IsUnique();
+
                     b.ToTable("Categories");
 
                     b.HasData(
@@ -149,6 +152,8 @@ namespace eTicketing.Catalog.Data.Migrations
                     b.HasIndex("City");
 
                     b.HasIndex("OrganizationId");
+
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("Products");
 
@@ -354,6 +359,64 @@ namespace eTicketing.Catalog.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("UserInteractions");
+                });
+
+            modelBuilder.Entity("eTicketing.Contracts.Messaging.InboxMessage", b =>
+                {
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("MessageId", "Consumer");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("InboxMessages");
+                });
+
+            modelBuilder.Entity("eTicketing.Contracts.Messaging.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RoutingKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("OutboxMessages");
                 });
 
             modelBuilder.Entity("eTicketing.Catalog.Data.Entities.Product", b =>

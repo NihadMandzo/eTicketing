@@ -2,6 +2,7 @@ using System.Security.Claims;
 using eTicketing.Contracts.Pagination;
 using eTicketing.Contracts.Results;
 using eTicketing.Ticketing.Business.Purchases;
+using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Data.Repositories;
 

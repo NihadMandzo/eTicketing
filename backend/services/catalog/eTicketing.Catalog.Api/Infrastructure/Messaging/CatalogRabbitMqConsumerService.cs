@@ -1,6 +1,7 @@
 using System.Text.Json;
 using eTicketing.Catalog.Business.Recommendations;
 using eTicketing.Contracts.Events;
+using eTicketing.Shared.Messaging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -19,10 +20,14 @@ namespace eTicketing.Catalog.Api.Infrastructure.Messaging;
 /// and a dropped signal costs one row of training data out of thousands — the recommendation is
 /// marginally worse, nobody is missing a ticket. Parking a repeatedly failing message where a human
 /// can see it beats retrying it every 30 minutes for a day.
+///
+/// Every message goes through the transactional inbox, keyed on this queue's name, so a redelivered
+/// purchase is recorded once rather than counted again.
 /// </summary>
 public sealed class CatalogRabbitMqConsumerService : BackgroundService
 {
-    private const string QueueName = "catalog.recommendations";
+    /// <summary>Also the consumer name the inbox records processed messages under.</summary>
+    public const string QueueName = "catalog.recommendations";
     private const string DeadLetterQueueName = "catalog.recommendations.deadletter";
     private const string RedeliveredHeader = "x-catalog-redelivered";
 
@@ -102,10 +107,11 @@ public sealed class CatalogRabbitMqConsumerService : BackgroundService
         // overwrites delivery.RoutingKey — RepublishAsync stashes the original in Type so the
         // second attempt still reaches the right handler.
         var routingKey = delivery.BasicProperties.Type ?? delivery.RoutingKey;
+        var messageId = delivery.BasicProperties.MessageId;
 
         try
         {
-            await DispatchAsync(routingKey, delivery.Body, ct);
+            await DispatchAsync(routingKey, messageId, delivery.Body, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (Exception ex)
@@ -116,20 +122,39 @@ public sealed class CatalogRabbitMqConsumerService : BackgroundService
             _logger.LogError(ex,
                 "Obrada poruke '{RoutingKey}' nije uspjela — premještam u red '{Queue}'.", routingKey, targetQueue);
 
-            await RepublishAsync(channel, targetQueue, routingKey, delivery.Body, ct);
+            await RepublishAsync(channel, targetQueue, routingKey, messageId, delivery.Body, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
     }
 
-    private async Task DispatchAsync(string routingKey, ReadOnlyMemory<byte> body, CancellationToken ct)
+    private async Task DispatchAsync(string routingKey, string? messageId, ReadOnlyMemory<byte> body, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
+        var services = scope.ServiceProvider;
 
+        // Through the inbox, so the interaction bump and the record that it happened commit
+        // together: a redelivered purchase is recognised and skipped instead of counted twice.
+        var processed = await services.GetRequiredService<IInbox>().ProcessOnceAsync(
+            messageId,
+            QueueName,
+            handlerCt => HandleAsync(services, routingKey, body, handlerCt),
+            ct);
+
+        if (!processed)
+        {
+            _logger.LogInformation(
+                "Poruka '{RoutingKey}' ({MessageId}) je već obrađena — preskačem ponovnu obradu.", routingKey, messageId);
+        }
+    }
+
+    private static async Task HandleAsync(
+        IServiceProvider services, string routingKey, ReadOnlyMemory<byte> body, CancellationToken ct)
+    {
         switch (routingKey)
         {
             case EventNames.TicketPurchased:
                 var purchased = Deserialize<TicketPurchased>(body, routingKey);
-                await scope.ServiceProvider.GetRequiredService<PurchaseInteractionRecorder>().RecordAsync(purchased, ct);
+                await services.GetRequiredService<PurchaseInteractionRecorder>().RecordAsync(purchased, ct);
                 break;
 
             default:
@@ -140,12 +165,15 @@ public sealed class CatalogRabbitMqConsumerService : BackgroundService
     }
 
     private static async Task RepublishAsync(
-        IChannel channel, string targetQueue, string routingKey, ReadOnlyMemory<byte> body, CancellationToken ct)
+        IChannel channel, string targetQueue, string routingKey, string? messageId, ReadOnlyMemory<byte> body,
+        CancellationToken ct)
     {
         var properties = new BasicProperties
         {
             Persistent = true,
             Type = routingKey,
+            // Kept so the retry is still recognisably the same message to the inbox.
+            MessageId = messageId,
             Headers = new Dictionary<string, object?> { [RedeliveredHeader] = 1 },
         };
 

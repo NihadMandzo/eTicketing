@@ -146,7 +146,8 @@ public class TicketPrintServiceTests : IDisposable
         await _sut.CreateAsync(Request((sector.Id, null, 25)), Organizer());
 
         _fixture.CapacityLock.Verify(
-            l => l.TryHoldAsync(sector.Id, 200, 25, null, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            // ownerId null: a print batch is a system hold, not a buyer's — see TicketPrintService.
+            l => l.TryHoldAsync(sector.Id, 200, 25, null, It.IsAny<TimeSpan>(), null, It.IsAny<CancellationToken>()),
             Times.Once);
         _fixture.CapacityLock.Verify(l => l.ConfirmAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _fixture.CapacityLock.Verify(l => l.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -551,7 +552,7 @@ public class TicketPrintServiceTests : IDisposable
     {
         _fixture.CapacityLock
             .Setup(l => l.TryHoldAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateOnly?>(),
-                It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new HoldResult(true, Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(2)));
 
         _fixture.CapacityLock
@@ -563,7 +564,7 @@ public class TicketPrintServiceTests : IDisposable
     {
         _fixture.CapacityLock
             .Setup(l => l.TryHoldAsync(sectorId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateOnly?>(),
-                It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                It.IsAny<TimeSpan>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HoldResult(false, null, null));
 
         _fixture.CapacityLock

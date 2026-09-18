@@ -1,11 +1,14 @@
+using eTicketing.Notifications.Infrastructure.Redis;
 using eTicketing.Notifications.Messaging;
 using eTicketing.Notifications.Options;
 using eTicketing.Notifications.Sending;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Polly;
+using StackExchange.Redis;
 
 namespace eTicketing.Notifications.Infrastructure;
 
@@ -61,7 +64,24 @@ public static class NotificationsServiceCollectionExtensions
                 pb.AddTimeout(TimeSpan.FromSeconds(10));
             });
 
+        // Required, not optional: without it every redelivered event re-sends its email. Missing
+        // configuration fails the boot loudly, same as a missing Brevo key above. A configured but
+        // unreachable Redis does not — AbortOnConnectFail=false lets the service start and keep
+        // reconnecting, and DeduplicatingDeliveryHandler sends without dedupe in the meantime.
+        var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+        if (string.IsNullOrWhiteSpace(redisConnectionString))
+            throw new InvalidOperationException("ConnectionStrings:Redis mora biti podešen.");
+
+        builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+        {
+            var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
+            redisOptions.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(redisOptions);
+        });
+        builder.Services.AddSingleton<IProcessedMessageStore, RedisProcessedMessageStore>();
+
         builder.Services.AddSingleton<NotificationDispatcher>();
+        builder.Services.AddSingleton<DeduplicatingDeliveryHandler>();
         builder.Services.AddHostedService<RabbitMqConsumerService>();
 
         return builder;

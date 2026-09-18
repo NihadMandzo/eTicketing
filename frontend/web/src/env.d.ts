@@ -12,9 +12,12 @@
  * it is designed to be public and is secured by HTTP-referrer restriction, not by being hidden.
  */
 interface ImportMetaEnv {
-  /** Absolute base URL of the Gateway, e.g. `http://localhost:5000/api`. Absolute, not
-   * same-origin-relative: the web app and the Gateway are published on separate host ports. */
-  readonly NG_APP_API_BASE_URL?: string;
+  // NG_APP_API_BASE_URL used to live here. It is gone on purpose: the browser now calls a
+  // same-origin, relative `/api` that this app's own server proxies to the Gateway (src/server.ts),
+  // which is what lets the session cookies be SameSite=Strict. The server side of that proxy reads
+  // GATEWAY_INTERNAL_URL — deliberately *not* an NG_APP_ name, because every NG_APP_ reference is
+  // replaced with a build-time literal in the server bundle too, and that value has to be settable
+  // per environment without a rebuild.
 
   /** Google Maps JavaScript API key for the product-details map. Empty/absent is a supported
    * state — the map is replaced by a labelled placeholder rather than Google's watermarked tile. */

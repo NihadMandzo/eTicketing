@@ -1,5 +1,6 @@
 using eTicketing.Identity.Data.Entities;
 using eTicketing.Identity.Data.Enums;
+using eTicketing.Identity.Data.Repositories;
 using Mapster;
 
 namespace eTicketing.Identity.Business.Organizations.Mapping;
@@ -20,6 +21,14 @@ public class OrganizationMappingConfig : IRegister
         // a logo is present, same reasoning as UserCount.
         config.NewConfig<Organization, OrganizationResponse>()
             .Map(dest => dest.UserCount, src => src.Users.Count);
+
+        // The list path counts users in SQL instead of loading them (see
+        // OrganizationRepository.SearchAsync), so it maps from the projection rather than the
+        // entity: Users is empty on these instances and reading Users.Count would report 0 for
+        // every organization on the page.
+        config.NewConfig<OrganizationWithUserCount, OrganizationResponse>()
+            .Map(dest => dest, src => src.Organization)
+            .Map(dest => dest.UserCount, src => src.UserCount);
 
         // LogoBlobName has no matching source on Create/UpdateOrganizationRequest (logos are
         // managed exclusively through the dedicated logo-upload endpoints) — Mapster leaves it

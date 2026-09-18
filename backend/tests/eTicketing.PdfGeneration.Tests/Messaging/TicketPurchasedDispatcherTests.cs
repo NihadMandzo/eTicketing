@@ -67,18 +67,23 @@ public class TicketPurchasedDispatcherTests
     }
 
     [Fact]
-    public async Task DispatchAsync_WhenTheProductNoLongerExists_ThrowsPoisonMessageException()
+    public async Task DispatchAsync_ForAnOrderWithNoProductDetails_StillPublishesTicketPdfReady()
     {
-        // A deleted product never comes back — retrying forever would just keep one message
-        // circulating.
+        // There used to be a branch here that dead-lettered an order whose product this service
+        // could not look up in eTicketing.Catalog — which meant a product deleted between purchase
+        // and render cost a paying buyer their ticket. There is no lookup any more: the details
+        // ride on TicketPurchased, and an order that predates those fields renders under a generic
+        // heading rather than being parked.
+        var order = Order(ticketCount: 1) with { ProductName = null, ProductDate = null, ProductCity = null };
+        var ready = ReadyFor(order);
         _generator
             .Setup(g => g.GenerateAsync(It.IsAny<TicketPurchased>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TicketPdfReady?)null);
+            .ReturnsAsync(ready);
 
-        var act = async () => await _sut.DispatchAsync(EventNames.TicketPurchased, Serialize(Order(ticketCount: 1)));
+        await _sut.DispatchAsync(EventNames.TicketPurchased, Serialize(order));
 
-        await act.Should().ThrowAsync<PoisonMessageException>();
-        _eventPublisher.VerifyNoOtherCalls();
+        _eventPublisher.Verify(
+            p => p.PublishAsync(EventNames.TicketPdfReady, ready, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -124,7 +129,8 @@ public class TicketPurchasedDispatcherTests
 
         return new TicketPurchased(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "VIP", TicketingMode.SingleOccurrence,
-            Guid.NewGuid(), "buyer@example.com", 50 * ticketCount, DateTime.UtcNow, tickets);
+            Guid.NewGuid(), "buyer@example.com", 50 * ticketCount, DateTime.UtcNow, tickets,
+            ProductName: "Ljetni Festival", ProductDate: DateTime.UtcNow, ProductCity: City.Sarajevo);
     }
 
     private static TicketPdfReady ReadyFor(TicketPurchased order) =>

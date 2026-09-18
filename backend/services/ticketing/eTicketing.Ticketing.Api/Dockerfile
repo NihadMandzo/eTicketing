@@ -3,6 +3,7 @@ WORKDIR /src
 
 COPY shared/eTicketing.Contracts/*.csproj shared/eTicketing.Contracts/
 COPY shared/eTicketing.Shared.Auth/*.csproj shared/eTicketing.Shared.Auth/
+COPY shared/eTicketing.Shared.Messaging/*.csproj shared/eTicketing.Shared.Messaging/
 COPY shared/eTicketing.Shared.TicketPdf/*.csproj shared/eTicketing.Shared.TicketPdf/
 COPY services/ticketing/eTicketing.Ticketing.Data/*.csproj services/ticketing/eTicketing.Ticketing.Data/
 COPY services/ticketing/eTicketing.Ticketing.Business/*.csproj services/ticketing/eTicketing.Ticketing.Business/
@@ -11,6 +12,7 @@ RUN dotnet restore services/ticketing/eTicketing.Ticketing.Api/eTicketing.Ticket
 
 COPY shared/eTicketing.Contracts/ shared/eTicketing.Contracts/
 COPY shared/eTicketing.Shared.Auth/ shared/eTicketing.Shared.Auth/
+COPY shared/eTicketing.Shared.Messaging/ shared/eTicketing.Shared.Messaging/
 COPY shared/eTicketing.Shared.TicketPdf/ shared/eTicketing.Shared.TicketPdf/
 COPY services/ticketing/ services/ticketing/
 RUN dotnet publish services/ticketing/eTicketing.Ticketing.Api/eTicketing.Ticketing.Api.csproj -c Release -o /app

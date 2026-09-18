@@ -18,7 +18,7 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Include(t => t.TicketType)
             .Where(t => t.UserId == userId)
             .OrderByDescending(t => t.CreatedAt)
-            .ToPagedResultAsync(query.Page, query.PageSize, ct);
+            .ToPagedResultAsync(query.EffectivePage, query.EffectivePageSize, ct);
 
     public Task<Ticket?> GetForValidationAsync(Guid ticketId, CancellationToken ct = default)
         => Query()

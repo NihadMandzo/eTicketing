@@ -5,6 +5,7 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { join } from 'node:path';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
@@ -13,16 +14,49 @@ const app = express();
 const angularApp = new AngularNodeAppEngine();
 
 /**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
+ * Where this server reaches the Gateway. Read at runtime, from a name that deliberately does NOT
+ * start with `NG_APP_`: `@ngx-env/builder` statically replaces every `NG_APP_*` reference with a
+ * literal at build time — in the *server* bundle as well as the browser one, verified against the
+ * committed build output — so a `NG_APP_`-prefixed name could never be changed per environment
+ * without a rebuild. This one is an ordinary `process.env` lookup in a Node process, so it can.
  *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
+ * The default is the compose service name, which is what makes `docker compose up` work with no
+ * configuration at all. In Azure Container Apps this is set to the Gateway's internal FQDN.
  */
+const gatewayUrl = process.env['GATEWAY_INTERNAL_URL'] ?? 'http://gateway:8080';
+
+/**
+ * Proxy `/api/**` straight through to the Gateway, so the browser only ever talks to this origin.
+ *
+ * This is what makes `SameSite=Strict` on the session cookies possible (see
+ * eTicketing.Shared.Auth.AuthCookiePolicy). Production previously ran the web app and the Gateway
+ * as two separate Container Apps on unrelated hostnames — genuinely cross-site — which forced
+ * `SameSite=None`, meaning the session rode along on cross-site requests to routes that
+ * deliberately have no antiforgery token (the multipart uploads, called from Flutter desktop,
+ * which cannot fetch one).
+ *
+ * Mounted **before** `express.static` so an `/api` path can never be answered by a stray file of
+ * that name, and before the Angular handler so it is never treated as a route to render.
+ *
+ * `xfwd: true` appends this hop to `X-Forwarded-For`, which is how the real client IP survives as
+ * far as Identity's rate limiter — without it every login would be throttled against this
+ * container's address. It also lengthens the forwarded chain by one, which is what
+ * `ForwardedHeaders:ForwardLimit` has to account for on the backend.
+ *
+ * The Gateway stays publicly published regardless: Flutter desktop, Flutter mobile, the IoT gate
+ * firmware and Stripe's webhook all call it directly and never pass through here.
+ */
+app.use(
+  '/api',
+  createProxyMiddleware({
+    target: gatewayUrl,
+    changeOrigin: true,
+    xfwd: true,
+    // The mount path is stripped by Express before the middleware sees it, so it has to go back
+    // on: the Gateway routes on `/api/**` (see gateway/appsettings.json) and would 404 without it.
+    pathRewrite: (path) => `/api${path}`,
+  }),
+);
 
 /**
  * Serve static files from /browser

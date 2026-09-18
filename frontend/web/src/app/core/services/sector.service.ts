@@ -29,7 +29,7 @@ export class SectorService {
    * re-request on each change, since the availability answer changes with it.
    */
   getSectors(productId: string, date?: string | null): Observable<PagedResult<Sector>> {
-    const params: Record<string, string> = { productId, pageSize: '100' };
+    const params: Record<string, string> = { productId, page: '0', pageSize: '100' };
     if (date) params['date'] = date;
 
     return this.http

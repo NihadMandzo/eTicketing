@@ -26,9 +26,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- For CatalogRabbitMqConsumerService.QueueName, the consumer name the inbox keys on — the same
+         reason eTicketing.Ticketing.Business.Tests references its own .Api project. -->
+    <ProjectReference Include="..\..\services\catalog\eTicketing.Catalog.Api\eTicketing.Catalog.Api.csproj" />
     <ProjectReference Include="..\..\services\catalog\eTicketing.Catalog.Business\eTicketing.Catalog.Business.csproj" />
     <ProjectReference Include="..\..\services\catalog\eTicketing.Catalog.Data\eTicketing.Catalog.Data.csproj" />
     <ProjectReference Include="..\..\shared\eTicketing.Contracts\eTicketing.Contracts.csproj" />
+    <ProjectReference Include="..\..\shared\eTicketing.Shared.Messaging\eTicketing.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

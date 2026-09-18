@@ -39,13 +39,83 @@ public class CategoryServiceTests : IDisposable
 
     private static CreateCategoryRequest ValidCreateRequest() => new()
     {
-        Name = "Muzika",
+        Name = "Pozorište",
         Description = "Koncerti i festivali",
         IsActive = true,
         DisplayOrder = 1,
     };
 
     [Fact]
+    public async Task CreateAsync_WithANameThatAlreadyExists_ReturnsConflict()
+    {
+        await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.CreateAsync(ValidCreateRequest());
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("category.name_already_exists");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithANameDifferingOnlyInCase_ReturnsConflict()
+    {
+        // SQL Server's default collation would treat these as the same name, so the service check
+        // has to as well — otherwise the insert would get past it and die on the unique index.
+        await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.CreateAsync(ValidCreateRequest() with { Name = "MUZIKA" });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("category.name_already_exists");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithADistinctName_Succeeds()
+    {
+        await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.CreateAsync(ValidCreateRequest() with { Name = "Kino" });
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_KeepingItsOwnName_Succeeds()
+    {
+        var created = await _sut.CreateAsync(ValidCreateRequest());
+
+        var result = await _sut.UpdateAsync(created.Value!.Id, new UpdateCategoryRequest
+        {
+            Name = created.Value.Name,
+            Description = "Izmijenjen opis",
+            IsActive = true,
+            DisplayOrder = 2,
+        });
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Description.Should().Be("Izmijenjen opis");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_RenamingOntoAnotherCategorysName_ReturnsConflict()
+    {
+        await _sut.CreateAsync(ValidCreateRequest());
+        var second = await _sut.CreateAsync(ValidCreateRequest() with { Name = "Kino" });
+
+        var result = await _sut.UpdateAsync(second.Value!.Id, new UpdateCategoryRequest
+        {
+            Name = "Pozorište",
+            Description = second.Value.Description,
+            IsActive = true,
+            DisplayOrder = 1,
+        });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("category.name_already_exists");
+    }
+
+    [Fact]
+
     public async Task CreateAsync_CreatesCategoryWithNullIconUrl()
     {
         var result = await _sut.CreateAsync(ValidCreateRequest());

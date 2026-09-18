@@ -24,8 +24,11 @@ services:
     environment:
       SA_PASSWORD: "${SA_PASSWORD:?Set SA_PASSWORD in .env}"
       ACCEPT_EULA: "Y"
+    # Bound to loopback, not 0.0.0.0: this is a developer convenience (SSMS/Azure Data Studio
+    # against the container), not something any other machine should reach. Publishing it on every
+    # interface put the database on the LAN of whatever network the dev machine happened to be on.
     ports:
-      - "${SQLSERVER_PORT:-1433}:1433"
+      - "127.0.0.1:${SQLSERVER_PORT:-1433}:1433"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
@@ -52,8 +55,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: eticketing-redis
+    # Loopback-only, same reasoning as sqlserver — and more urgent here: Redis runs with no
+    # password and holds the sector capacity counters, so anyone who could reach this port could
+    # take or wipe holds.
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -116,9 +122,9 @@ services:
       Jwt__SigningKey: "${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}"
       Services__Catalog: "http://catalog-service:8080"
       Services__Payment: "http://payment-service:8080"
-      # The Izvještaji reports are the only thing here that needs Identity: they show organization
-      # names, which no ticket row carries.
-      Services__Identity: "http://identity-service:8080"
+      # No Services__Identity. Organization names and contact details come from the local
+      # OrganizationSnapshot read model, fed by organization.changed over RabbitMQ — which is
+      # what put this service back inside the documented two-call whitelist.
       RabbitMq__Host: "rabbitmq"
       # Signs the QR payload minted for every ticket, and verifies it back at the gate. Ticketing is
       # the ONLY service that needs this — PdfGeneration receives finished payloads on the event.
@@ -223,8 +229,12 @@ services:
       Brevo__SenderEmail: "${BREVO_SENDER_EMAIL:?Set BREVO_SENDER_EMAIL in .env}"
       Brevo__SenderName: "${BREVO_SENDER_NAME:-eKarta}"
       Frontend__WebBaseUrl: "${CORS_ALLOWED_ORIGIN:-http://localhost:4200}"
+      # Remembers which events already produced their email, so a redelivered one is not sent twice.
+      # See DeduplicatingDeliveryHandler.
+      ConnectionStrings__Redis: "redis:6379"
     depends_on:
       rabbitmq: { condition: service_healthy }
+      redis: { condition: service_healthy }
     networks: [eticketing-network]
     restart: unless-stopped
 
@@ -239,12 +249,11 @@ services:
       # the address alone rather than a number nobody answers.
       TicketSupport__Email: "${SUPPORT_EMAIL:-podrska@ekarta.ba}"
       TicketSupport__Phone: "${SUPPORT_PHONE:-}"
-      # TicketPurchased carries no product name/date (Ticketing only stores a ProductId) — the PDF
-      # gets them from Catalog's internal endpoint.
-      Services__Catalog: "http://catalog-service:8080"
+      # No Services__Catalog and no catalog-service dependency: TicketPurchased now carries the
+      # product's name, date and city, read from Ticketing's own ProductSnapshot at purchase time.
+      # This consumer talks to the broker and to blob storage, and to nothing else.
     depends_on:
       rabbitmq: { condition: service_healthy }
-      catalog-service: { condition: service_started }
     networks: [eticketing-network]
     restart: unless-stopped
 
@@ -281,13 +290,16 @@ services:
       context: ./frontend/web
       args:
         # The root .env is not part of the web build context, so @ngx-env/builder cannot read it
-        # from inside the image — these ARGs are how the same two values reach the build there.
-        # (It merges process.env with whatever .env it finds, so both paths work unchanged.)
-        NG_APP_API_BASE_URL: "${NG_APP_API_BASE_URL:-http://localhost:5000/api}"
+        # from inside the image — this ARG is how the value reaches the build there. (It merges
+        # process.env with whatever .env it finds, so both paths work unchanged.)
         NG_APP_GOOGLE_MAPS_API_KEY: "${NG_APP_GOOGLE_MAPS_API_KEY:-}"
     container_name: eticketing-web
     environment:
       PORT: "4000"
+      # The browser talks only to this container; server.ts proxies /api on to the Gateway over the
+      # internal network. Runtime, not a build arg — that is the whole point of the name not
+      # starting with NG_APP_, which the builder would have frozen into the bundle at build time.
+      GATEWAY_INTERNAL_URL: "http://gateway:8080"
     ports:
       - "${WEB_PORT:-4200}:4000"
     depends_on:
