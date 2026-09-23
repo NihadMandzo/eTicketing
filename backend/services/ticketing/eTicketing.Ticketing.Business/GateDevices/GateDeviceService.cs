@@ -24,6 +24,7 @@ public class GateDeviceService : IGateDeviceService
 {
     private readonly IGateDeviceRepository _repository;
     private readonly ICatalogClient _catalogClient;
+    private readonly IProductSnapshotRepository _productSnapshots;
     private readonly GateDeviceKeyGenerator _keyGenerator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
@@ -32,6 +33,7 @@ public class GateDeviceService : IGateDeviceService
     public GateDeviceService(
         IGateDeviceRepository repository,
         ICatalogClient catalogClient,
+        IProductSnapshotRepository productSnapshots,
         GateDeviceKeyGenerator keyGenerator,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider,
@@ -39,6 +41,7 @@ public class GateDeviceService : IGateDeviceService
     {
         _repository = repository;
         _catalogClient = catalogClient;
+        _productSnapshots = productSnapshots;
         _keyGenerator = keyGenerator;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
@@ -193,7 +196,11 @@ public class GateDeviceService : IGateDeviceService
 
     public async Task<Result<GateConfigResponse>> GetConfigAsync(GateDevice device, CancellationToken ct = default)
     {
-        var product = await _catalogClient.GetProductAsync(device.ProductId, ct);
+        // The local read model, not Catalog: this is the device's own path (every boot and every
+        // refresh), and like validation it should keep working while Catalog is down. Registration
+        // below still asks Catalog, because that is an organizer's write and the ownership check
+        // there wants the authoritative answer.
+        var product = await _productSnapshots.GetByIdNoTrackingAsync(device.ProductId, ct);
         if (product is null)
             return Result<GateConfigResponse>.Failure(Error.NotFound(
                 "gate_device.product_not_found", "Proizvod za ovaj uređaj više ne postoji."));

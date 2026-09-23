@@ -188,10 +188,38 @@ public sealed class TicketingTestContext : IDisposable
             SubscriptionRepository, TicketRepository, SectorRepository, ProductSnapshotRepository, CapacityLock.Object,
             EventPublisher.Object, UnitOfWork, QrCodec, PlatformClock, NullLogger<SubscriptionRenewalService>.Instance);
 
-    public ITicketValidationService CreateTicketValidationService() =>
+    /// <param name="productSnapshots">Defaults to the real repository. Pass a mock only to make the
+    /// lookup fail, which a real SQLite table cannot be made to do on cue.</param>
+    public ITicketValidationService CreateTicketValidationService(IProductSnapshotRepository? productSnapshots = null) =>
         new TicketValidationService(
-            TicketRepository, ValidationLock.Object, CatalogClient.Object, QrCodec, UnitOfWork, PlatformClock,
-            NullLogger<TicketValidationService>.Instance);
+            TicketRepository, ValidationLock.Object, productSnapshots ?? ProductSnapshotRepository, QrCodec, UnitOfWork,
+            PlatformClock, NullLogger<TicketValidationService>.Instance);
+
+    /// <summary>Creates or overwrites the snapshot row for a product, synchronously so test
+    /// constructors can call it. Overwriting is the point: a test that moves a showing to another
+    /// day re-seeds a product the constructor already seeded.</summary>
+    public void UpsertProductSnapshot(
+        Guid productId, Guid organizationId, TicketingMode ticketingMode, DateTime? date,
+        string name = "Test proizvod")
+    {
+        var snapshot = DbContext.ProductSnapshots.Find(productId);
+        if (snapshot is null)
+        {
+            snapshot = new ProductSnapshot { ProductId = productId };
+            DbContext.ProductSnapshots.Add(snapshot);
+        }
+
+        snapshot.OrganizationId = organizationId;
+        snapshot.Name = name;
+        snapshot.Date = date;
+        snapshot.City = City.Sarajevo;
+        snapshot.Status = PublishStatus.Published;
+        snapshot.TicketingMode = ticketingMode;
+        snapshot.ChangedAt = Clock.GetUtcNow().UtcDateTime;
+
+        DbContext.SaveChanges();
+        DbContext.ChangeTracker.Clear();
+    }
 
     public ITicketPdfCompletionService CreateTicketPdfCompletionService() =>
         new TicketPdfCompletionService(TicketRepository, UnitOfWork, NullLogger<TicketPdfCompletionService>.Instance);
@@ -282,7 +310,7 @@ public sealed class TicketingTestContext : IDisposable
 
     public IGateDeviceService CreateGateDeviceService() =>
         new GateDeviceService(
-            GateDeviceRepository, CatalogClient.Object, KeyGenerator, UnitOfWork, Clock,
+            GateDeviceRepository, CatalogClient.Object, ProductSnapshotRepository, KeyGenerator, UnitOfWork, Clock,
             NullLogger<GateDeviceService>.Instance);
 
 

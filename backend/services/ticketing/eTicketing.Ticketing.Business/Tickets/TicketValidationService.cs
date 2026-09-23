@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
-using eTicketing.Ticketing.Business.External;
 using eTicketing.Contracts.Security;
 using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
@@ -41,12 +40,16 @@ namespace eTicketing.Ticketing.Business.Tickets;
 ///    is an exit, and the ticket stays Confirmed for its whole ValidFrom..ValidTo window. Because
 ///    that toggle is the only way in, the same ticket can never be used to enter twice without an
 ///    exit in between - which is exactly the rule this mode needs.
+/// 5. <b>Nothing here calls another service.</b> A SingleOccurrence ticket's showing date comes
+///    from the local <see cref="ProductSnapshot"/> read model, not from Catalog, so a Catalog
+///    outage cannot close every door of a venue. A scan touches only this service's database and
+///    the Redis lock.
 /// </summary>
 public class TicketValidationService : ITicketValidationService
 {
     private readonly ITicketRepository _ticketRepository;
     private readonly ITicketValidationLock _validationLock;
-    private readonly ICatalogClient _catalogClient;
+    private readonly IProductSnapshotRepository _productSnapshots;
     private readonly TicketQrCodec _qrCodec;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PlatformClock _clock;
@@ -55,7 +58,7 @@ public class TicketValidationService : ITicketValidationService
     public TicketValidationService(
         ITicketRepository ticketRepository,
         ITicketValidationLock validationLock,
-        ICatalogClient catalogClient,
+        IProductSnapshotRepository productSnapshots,
         TicketQrCodec qrCodec,
         IUnitOfWork unitOfWork,
         PlatformClock clock,
@@ -63,7 +66,7 @@ public class TicketValidationService : ITicketValidationService
     {
         _ticketRepository = ticketRepository;
         _validationLock = validationLock;
-        _catalogClient = catalogClient;
+        _productSnapshots = productSnapshots;
         _qrCodec = qrCodec;
         _unitOfWork = unitOfWork;
         _clock = clock;
@@ -84,14 +87,15 @@ public class TicketValidationService : ITicketValidationService
         if (counts.Count == 0)
             return Result<List<ValidationProductResponse>>.Success([]);
 
-        var products = await _catalogClient.GetProductsAsync(counts.Select(c => c.ProductId).Distinct().ToList(), ct);
-        var productsById = products.ToDictionary(p => p.Id);
+        var products = await _productSnapshots.GetByIdsNoTrackingAsync(counts.Select(c => c.ProductId).Distinct().ToList(), ct);
+        var productsById = products.ToDictionary(p => p.ProductId);
 
         var result = new List<ValidationProductResponse>();
         foreach (var count in counts)
         {
-            // A product Catalog no longer knows about (deleted out from under live tickets) is
-            // skipped rather than shown as a nameless row — there is nothing useful to scan against.
+            // A product with no snapshot row (deleted in Catalog out from under live tickets, which
+            // removes the row) is skipped rather than shown as a nameless row — there is nothing
+            // useful to scan against.
             if (!productsById.TryGetValue(count.ProductId, out var product))
                 continue;
 
@@ -104,7 +108,7 @@ public class TicketValidationService : ITicketValidationService
             }
 
             result.Add(new ValidationProductResponse(
-                product.Id, product.Name, product.Date, count.TicketingMode, count.TotalToday, count.ValidatedToday));
+                product.ProductId, product.Name, product.Date, count.TicketingMode, count.TotalToday, count.ValidatedToday));
         }
 
         return Result<List<ValidationProductResponse>>.Success(
@@ -261,9 +265,14 @@ public class TicketValidationService : ITicketValidationService
     }
 
     /// <summary>Mode-aware "is today inside this ticket's window". DailyEntry and
-    /// RecurringReservation answer from their own columns; SingleOccurrence has to ask Catalog for
-    /// the showing date, which is why this is async. A Catalog outage surfaces as the thrown
-    /// exception (and 500) it really is, rather than silently admitting everyone.</summary>
+    /// RecurringReservation answer from their own columns; SingleOccurrence has to look up the
+    /// showing date, which is why this is async.
+    ///
+    /// <para>The date comes from the local ProductSnapshot, which holds the same value Catalog
+    /// would return (it is copied from product.changed and from the startup backfill). An edit to
+    /// the date reaches it a few seconds late, through the outbox; in exchange, a scan no longer
+    /// depends on Catalog being up. A missing row or a missing date refuses the ticket rather than
+    /// admitting it.</para></summary>
     private async Task<(string Code, string Message)?> CheckValidTodayAsync(Ticket ticket, CancellationToken ct)
     {
         var today = Today();
@@ -282,7 +291,7 @@ public class TicketValidationService : ITicketValidationService
                 : ("ticket.not_valid_today", $"Rezervacija vrijedi od {from:dd.MM.yyyy}. do {to:dd.MM.yyyy}.");
         }
 
-        var product = await _catalogClient.GetProductAsync(ticket.ProductId, ct);
+        var product = await _productSnapshots.GetByIdNoTrackingAsync(ticket.ProductId, ct);
         if (product?.Date is null)
             return ("ticket.product_unavailable", "Podaci o događaju trenutno nisu dostupni.");
 

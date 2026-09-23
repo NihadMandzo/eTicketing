@@ -9,13 +9,15 @@
 //     sector, already-used, valid-today, organization — is checked server-side, so re-flashing this
 //     board with different constants cannot widen what the gate admits.
 //
-//  2. It fails CLOSED. No network, a timeout, an unparseable body, a rejected key: the barrier does
-//     not move. The only path that opens it is HTTP 200 with isValid = true.
+//  2. It fails CLOSED. No network, a timeout, an unparseable body, a rejected key, a server
+//     certificate it does not trust: the barrier does not move. The only path that opens it is
+//     HTTP 200 with isValid = true — in the real build (esp32cam), only over a TLS connection to a
+//     server that proved who it is. See build_mode.h for what the development build relaxes.
 
 #include <Arduino.h>
 
+#include "build_mode.h"
 #include "camera_qr.h"
-#include "config.h"
 #include "debug_log.h"
 #include "debug_server.h"
 #include "gate_api.h"
@@ -49,6 +51,22 @@ void logConfig(const gate_api::GateConfig &config) {
                     config.sectorSummary.c_str(), config.sectorCount);
   }
   Serial.println("------------------------------------------------------------");
+}
+
+/// <summary>Says which build is running, first thing at every boot. A development build flashed onto
+/// a real gate by mistake has to be impossible to miss, on the serial console and in the web log
+/// alike.</summary>
+void logBuild() {
+#if GATE_DEV_BUILD
+  debug_log::addf(debug_log::Level::Warn, "[gate] RAZVOJNA VERZIJA (esp32cam-dev) — nije za stvarni ulaz.");
+  if (gate_api::usesPlainHttp()) {
+    debug_log::addf(debug_log::Level::Bad,
+                    "[gate] Veza sa serverom je NEŠIFROVANI HTTP: ključ uređaja putuje otvoreno. "
+                    "Samo za lokalnu mrežu.");
+  }
+#else
+  debug_log::addf(debug_log::Level::Info, "[gate] Verzija: stvarni uređaj (esp32cam), veza samo HTTPS.");
+#endif
 }
 
 void refreshConfig(bool force) {
@@ -105,6 +123,7 @@ void setup() {
   Serial.println("\n[gate] eTicketing — ulazni skener");
 
   debug_log::begin();
+  logBuild();
 
   // First, and before anything that can fail: drive the barrier closed. A gate that reboots
   // mid-shift must come back down, not sit open.
@@ -142,6 +161,7 @@ void loop() {
 #if GATE_USE_FLASH
     gate_io::setFlash(false);
 #endif
+    gate_api::dropConnection();
     wifi_link::waitUntilConnected();
     // Scope may have changed while this gate was off the network.
     refreshConfig(true);
@@ -181,6 +201,18 @@ void loop() {
   debug_log::addf(debug_log::Level::Info, "[gate] Skenirano: %s", code.c_str());
 
   const gate_api::Verdict verdict = gate_api::validate(code);
+
+  // The network half of what a person at the door waits for, logged for every scan so it can be
+  // measured rather than guessed. A new TLS connection costs a handshake that a kept one does not,
+  // so the cases are labelled apart.
+  if (verdict.httpStatus > 0) {
+    debug_log::addf(debug_log::Level::Info, "[api] Odgovor za %lu ms (%s).",
+                    static_cast<unsigned long>(verdict.elapsedMs),
+                    !verdict.freshConnection        ? "postojeća veza"
+                    : gate_api::usesPlainHttp()     ? "nova HTTP veza"
+                                                    : "nova TLS veza");
+  }
+
   handle(verdict);
 
   // Whatever was decoded while the barrier was moving is stale by now.

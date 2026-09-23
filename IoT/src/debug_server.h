@@ -6,14 +6,15 @@
 // own port keeps the log and stats endpoints answering while the feed runs. This is the same split
 // the espressif CameraWebServer example uses, for the same reason.
 //
-// Compiled out entirely when GATE_DEBUG_SERVER is 0.
+// Development build only (esp32cam-dev, see build_mode.h), and there only when GATE_DEBUG_SERVER is 1.
+// The real build compiles it out entirely.
 #pragma once
 
 #include <Arduino.h>
 
 namespace debug_server {
 
-// Safe to call unconditionally — a no-op unless GATE_DEBUG_SERVER is 1. Call after WiFi is up.
+// Safe to call unconditionally — a no-op unless the page is compiled in. Call after WiFi is up.
 void begin();
 
 bool isRunning();

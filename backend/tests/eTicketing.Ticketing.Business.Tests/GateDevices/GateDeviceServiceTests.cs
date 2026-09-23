@@ -410,6 +410,7 @@ public class GateDeviceServiceTests : IDisposable
         var loza = await SeedSectorAsync("Loža");
         var created = (await _sut.CreateAsync(Request(sectorIds: [vip.Id, loza.Id]), OrganizerOf(_orgA))).Value!;
         var device = (await _fixture.GateDeviceRepository.GetByIdWithSectorsAsync(created.Device.Id))!;
+        SeedSnapshot(_productId);
 
         var result = await _sut.GetConfigAsync(device);
 
@@ -425,11 +426,44 @@ public class GateDeviceServiceTests : IDisposable
     {
         var created = (await _sut.CreateAsync(Request(allSectors: true, sectorIds: []), OrganizerOf(_orgA))).Value!;
         var device = (await _fixture.GateDeviceRepository.GetByIdWithSectorsAsync(created.Device.Id))!;
+        SeedSnapshot(_productId);
 
         var result = await _sut.GetConfigAsync(device);
 
         result.Value!.AllSectors.Should().BeTrue();
         result.Value.Sectors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetConfigAsync_ReadsTheProductFromTheSnapshot_WithoutCallingCatalog()
+    {
+        // The device's own path must keep working while Catalog is down, so the name and date come
+        // from the local read model. Registration (above) is what still asks Catalog.
+        var created = (await _sut.CreateAsync(Request(allSectors: true, sectorIds: []), OrganizerOf(_orgA))).Value!;
+        var device = (await _fixture.GateDeviceRepository.GetByIdWithSectorsAsync(created.Device.Id))!;
+        var showing = new DateTime(2026, 8, 24, 19, 30, 0);
+        _fixture.UpsertProductSnapshot(_productId, _orgA, TicketingMode.SingleOccurrence, showing, name: "Koncert u Zetri");
+        _fixture.CatalogClient.Invocations.Clear();
+
+        var result = await _sut.GetConfigAsync(device);
+
+        result.Value!.ProductName.Should().Be("Koncert u Zetri");
+        result.Value.ProductDate.Should().Be(showing);
+        _fixture.CatalogClient.Verify(
+            c => c.GetProductAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetConfigAsync_WhenTheProductHasNoSnapshotRow_FailsWithProductNotFound()
+    {
+        // The product was deleted after the device was registered, which removes its snapshot row.
+        var created = (await _sut.CreateAsync(Request(allSectors: true, sectorIds: []), OrganizerOf(_orgA))).Value!;
+        var device = (await _fixture.GateDeviceRepository.GetByIdWithSectorsAsync(created.Device.Id))!;
+
+        var result = await _sut.GetConfigAsync(device);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("gate_device.product_not_found");
     }
 
     [Fact]
@@ -463,6 +497,12 @@ public class GateDeviceServiceTests : IDisposable
                 productId, organizationId, PublishStatus.Published, TicketingMode.SingleOccurrence,
                 "Test proizvod", new DateTime(2026, 8, 24, 20, 0, 0, DateTimeKind.Utc), City.Sarajevo));
     }
+
+    /// <summary>The device's config path reads the local read model, not Catalog, so the config
+    /// tests need a row there as well as the Catalog mock registration uses.</summary>
+    private void SeedSnapshot(Guid productId) =>
+        _fixture.UpsertProductSnapshot(
+            productId, _orgA, TicketingMode.SingleOccurrence, new DateTime(2026, 8, 24, 20, 0, 0));
 
     private UpsertGateDeviceRequest Request(
         List<Guid> sectorIds,

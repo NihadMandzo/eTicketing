@@ -117,7 +117,10 @@ class GateDeviceKeyDialog extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Ako je adresa iznad "localhost", zamijenite je IP adresom ovog računara na '
-                'mreži (npr. 192.168.1.10) — uređaj je zaseban uređaj i ne može doći do "localhost".',
+                'mreži (npr. 192.168.1.10) — uređaj je zaseban uređaj i ne može doći do "localhost". '
+                'Adresu sa http:// prihvata samo razvojna verzija firmvera (esp32cam-dev), i to samo '
+                'na lokalnoj mreži. Stvarni uređaj (esp32cam) traži https:// adresu i korijenski '
+                'certifikat servera (GATE_API_ROOT_CA) — vidi IoT/README.md.',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.5,

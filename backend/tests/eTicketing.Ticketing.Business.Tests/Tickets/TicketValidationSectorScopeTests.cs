@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
-using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Tests.TestFixtures;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data.Entities;
@@ -34,8 +33,8 @@ public class TicketValidationSectorScopeTests : IDisposable
     public TicketValidationSectorScopeTests()
     {
         _sut = _fixture.CreateTicketValidationService();
-        MockProduct(_productId);
-        MockProduct(_otherProductId);
+        SeedProduct(_productId);
+        SeedProduct(_otherProductId);
     }
 
     // ------------------------------------------------------- device scope: the multi-sector gate
@@ -291,16 +290,9 @@ public class TicketValidationSectorScopeTests : IDisposable
 
     // ------------------------------------------------------------------------------- test helpers
 
-    private void MockProduct(Guid productId)
-    {
-        var response = new CatalogProductResponse(
-            productId, _orgA, PublishStatus.Published, TicketingMode.SingleOccurrence,
-            "Test proizvod", Today.ToDateTime(new TimeOnly(20, 0)), City.Sarajevo);
-
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductAsync(productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-    }
+    private void SeedProduct(Guid productId) =>
+        _fixture.UpsertProductSnapshot(
+            productId, _orgA, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
 
     private async Task<Sector> SeedSectorAsync(string name, Guid? productId = null, Guid? organizationId = null)
     {
