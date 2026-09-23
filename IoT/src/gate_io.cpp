@@ -22,8 +22,10 @@ void beepAt(uint16_t hz, uint16_t ms) {
   if (hz == 0) return;
 
   const uint32_t halfPeriodUs = 500000UL / hz;
-  const uint32_t until = millis() + ms;
-  while (millis() < until) {
+  // Elapsed time, not a deadline: millis() wraps after ~49.7 days, and a gate on mains power runs
+  // that long. A precomputed `millis() + ms` deadline that wraps makes the beep silently vanish.
+  const uint32_t start = millis();
+  while (millis() - start < ms) {
     digitalWrite(GATE_PIN_BUZZER, HIGH);
     delayMicroseconds(halfPeriodUs);
     digitalWrite(GATE_PIN_BUZZER, LOW);

@@ -1,4 +1,4 @@
-// Copy this file to include/config.h and fill in the four values at the top.
+// Copy this file to include/config.h and fill in the values at the top.
 // config.h is gitignored — it holds a WiFi password and a working gate credential.
 #pragma once
 
@@ -7,10 +7,18 @@
 #define GATE_WIFI_SSID "TvojWifi"
 #define GATE_WIFI_PASSWORD "TvojaLozinka"
 
-// Base URL of the API gateway, WITHOUT a trailing slash, INCLUDING the /api prefix.
-// Use the host machine's LAN address, not localhost — the ESP32 is a separate device.
-// Find it with `ipconfig` on Windows; the gateway is published on port 5000 by docker-compose.
-#define GATE_API_BASE_URL "http://192.168.1.10:5000/api"
+// Base URL of the API gateway, WITHOUT a trailing slash, INCLUDING the /api prefix. This device
+// sends its key with every request, so which addresses are accepted depends on the build
+// (platformio.ini), and a wrong combination does not compile:
+//
+//   Real gate (esp32cam), the default:
+//     https://<the Container Apps gateway's host name>/api — HTTPS only.
+//   Local development (esp32cam-dev):
+//     http://<this PC's LAN IP>:5000/api — plain HTTP to the local docker compose stack. Only a
+//     private LAN address is accepted (10.x, 172.16-31.x, 192.168.x), never a host name. Use the
+//     LAN IP from `ipconfig`, not localhost: the ESP32 is a separate device.
+#define GATE_API_BASE_URL "https://<gateway host name>/api"
+
 
 // The API key shown ONCE when this gate was registered in the desktop back-office
 // (Ulazni uređaji → Novi uređaj). Rotate it there if it ever leaks; the old one dies instantly.
@@ -88,8 +96,14 @@
 #define GATE_RESCAN_GUARD_MS 3000     // Ignore the same payload again within this window.
 #define GATE_CONFIG_REFRESH_MS 300000 // Re-fetch /gate/config every 5 min, so a sector change made
                                       // in the back-office reaches this door with no re-flash.
-#define GATE_HTTP_TIMEOUT_MS 8000
+#define GATE_HTTP_TIMEOUT_MS 8000     // Connect, TLS handshake and response wait, each.
 #define GATE_WIFI_RETRY_MS 5000
+
+// Keep the connection open between scans for this long (optional; 60 s if absent). A TLS handshake
+// costs far more than a request, so a queue at the door reuses one connection; after a quiet spell
+// the next scan opens a fresh one. Keep it well under the server's idle timeout (Kestrel closes an
+// idle connection after about two minutes), so a scan is never sent down a closed connection.
+#define GATE_TLS_REUSE_MS 60000
 
 // ------------------------------------------------------------------------------ testing / debug
 //
@@ -97,8 +111,9 @@
 // http://<device-ip>/ (the IP is printed at boot). Use it to see what the lens actually sees when
 // a ticket refuses to scan.
 //
-// TURN THIS OFF FOR ANYTHING RESEMBLING PRODUCTION. It publishes an unauthenticated view of the
-// camera to everyone on the venue's network, and it slows scanning down (see below).
+// DEVELOPMENT BUILD ONLY (esp32cam-dev). The real build (esp32cam) compiles the page out whatever
+// this says, because it publishes an unauthenticated view of the camera to everyone on the network,
+// and it slows scanning down (see below).
 #define GATE_DEBUG_SERVER 1
 
 // The page is on this port; the MJPEG stream is on this port + 1. Two servers because an MJPEG

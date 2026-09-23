@@ -1,8 +1,12 @@
 #include "debug_server.h"
 
-#include "config.h"
+#include "build_mode.h"
 
-#if GATE_DEBUG_SERVER
+#if !GATE_DEV_BUILD && GATE_DEBUG_SERVER
+#pragma message("GATE_DEBUG_SERVER is ignored in the real build (esp32cam): the diagnostic page is only in esp32cam-dev")
+#endif
+
+#if GATE_DIAGNOSTICS_ENABLED
 
 #include <WiFi.h>
 #include <esp_camera.h>
@@ -324,7 +328,7 @@ bool isRunning() { return controlServer != nullptr; }
 
 } // namespace debug_server
 
-#else // GATE_DEBUG_SERVER
+#else // GATE_DIAGNOSTICS_ENABLED
 
 namespace debug_server {
 void begin() {}

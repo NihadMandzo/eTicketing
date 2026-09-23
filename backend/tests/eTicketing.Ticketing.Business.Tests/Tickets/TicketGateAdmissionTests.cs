@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using eTicketing.Contracts.Persistence;
-using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Tests.TestFixtures;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data.Entities;
@@ -40,7 +39,7 @@ public class TicketGateAdmissionTests : IDisposable
     public TicketGateAdmissionTests()
     {
         _sut = _fixture.CreateTicketValidationService();
-        MockProduct(TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
+        SeedProduct(TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
     }
 
     // ------------------------------------------- RecurringReservation: the entry/exit toggle
@@ -234,7 +233,7 @@ public class TicketGateAdmissionTests : IDisposable
     {
         // The bright line between the two behaviours: a museum day pass is one admission, so its
         // second scan must be the "already used" refusal, never the exit a parking pass would get.
-        MockProduct(TicketingMode.DailyEntry, date: null);
+        SeedProduct(TicketingMode.DailyEntry, date: null);
         var ticket = await SeedOneShotTicketAsync(TicketingMode.DailyEntry, validDate: Today);
         var code = _fixture.QrCodec.Sign(ticket.Id);
         await _sut.ValidateAsync(Request(code), OrganizerOf(_orgA));
@@ -333,18 +332,8 @@ public class TicketGateAdmissionTests : IDisposable
         return await _fixture.DbContext.Tickets.AsNoTracking().FirstAsync(t => t.Id == ticketId);
     }
 
-    private void MockProduct(TicketingMode mode, DateTime? date)
-    {
-        var response = new CatalogProductResponse(
-            _productId, _orgA, PublishStatus.Published, mode, "Test proizvod", date, City.Sarajevo);
-
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductAsync(_productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(_productId)), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([response]);
-    }
+    private void SeedProduct(TicketingMode mode, DateTime? date) =>
+        _fixture.UpsertProductSnapshot(_productId, _orgA, mode, date);
 
     private ClaimsPrincipal OrganizerOf(Guid organizationId)
     {

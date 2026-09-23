@@ -1,10 +1,11 @@
 using System.Security.Claims;
+using eTicketing.Contracts.Events;
 using eTicketing.Contracts.Persistence;
 using eTicketing.Contracts.Results;
-using eTicketing.Ticketing.Business.External;
 using eTicketing.Ticketing.Business.Tests.TestFixtures;
 using eTicketing.Ticketing.Business.Tickets;
 using eTicketing.Ticketing.Data.Entities;
+using eTicketing.Ticketing.Data.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -33,8 +34,8 @@ public class TicketValidationServiceTests : IDisposable
     public TicketValidationServiceTests()
     {
         _sut = _fixture.CreateTicketValidationService();
-        MockProduct(_productId, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
-        MockProduct(_otherProductId, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
+        SeedProduct(_productId, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
+        SeedProduct(_otherProductId, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
     }
 
     // ---------------------------------------------------------------- ValidateAsync: happy path
@@ -225,8 +226,9 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_ForASingleOccurrenceTicketWhoseShowingIsNotToday_ReturnsInvalid()
     {
-        // SingleOccurrence tickets carry no date of their own — the answer comes from Catalog.
-        MockProduct(_productId, TicketingMode.SingleOccurrence, Today.AddDays(5).ToDateTime(new TimeOnly(20, 0)));
+        // SingleOccurrence tickets carry no date of their own — the answer comes from the local
+        // product snapshot.
+        SeedProduct(_productId, TicketingMode.SingleOccurrence, Today.AddDays(5).ToDateTime(new TimeOnly(20, 0)));
         var ticket = await SeedTicketAsync();
 
         var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
@@ -236,15 +238,49 @@ public class TicketValidationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidateAsync_WhenCatalogHasNoDateForTheProduct_ReturnsInvalidRatherThanAdmitting()
+    public async Task ValidateAsync_WhenTheSnapshotHasNoDateForTheProduct_ReturnsInvalidRatherThanAdmitting()
     {
-        MockProduct(_productId, TicketingMode.SingleOccurrence, date: null);
+        SeedProduct(_productId, TicketingMode.SingleOccurrence, date: null);
         var ticket = await SeedTicketAsync();
 
         var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
 
         result.Value!.IsValid.Should().BeFalse();
         result.Value.Code.Should().Be("ticket.product_unavailable");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_WhenTheProductHasNoSnapshotRow_ReturnsInvalidAndLeavesTheTicketUnused()
+    {
+        // A product deleted in Catalog loses its snapshot row. "Unknown" must refuse, not admit, and
+        // must not burn the ticket either — the holder may still be owed a refund for it.
+        var deletedProductId = Guid.NewGuid();
+        var ticket = await SeedTicketAsync(productId: deletedProductId);
+
+        var result = await _sut.ValidateAsync(Request(deletedProductId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeFalse();
+        result.Value.Code.Should().Be("ticket.product_unavailable");
+        (await ReloadAsync(ticket.Id)).Status.Should().Be(TicketStatus.Confirmed);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_AfterAProjectedDateChange_JudgesTheTicketByTheNewDate()
+    {
+        // The date reaches this service as product.changed, through the real projector — the same
+        // path an organizer's edit in Catalog takes. Moving tonight's showing to next week has to
+        // stop tonight's door admitting it.
+        var ticket = await SeedTicketAsync();
+        var nextWeek = Today.AddDays(7).ToDateTime(new TimeOnly(20, 0));
+        await _fixture.CreateProductSnapshotProjector().ApplyAsync(new ProductSnapshotChanged(
+            _productId, _orgA, "Test proizvod", nextWeek, City.Sarajevo, PublishStatus.Published,
+            TicketingMode.SingleOccurrence, _fixture.Clock.GetUtcNow().UtcDateTime.AddMinutes(1)));
+
+        var result = await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+
+        result.Value!.IsValid.Should().BeFalse();
+        result.Value.Code.Should().Be("ticket.not_valid_today");
+        (await ReloadAsync(ticket.Id)).Status.Should().Be(TicketStatus.Confirmed);
     }
 
     // -------------------------------------------------------------------- ValidateAsync: locking
@@ -296,13 +332,15 @@ public class TicketValidationServiceTests : IDisposable
     public async Task ValidateAsync_ReleasesTheLock_EvenWhenTheLookupThrows()
     {
         var ticket = await SeedTicketAsync();
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductAsync(_productId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("Catalog je nedostupan."));
+        var failingSnapshots = new Mock<IProductSnapshotRepository>();
+        failingSnapshots
+            .Setup(r => r.GetByIdNoTrackingAsync(_productId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Baza je nedostupna."));
+        var sut = _fixture.CreateTicketValidationService(failingSnapshots.Object);
 
-        var act = async () => await _sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
+        var act = async () => await sut.ValidateAsync(Request(_productId, _fixture.QrCodec.Sign(ticket.Id)), OrganizerOf(_orgA));
 
-        await act.Should().ThrowAsync<HttpRequestException>();
+        await act.Should().ThrowAsync<InvalidOperationException>();
         _fixture.ValidationLock.Verify(
             l => l.ReleaseAsync(ticket.Id, "test-lock-token", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -335,7 +373,7 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task GetProductsForTodayAsync_ExcludesAProductShowingOnAnotherDay()
     {
-        MockProduct(_productId, TicketingMode.SingleOccurrence, Today.AddDays(1).ToDateTime(new TimeOnly(20, 0)));
+        SeedProduct(_productId, TicketingMode.SingleOccurrence, Today.AddDays(1).ToDateTime(new TimeOnly(20, 0)));
         await SeedTicketAsync();
 
         var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
@@ -346,7 +384,7 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task GetProductsForTodayAsync_ExcludesADailyEntryProductWithNoTicketsForToday()
     {
-        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        SeedProduct(_productId, TicketingMode.DailyEntry, date: null);
         await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(2));
 
         var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
@@ -386,14 +424,39 @@ public class TicketValidationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProductsForTodayAsync_WithNoTicketsAtAll_ReturnsEmptyWithoutCallingCatalog()
+    public async Task GetProductsForTodayAsync_WithNoTicketsAtAll_ReturnsEmpty()
     {
         var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
-        _fixture.CatalogClient.Verify(
-            c => c.GetProductsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetProductsForTodayAsync_SkipsAProductWithNoSnapshotRow()
+    {
+        // Tickets that outlived their product (deleted in Catalog, row removed here) have nothing
+        // to be scanned against, so they must not show up as a nameless row in the list.
+        await SeedTicketAsync();
+        await SeedTicketAsync(productId: Guid.NewGuid());
+
+        var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
+
+        result.Value!.Should().ContainSingle().Which.ProductId.Should().Be(_productId);
+    }
+
+    [Fact]
+    public async Task GetProductsForTodayAsync_TakesTheNameAndDateFromTheSnapshot()
+    {
+        var showing = Today.ToDateTime(new TimeOnly(19, 30));
+        _fixture.UpsertProductSnapshot(_productId, _orgA, TicketingMode.SingleOccurrence, showing, name: "Koncert u Zetri");
+        await SeedTicketAsync();
+
+        var result = await _sut.GetProductsForTodayAsync(OrganizerOf(_orgA));
+
+        var row = result.Value!.Single();
+        row.Name.Should().Be("Koncert u Zetri");
+        row.Date.Should().Be(showing);
     }
 
     [Fact]
@@ -422,7 +485,7 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_JustAfterLocalMidnight_AcceptsADailyEntryTicketForTheNewLocalDay()
     {
-        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        SeedProduct(_productId, TicketingMode.DailyEntry, date: null);
         var ticket = await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
         _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
 
@@ -437,7 +500,7 @@ public class TicketValidationServiceTests : IDisposable
     {
         // The other side of the same boundary: 21:30 UTC is 23:30 local, still today, so a ticket
         // for tomorrow must not open the gate half an hour early.
-        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        SeedProduct(_productId, TicketingMode.DailyEntry, date: null);
         var ticket = await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
         _fixture.Clock.SetUtcNow(new DateTimeOffset(2026, 8, 24, 21, 30, 0, TimeSpan.Zero));
 
@@ -463,7 +526,7 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_JustAfterLocalMidnight_RejectsASingleOccurrenceTicketForTheDayThatJustEnded()
     {
-        // Mirror case for the mode that asks Catalog for the date: last night's concert stops
+        // Mirror case for the mode that looks the date up: last night's concert stops
         // working the moment the local day rolls over, not two hours later when UTC catches up.
         var ticket = await SeedTicketAsync();
         _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
@@ -477,7 +540,7 @@ public class TicketValidationServiceTests : IDisposable
     [Fact]
     public async Task GetProductsForTodayAsync_JustAfterLocalMidnight_ListsTheNewLocalDaysProduct()
     {
-        MockProduct(_productId, TicketingMode.DailyEntry, date: null);
+        SeedProduct(_productId, TicketingMode.DailyEntry, date: null);
         await SeedTicketAsync(mode: TicketingMode.DailyEntry, validDate: Today.AddDays(1));
         _fixture.Clock.SetUtcNow(JustAfterLocalMidnight);
 
@@ -590,18 +653,8 @@ public class TicketValidationServiceTests : IDisposable
         return await _fixture.DbContext.Tickets.AsNoTracking().FirstAsync(t => t.Id == ticketId);
     }
 
-    private void MockProduct(Guid productId, TicketingMode mode, DateTime? date)
-    {
-        var response = new CatalogProductResponse(
-            productId, _orgA, PublishStatus.Published, mode, "Test proizvod", date, City.Sarajevo);
-
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductAsync(productId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-        _fixture.CatalogClient
-            .Setup(c => c.GetProductsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(productId)), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([response]);
-    }
+    private void SeedProduct(Guid productId, TicketingMode mode, DateTime? date) =>
+        _fixture.UpsertProductSnapshot(productId, _orgA, mode, date);
 
     private async Task<Ticket> SeedTicketAsync(
         Guid? productId = null,
