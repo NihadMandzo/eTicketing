@@ -14,10 +14,29 @@
       }
     </div>
 
-    <div class="recommendation-grid">
-      @for (product of products(); track product.id) {
-        <app-product-card [product]="product" />
-      }
-    </div>
+    @if (marquee()) {
+      <div class="marquee" [style.--marquee-duration]="marqueeDuration()">
+        <div class="marquee-track">
+          <div class="marquee-group">
+            @for (product of marqueeItems(); track $index) {
+              <app-product-card class="marquee-item" [product]="product" />
+            }
+          </div>
+          <!-- Second copy exists only to make the loop seamless; hidden from assistive tech and
+               unfocusable so keyboard users do not tab through every card twice. -->
+          <div class="marquee-group" aria-hidden="true" inert>
+            @for (product of marqueeItems(); track $index) {
+              <app-product-card class="marquee-item" [product]="product" />
+            }
+          </div>
+        </div>
+      </div>
+    } @else {
+      <div class="recommendation-grid">
+        @for (product of products(); track product.id) {
+          <app-product-card [product]="product" />
+        }
+      </div>
+    }
   </section>
 }

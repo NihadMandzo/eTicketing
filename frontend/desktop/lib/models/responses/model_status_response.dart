@@ -1,6 +1,5 @@
 /// One past training run of the recommendation model.
 class ModelSnapshotResponse {
-  final String id;
   final DateTime trainedAt;
   final int interactionCount;
   final int userCount;
@@ -9,7 +8,6 @@ class ModelSnapshotResponse {
   final bool isActive;
 
   const ModelSnapshotResponse({
-    required this.id,
     required this.trainedAt,
     required this.interactionCount,
     required this.userCount,
@@ -19,7 +17,6 @@ class ModelSnapshotResponse {
   });
 
   factory ModelSnapshotResponse.fromJson(Map<String, dynamic> json) => ModelSnapshotResponse(
-        id: json['id'] as String,
         trainedAt: DateTime.parse(json['trainedAt'] as String),
         interactionCount: json['interactionCount'] as int? ?? 0,
         userCount: json['userCount'] as int? ?? 0,
