@@ -528,6 +528,13 @@ dotnet test backend/eTicketing.sln
 ### 1. Create the `.env` file
 
 The whole stack is configured by one `.env` file in the repository root, which is gitignored.
+Copy the template and fill in the Azure Storage and Brevo values; every other value already has a
+working local default:
+
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+```
+
 Compose refuses to start without the six required values.
 
 <details>
@@ -646,6 +653,43 @@ docker compose --profile build run --rm desktop-build    # -> ./dist/desktop/ (L
 Docker can produce only an Android APK (iOS needs a macOS host) and a Linux desktop bundle. Build
 Windows or macOS desktop apps natively with `flutter build windows` or `flutter build macos` from
 `frontend/desktop`.
+
+### 4. Run the load tests (optional)
+
+The [k6](https://k6.io) load, stress and flash-sale tests live in [`loadtests/`](loadtests/). They
+run against a **separate copy** of the stack (`eticketing-lt-*` containers, its own network and
+database volume, Gateway on port **5100**), so the thousands of test accounts and tickets they
+create never touch the normal stack from step 2. k6 itself runs in a container, so nothing but
+Docker has to be installed.
+
+Needs: Docker, a bash shell (Git Bash on Windows), the `.env` from step 1, and Python 3 only if you
+want the charted HTML report. Run everything from the repository root:
+
+```bash
+# 1. Start a fresh isolated stack (the first run builds the images, 1-3 minutes)
+docker compose -p eticketing-loadtest -f docker-compose.yml -f loadtests/docker-compose.loadtest.yml down -v
+docker compose -p eticketing-loadtest -f docker-compose.yml -f loadtests/docker-compose.loadtest.yml up -d --build gateway
+
+# 2. A quick first check (about 1 minute): create the test data, then 20 virtual users
+bash loadtests/run.sh seed-run seed.js -q
+bash loadtests/run.sh smoke mixed.js -q -e TARGET_VUS=20 -e RAMP=10s -e HOLD=30s -e BUYER_EVERY=2
+
+# 3. The full suite in report order (about 50 minutes), then the charted report
+bash loadtests/run-all.sh
+python loadtests/report/analyze.py && python loadtests/report/build.py
+
+# 4. Remove the load-test containers and their database volume
+docker compose -p eticketing-loadtest -f docker-compose.yml -f loadtests/docker-compose.loadtest.yml down -v
+```
+
+Each run writes its output to `loadtests/results/` (gitignored): the k6 summary, a per-request CSV,
+k6's own HTML dashboard and CPU/memory samples. The report page is
+`loadtests/results/load-test-report.html`. A 5,000-user tier needs a machine with roughly 16 cores
+and plenty of memory. Start with the smoke run above and scale `TARGET_VUS` up from there.
+
+[`loadtests/README.md`](loadtests/README.md) describes every script, the single-test commands
+(1,000 and 5,000 users, breakpoint, flash sale with and without a virtual queue), the two
+correctness checks (`verify-redis-lock.sh`, `verify-recovery.sh`) and how to read the results.
 
 <p align="center">
   Built by Nihad Mandžo as a diploma thesis project.

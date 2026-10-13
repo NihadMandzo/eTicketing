@@ -1,0 +1,85 @@
+# =============================================================================
+# eTicketing — isolated load-test stack (overlay on the root docker-compose.yml)
+#
+# Always run with its own project name, so it gets its own containers, network and
+# SQL volume and never touches the dev database:
+#
+#   docker compose -p eticketing-loadtest -f docker-compose.yml -f loadtests/docker-compose.loadtest.yml up -d --build gateway
+#   docker compose -p eticketing-loadtest -f docker-compose.yml -f loadtests/docker-compose.loadtest.yml --profile loadtest run --rm k6 run /scripts/seed.js
+#
+# Only `gateway` (and what it depends on) is started: notifications-service and
+# pdfgeneration-service are deliberately left down, because they send real Brevo email and
+# render PDFs for every purchase — a 10k-user run would mail thousands of fake addresses
+# and burn the account's sending quota. The events they would consume simply queue up.
+# See loadtests/README.md.
+# =============================================================================
+
+services:
+  sqlserver:
+    container_name: eticketing-lt-sqlserver
+    ports: !reset []
+
+  rabbitmq:
+    container_name: eticketing-lt-rabbitmq
+    ports: !override
+      - "15673:15672"
+
+  redis:
+    container_name: eticketing-lt-redis
+    ports: !reset []
+
+  identity-service:
+    container_name: eticketing-lt-identity
+    environment:
+      # Every k6 virtual user arrives from the k6 container's single IP, so the production
+      # 20/minute login+register limit would turn any login storm into a 429 storm.
+      RateLimiting__AuthAttemptsPerMinute: "100000000"
+      # Long enough that no access cookie expires mid-run (k6 sends cookies by hand, see
+      # scripts/lib/session.js, and does not run the refresh flow).
+      Jwt__AccessTokenMinutes: "240"
+
+  catalog-service:
+    container_name: eticketing-lt-catalog
+
+  ticketing-service:
+    container_name: eticketing-lt-ticketing
+
+  payment-service:
+    container_name: eticketing-lt-payment
+    environment:
+      # Never Stripe under load: Stripe test mode has far lower rate limits than live mode, so a
+      # load test against it would measure Stripe's throttling, not this system.
+      Payment__Provider: "Mock"
+
+  notifications-service:
+    container_name: eticketing-lt-notifications
+
+  pdfgeneration-service:
+    container_name: eticketing-lt-pdfgeneration
+
+  gateway:
+    container_name: eticketing-lt-gateway
+    ports: !override
+      - "5100:8080"
+
+  web:
+    container_name: eticketing-lt-web
+    ports: !override
+      - "4300:4000"
+
+  # The load generator. Runs inside the compose network so it reaches the Gateway over the
+  # Docker bridge — not through Docker Desktop's Windows port forwarding, which would cap
+  # throughput long before the services do.
+  k6:
+    image: grafana/k6:2.3.0
+    container_name: eticketing-lt-k6
+    profiles: ["loadtest"]
+    environment:
+      BASE_URL: "http://gateway:8080"
+      K6_NO_USAGE_REPORT: "true"
+    volumes:
+      - ./loadtests/scripts:/scripts:ro
+      - ./loadtests/results:/results
+    networks: [eticketing-network]
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
