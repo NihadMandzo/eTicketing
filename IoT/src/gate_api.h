@@ -1,4 +1,6 @@
-// The two calls this device makes to eTicketing, both authenticated with the X-Device-Key header.
+// The two calls this device makes to eTicketing, both over HTTPS and both authenticated with the
+// X-Device-Key header. The server's certificate is checked against the one root in config.h before
+// the key is sent; see gate_api.cpp for why a plain-HTTP build is refused outright.
 //
 // Note what is NOT sent: no product id, no sector ids. The server reads this gate's scope from the
 // GateDevice row the key resolves to. That is the point — re-flashing this board with different
@@ -38,10 +40,20 @@ struct Verdict {
   String sectorName;
   String ticketType;
   String holderEmail;
-  int httpStatus = 0;
+  int httpStatus = 0;        // negative = HTTPClient's own error code, no response at all
+  uint32_t elapsedMs = 0;    // request sent to response read, including any TLS handshake
+  bool freshConnection = false; // true when this scan opened a new connection (a TLS handshake)
 };
 
 GateConfig fetchConfig();
+
+// Closes the kept connection. Called when WiFi drops: a socket from before the outage can look open
+// afterwards, and the first scan sent down it would fail for no reason the holder could fix.
+void dropConnection();
+
+// True only in a development build (esp32cam-dev) whose GATE_API_BASE_URL is http:// to a LAN
+// address. Always false in the real build, which does not compile with an http:// address.
+bool usesPlainHttp();
 
 Verdict validate(const String &scannedCode);
 

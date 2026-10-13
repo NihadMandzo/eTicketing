@@ -40,7 +40,64 @@
   min-width: 0;
 }
 
+/* Auto-scrolling strip. The track holds two identical groups and slides left by exactly one group's
+   * width (-50%), then restarts — the restart is invisible because the second group is a copy of
+   * the first. Hovering or focusing inside pauses it so a card can actually be clicked. */
+.marquee {
+  overflow: hidden;
+  /* Vertical padding so card hover lift/shadow is not clipped by overflow: hidden. */
+  padding: 12px 0;
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+}
+
+.marquee-group {
+  display: flex;
+  gap: 24px;
+  /* Trailing gap so the seam between the two groups matches the gap between cards. */
+  padding-right: 24px;
+}
+
+.marquee-item {
+  flex: 0 0 320px;
+  width: 320px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .marquee-track {
+    /* @keyframes marquee-scroll lives in styles.css: Angular's style scoping renames keyframes
+       declared here but not an animation name that sits next to a var(), so nothing animates. */
+    animation: marquee-scroll var(--marquee-duration, 40s) linear infinite;
+  }
+
+  .marquee:hover .marquee-track,
+  .marquee:focus-within .marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+/* Reduced motion: no auto-scroll, fall back to a hand-scrollable strip. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    overflow-x: auto;
+    mask-image: none;
+  }
+
+  .marquee-group[aria-hidden='true'] {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
+  .marquee-item {
+    flex-basis: 280px;
+    width: 280px;
+  }
+
   .recommendation-row {
     margin-bottom: 32px;
   }

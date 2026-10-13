@@ -43,7 +43,6 @@ public class OrganizationSnapshotPublisher : IOrganizationSnapshotPublisher
                 organization.Email,
                 organization.PhoneNumber,
                 superAdminEmail,
-                organization.IsActive,
                 DateTime.UtcNow),
             ct);
 
@@ -69,7 +68,7 @@ public class OrganizationSnapshotPublisher : IOrganizationSnapshotPublisher
                 EventNames.OrganizationSnapshotChanged,
                 new OrganizationSnapshotChanged(
                     row.Id, row.Name, row.Address, row.Email, row.PhoneNumber,
-                    row.SuperAdminEmail, row.IsActive, publishedAt),
+                    row.SuperAdminEmail, publishedAt),
                 ct);
         }
 

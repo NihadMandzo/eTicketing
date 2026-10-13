@@ -138,8 +138,8 @@ public class OrganizationService : IOrganizationService
         // dedicated logo endpoints).
         request.Adapt(organization);
 
-        // Name, address, email, phone and IsActive all live on this request, and all five are on
-        // the snapshot eTicketing.Ticketing prints from.
+        // Name, address, email and phone all live on this request, and all four are on the
+        // snapshot eTicketing.Ticketing prints from.
         await _snapshotPublisher.PublishAsync(organization, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 

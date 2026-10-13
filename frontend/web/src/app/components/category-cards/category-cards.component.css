@@ -23,10 +23,10 @@
 .category-card {
   display: flex;
   flex-direction: column;
-  /* 140/150 rather than 120/150: inside the 900px wrapper this row lives in, five cards per line
-     leave enough slack that every card reaches the 150px cap — so a wrapped last row is made of
-     cards the same size as the rows above it, not wider ones. */
-  flex: 1 1 140px;
+  /* Basis 100 / cap 150: the cards sit in one row on a wide screen (growing to the 150px cap, and
+     shrinking-to-wrap only once a card would drop below ~100px), then wrap into further centred rows
+     as the viewport narrows. */
+  flex: 1 1 100px;
   max-width: 150px;
   min-width: 0;
   aspect-ratio: 1 / 1;

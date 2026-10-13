@@ -38,8 +38,7 @@ public class ProductSnapshotProjectorTests : IDisposable
         DateTime? changedAt = null,
         DateTime? date = null,
         City city = City.Sarajevo) =>
-        new(_productId, _organizationId, name, date, city, status,
-            TicketingMode.SingleOccurrence, changedAt ?? Noon);
+        new(_productId, name, date, city, status, changedAt ?? Noon);
 
     private Task<ProductSnapshot?> StoredAsync() =>
         _fixture.DbContext.ProductSnapshots.AsNoTracking().FirstOrDefaultAsync(p => p.ProductId == _productId);
@@ -51,12 +50,10 @@ public class ProductSnapshotProjectorTests : IDisposable
 
         var stored = await StoredAsync();
         stored.Should().NotBeNull();
-        stored!.OrganizationId.Should().Be(_organizationId);
-        stored.Name.Should().Be("Ljetni Festival");
+        stored!.Name.Should().Be("Ljetni Festival");
         stored.Date.Should().Be(new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc));
         stored.City.Should().Be(City.Sarajevo);
         stored.Status.Should().Be(PublishStatus.Published);
-        stored.TicketingMode.Should().Be(TicketingMode.SingleOccurrence);
         stored.ChangedAt.Should().Be(Noon);
     }
 

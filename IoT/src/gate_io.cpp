@@ -9,40 +9,31 @@ namespace {
 
 Servo barrier;
 
-/// <summary>One tone on a PASSIVE piezo — the only kind this gate supports. A passive disc has no
-/// oscillator of its own: it makes sound only from a driven waveform, so a steady level produces
-/// nothing but a click at each edge. This drives a 50% square wave at `hz` for `ms`.
-///
-/// Software-timed on purpose: tone() and ledcWriteTone() both go through the LEDC peripheral, and
-/// on arduino-esp32 2.x tone() hardcodes channel 0 — the very channel the camera driver assigns to
-/// the OV2640's XCLK. Calling it here would reconfigure the sensor's clock mid-run (green frames,
-/// then nothing). Bit-banging the pin touches no shared peripheral at all, which is why the gate
-/// can have both a camera and a pitched buzzer.</summary>
-void beepAt(uint16_t hz, uint16_t ms) {
-  if (hz == 0) return;
-
-  const uint32_t halfPeriodUs = 500000UL / hz;
-  const uint32_t until = millis() + ms;
-  while (millis() < until) {
-    digitalWrite(GATE_PIN_BUZZER, HIGH);
-    delayMicroseconds(halfPeriodUs);
-    digitalWrite(GATE_PIN_BUZZER, LOW);
-    delayMicroseconds(halfPeriodUs);
-  }
-  // Never leave the disc sitting at a DC level: it holds the element deflected and wastes current.
+/// <summary>One beep on an ACTIVE buzzer — the kind with its own oscillator, which sounds at a fixed
+/// pitch for as long as the pin is held HIGH. Driving it with a waveform (as a passive disc needs)
+/// fights that oscillator and comes out as one continuous drone, so this simply holds the level.
+/// Pitch is not ours to choose here; the verdicts are told apart by pattern alone.</summary>
+void beepAt(uint16_t ms) {
+  // Re-claim the pin every time. begin() configures it before the camera, Wi-Fi and the servo
+  // library come up; the boot chirp (played before them) was audible while later beeps were not,
+  // which points at the pad being reassigned afterwards. pinMode() takes it back and detaches any
+  // peripheral signal routed to it.
+  pinMode(GATE_PIN_BUZZER, OUTPUT);
+  digitalWrite(GATE_PIN_BUZZER, HIGH);
+  delay(ms);
   digitalWrite(GATE_PIN_BUZZER, LOW);
 }
 
-/// <summary>N identical bursts separated by gaps. Pattern, not pitch, is what distinguishes the
-/// verdicts on a resonant transducer — see the tone frequencies in config.h.</summary>
-void beepTimes(uint8_t count, uint16_t hz, uint16_t onMs, uint16_t gapMs) {
+/// <summary>N identical bursts separated by gaps. Pattern is the only thing that distinguishes the
+/// verdicts on a fixed-pitch buzzer.</summary>
+void beepTimes(uint8_t count, uint16_t onMs, uint16_t gapMs) {
   for (uint8_t i = 0; i < count; i++) {
     if (i > 0) delay(gapMs);
-    beepAt(hz, onMs);
+    beepAt(onMs);
   }
 }
 
-void beepTwice(uint16_t hz, uint16_t onMs, uint16_t gapMs) { beepTimes(2, hz, onMs, gapMs); }
+void beepTwice(uint16_t onMs, uint16_t gapMs) { beepTimes(2, onMs, gapMs); }
 
 /// <summary>Move the barrier for a fixed time, then stop it. The whole vocabulary of a
 /// continuous-rotation servo: a pulse width is a speed and a direction, so distance is expressed
@@ -73,6 +64,11 @@ void begin() {
   digitalWrite(GATE_PIN_FLASH, LOW);
   setStatusLed(false);
 
+  // Power-on chirp: proves the buzzer, its wiring and GPIO GATE_PIN_BUZZER work, independently of
+  // any ticket verdict. If this is silent the fault is in the wiring or pin, never in the API path.
+  beepAt(200);
+  Serial.printf("[gate] Zujalica: probni signal na GPIO %d\n", GATE_PIN_BUZZER);
+
   // Hand ESP32Servo timers 1-3 and never timer 0: the esp32-camera driver claims LEDC timer 0 /
   // channel 0 for the sensor's XCLK. Letting the servo library allocate greedily means whichever
   // of the two initialises second silently reconfigures the other's clock — the classic symptom
@@ -98,11 +94,11 @@ void begin() {
 void performGranted() {
   setLeds(true, false);
 
-  // Rising two-tone, sounded BEFORE the barrier moves: the holder is still looking at the scanner
+  // Short then long, sounded BEFORE the barrier moves: the holder is still looking at the scanner
   // at this point, and the servo burst is loud enough to mask a beep played under it.
-  beepAt(GATE_TONE_GRANTED_LOW_HZ, 150);
-  delay(100);
-  beepAt(GATE_TONE_GRANTED_HIGH_HZ, 200);
+  beepAt(100);
+  delay(80);
+  beepAt(350);
 
   drive(GATE_SERVO_OPEN_US, GATE_SERVO_OPEN_TRAVEL_MS);
   delay(GATE_OPEN_HOLD_MS);
@@ -115,20 +111,16 @@ void performGranted() {
 
 void performDenied() {
   setLeds(false, true);
-  // Three short bursts, not one long low tone. A single 700Hz note was the original design and it
-  // reads correctly as "wrong" to a human — but a piezo disc barely radiates at 700Hz, so at an
-  // entrance it simply was not heard. Staccato repetition carries "rejected" just as clearly and
-  // survives being played at a frequency the transducer is efficient at.
-  beepTimes(3, GATE_TONE_DENIED_HZ, 140, 90);
+  // Three short staccato bursts: unmistakably "rejected", and distinct from the granted pair.
+  beepTimes(3, 140, 90);
   delay(GATE_VERDICT_HOLD_MS);
   setLeds(false, false);
 }
 
 void performRetry() {
-  // Both LEDs, and a mid tone that is neither the rising chime nor the low buzz — this is
-  // "try again", not "you are not getting in".
+  // Both LEDs and two even, medium beeps — "try again", not "you are not getting in".
   setLeds(true, true);
-  beepTwice(GATE_TONE_RETRY_HZ, 200, 140);
+  beepTwice(200, 140);
   delay(GATE_VERDICT_HOLD_MS);
   setLeds(false, false);
 }
@@ -140,9 +132,9 @@ void performNetworkError() {
     setLeds(false, false);
     delay(120);
   }
-  // Same low pitch as a rejection but stuttered, so a broken gate is audibly distinct from a
-  // stream of bad tickets without needing anyone to read the serial log.
-  beepTwice(GATE_TONE_DENIED_HZ, 100, 90);
+  // Two quick stutters, so a broken gate is audibly distinct from a stream of bad tickets without
+  // needing anyone to read the serial log.
+  beepTwice(100, 90);
 }
 
 void setStatusLed(bool on) {

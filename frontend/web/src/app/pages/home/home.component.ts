@@ -83,7 +83,7 @@ export class HomeComponent {
     this.isLoadingRecommendations.set(true);
 
     if (this.authService.isAuthenticated()) {
-      this.recommendationService.getForMe(6).subscribe({
+      this.recommendationService.getForMe(12).subscribe({
         next: (result) => {
           this.recommendations.set(result.items);
           this.recommendationTitle.set(RECOMMENDATION_TITLES[result.source]);
@@ -94,7 +94,7 @@ export class HomeComponent {
       return;
     }
 
-    this.recommendationService.getPopular(null, 6).subscribe({
+    this.recommendationService.getPopular(null, 12).subscribe({
       next: (products) => {
         this.recommendations.set(products);
         this.recommendationTitle.set(RECOMMENDATION_TITLES.Popular);

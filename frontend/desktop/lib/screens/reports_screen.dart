@@ -34,14 +34,30 @@ import 'widgets/reports/report_segment_card.dart';
 class ReportsScreen extends StatefulWidget {
   final UserProfile user;
 
-  const ReportsScreen({super.key, required this.user});
+  /// The API client. Null in the app (the screen makes its own); a test passes a fake so it can
+  /// decide when each response arrives.
+  final ReportProvider? provider;
+
+  const ReportsScreen({super.key, required this.user, this.provider});
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
+/// What the screen is currently waiting on. See [_ReportsScreenState._fetchLatest].
+enum _Fetch {
+  /// Nothing in flight.
+  idle,
+
+  /// A tab load: the whole tab is blanked behind a spinner.
+  tab,
+
+  /// A horizon change: the tab keeps its figures and only the selected pill spins.
+  horizon,
+}
+
 class _ReportsScreenState extends State<ReportsScreen> {
-  final ReportProvider _provider = ReportProvider();
+  late final ReportProvider _provider = widget.provider ?? ReportProvider();
 
   late List<ReportTab> _tabs;
   late ReportTab _tab;
@@ -56,13 +72,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late DateTime _loadedFrom;
   late DateTime _loadedTo;
 
-  bool _isLoading = true;
   bool _isExporting = false;
   String? _errorMessage;
 
-  /// Incremented on every [_load]. A response whose generation no longer matches
-  /// has been superseded and is discarded — see [_load].
-  int _loadGeneration = 0;
+  /// What the newest request is doing — one value, not one flag per kind of request.
+  ///
+  /// Two independent booleans (tab loading, horizon refreshing) used to be cleared by their own
+  /// request's completion handler, and a superseded request skips that handler by design (its
+  /// response must be discarded), so a horizon refresh replaced by a date change left its flag set
+  /// forever and locked the projection pills. With a single value the newest request overwrites it
+  /// on the way in, so an older request never has anything to clean up.
+  _Fetch _fetch = _Fetch.tab;
+
+  /// Id of the newest request; every earlier one is stale — see [_fetchLatest].
+  int _generation = 0;
+
+  bool get _isLoading => _fetch == _Fetch.tab;
+
+  /// See [_Fetch.horizon]: separate from [_isLoading] because a horizon change must not blank the
+  /// tab. The projection and the findings written from it do change, but the anomalies and the
+  /// segments do not depend on the horizon, and none of the four has a reason to vanish while the
+  /// answer is on its way.
+  bool get _isRefreshingInsights => _fetch == _Fetch.horizon;
 
   SalesReport? _sales;
   ProductReport? _products;
@@ -76,15 +107,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// block it governs.
   int _horizon = ReportHorizon.defaultDays;
 
-  /// True while a horizon change is being applied.
-  ///
-  /// Deliberately separate from `_isLoading`: that flag blanks the whole tab
-  /// behind a spinner, which is the "full refresh" a horizon change must not
-  /// cause. The projection and the findings written from it do change; the
-  /// anomalies and the segments cannot, since neither depends on the horizon —
-  /// and none of the four has any reason to vanish while the answer is on its
-  /// way. See `_changeHorizon`.
-  bool _isRefreshingInsights = false;
+  /// The horizon the insights on screen were computed for. [_horizon] is what the pill strip shows;
+  /// the two differ only while a change is in flight, and a failed change returns [_horizon] here
+  /// so the strip never names a period the figures are not for.
+  int _loadedHorizon = ReportHorizon.defaultDays;
 
   /// The tabs each role may see — the client half of the matrix in
   /// `ReportService.Authorize`.
@@ -143,61 +169,88 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
-  /// Fetches only the active tab. The four reports are four separate queries
-  /// server-side, and a platform-wide yearly range is not cheap — loading the
-  /// three the user is not looking at would triple that for nothing.
-  Future<void> _load() async {
-    if (_rangeInvalid) return;
-
-    // Supersedes any request still in flight. The user can change tab, preset or
-    // date faster than a wide range answers, and a wider range is the slower one
-    // — so without this the older response is actually the likelier to land last
-    // and paint stale figures under the newly selected filter.
-    final requestId = ++_loadGeneration;
-
+  /// Runs [request] as the screen's newest request and applies its result only if it still is.
+  ///
+  /// The user can change tab, preset, date or projection faster than a wide range answers, and a
+  /// wider range is the slower one — so the older response is actually the likelier to land last.
+  /// Every call bumps [_generation]; a response (or failure) whose id is no longer the newest is
+  /// dropped without touching any state, which is what stops it painting stale figures under the
+  /// filter the user has since moved on to.
+  ///
+  /// Both effects of that rule are structural rather than remembered at each call site:
+  /// * [apply] is the only place a result is written, so a stale one is never stored, not merely
+  ///   never shown.
+  /// * [_fetch] is set here on the way in and cleared here on the way out, and only by the newest
+  ///   request. A superseded request leaves nothing to clean up, because its successor has already
+  ///   overwritten [_fetch] with its own kind.
+  Future<void> _fetchLatest<T>(
+    _Fetch kind,
+    Future<T> Function() request, {
+    required void Function(T result) apply,
+    required void Function(Object error) onError,
+  }) async {
+    final id = ++_generation;
     setState(() {
-      _isLoading = true;
+      _fetch = kind;
       _errorMessage = null;
     });
 
     try {
-      switch (_tab) {
-        case ReportTab.sales:
-          _sales = await _provider.getSales(_from, _to);
-          break;
-        case ReportTab.products:
-          _products = await _provider.getProducts(_from, _to);
-          break;
-        case ReportTab.redemption:
-          _redemption = await _provider.getRedemption(_from, _to);
-          break;
-        case ReportTab.organizations:
-          _organizations = await _provider.getOrganizations(_from, _to);
-          break;
-        case ReportTab.insights:
-          _insights = await _provider.getInsights(_from, _to, horizon: _horizon);
-          break;
-      }
-
-      if (!mounted || requestId != _loadGeneration) return;
+      final result = await request();
+      if (!mounted || id != _generation) return;
       setState(() {
-        _loadedFrom = _from;
-        _loadedTo = _to;
-        _isLoading = false;
+        apply(result);
+        _fetch = _Fetch.idle;
       });
-    } on ApiException catch (e) {
-      if (!mounted || requestId != _loadGeneration) return;
-      setState(() {
-        _errorMessage = e.apiError.displayMessage;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted || requestId != _loadGeneration) return;
-      setState(() {
-        _errorMessage = 'Izvještaj nije moguće učitati. Pokušajte ponovo.';
-        _isLoading = false;
-      });
+    } catch (e) {
+      if (!mounted || id != _generation) return;
+      setState(() => _fetch = _Fetch.idle);
+      onError(e);
     }
+  }
+
+  /// Fetches only the active tab. The four reports are four separate queries
+  /// server-side, and a platform-wide yearly range is not cheap — loading the
+  /// three the user is not looking at would triple that for nothing.
+  Future<void> _load() {
+    if (_rangeInvalid) return Future.value();
+
+    // Read once: what the request asks for is what [_loadedFrom]/[_loadedTo]/[_loadedHorizon]
+    // record, even if the user has already edited the fields by the time it answers.
+    final from = _from;
+    final to = _to;
+    final horizon = _horizon;
+
+    Future<void> run<T>(Future<T> Function() request, void Function(T result) assign) =>
+        _fetchLatest<T>(
+          _Fetch.tab,
+          request,
+          apply: (result) {
+            assign(result);
+            _loadedFrom = from;
+            _loadedTo = to;
+          },
+          onError: (e) => setState(() {
+            _errorMessage = e is ApiException
+                ? e.apiError.displayMessage
+                : 'Izvještaj nije moguće učitati. Pokušajte ponovo.';
+          }),
+        );
+
+    return switch (_tab) {
+      ReportTab.sales => run(() => _provider.getSales(from, to), (r) => _sales = r),
+      ReportTab.products => run(() => _provider.getProducts(from, to), (r) => _products = r),
+      ReportTab.redemption => run(() => _provider.getRedemption(from, to), (r) => _redemption = r),
+      ReportTab.organizations =>
+        run(() => _provider.getOrganizations(from, to), (r) => _organizations = r),
+      ReportTab.insights => run(
+          () => _provider.getInsights(from, to, horizon: horizon),
+          (r) {
+            _insights = r;
+            _loadedHorizon = horizon;
+          },
+        ),
+    };
   }
 
   /// Re-fetches AI Uvidi for a new horizon without the tab's full loading
@@ -206,31 +259,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// and every block already on screen stays where it is until the answer
   /// arrives, rather than the tab blanking and rebuilding under the reader.
   ///
-  /// Shares `_loadGeneration` with `_load()` rather than a horizon-local
-  /// counter: a date change or tab switch mid-flight has to supersede this
-  /// fetch exactly the way it supersedes any other one, and one guard is what
-  /// makes that automatic.
-  Future<void> _changeHorizon(int horizon) async {
-    if (_horizon == horizon || _isRefreshingInsights) return;
+  /// Goes through [_fetchLatest] like [_load], so a date change or tab switch
+  /// mid-flight supersedes it exactly the way it supersedes any other fetch. On
+  /// failure the strip returns to [_loadedHorizon]: the figures are still the
+  /// old ones, and a pill claiming otherwise would be wrong.
+  Future<void> _changeHorizon(int horizon) {
+    if (_horizon == horizon || _fetch != _Fetch.idle) return Future.value();
 
-    final requestId = ++_loadGeneration;
-    setState(() {
-      _horizon = horizon;
-      _isRefreshingInsights = true;
-    });
+    setState(() => _horizon = horizon);
 
-    try {
-      final result = await _provider.getInsights(_from, _to, horizon: horizon);
-      if (!mounted || requestId != _loadGeneration) return;
-      setState(() {
+    return _fetchLatest<AnalyticsInsights>(
+      _Fetch.horizon,
+      () => _provider.getInsights(_from, _to, horizon: horizon),
+      apply: (result) {
         _insights = result;
-        _isRefreshingInsights = false;
-      });
-    } catch (e) {
-      if (!mounted || requestId != _loadGeneration) return;
-      setState(() => _isRefreshingInsights = false);
-      handleApiError(e);
-    }
+        _loadedHorizon = horizon;
+      },
+      onError: (e) {
+        setState(() => _horizon = _loadedHorizon);
+        handleApiError(e);
+      },
+    );
   }
 
   void _selectTab(int index) {

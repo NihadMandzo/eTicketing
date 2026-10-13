@@ -136,7 +136,7 @@ public class InboxRedeliveryTests : IDisposable
     [Fact]
     public async Task RouteAsync_ForProductDeletedDeliveredTwice_RemovesTheSnapshotAndNotifiesEachBuyerOnce()
     {
-        await _fixture.SeedProductSnapshotAsync(_productId, organizationId: _organizationId);
+        await _fixture.SeedProductSnapshotAsync(_productId);
         await SeedBuyerAsync("ana@example.com");
         await SeedBuyerAsync("marko@example.com");
 
@@ -154,7 +154,7 @@ public class InboxRedeliveryTests : IDisposable
         // Dropping the snapshot is what stops the deleted product's sectors selling, so it must not
         // be rolled back with a failed fan-out — the retry path is one attempt and then the
         // dead-letter queue, and the product would stay on sale until someone replayed it by hand.
-        await _fixture.SeedProductSnapshotAsync(_productId, organizationId: _organizationId);
+        await _fixture.SeedProductSnapshotAsync(_productId);
         await SeedBuyerAsync("ana@example.com");
 
         var failing = new Mock<IProductDeletionNotifier>();
@@ -172,7 +172,7 @@ public class InboxRedeliveryTests : IDisposable
     [Fact]
     public async Task RouteAsync_ForProductDeletedRetriedAfterItsNoticesFailed_NotifiesOnce()
     {
-        await _fixture.SeedProductSnapshotAsync(_productId, organizationId: _organizationId);
+        await _fixture.SeedProductSnapshotAsync(_productId);
         await SeedBuyerAsync("ana@example.com");
 
         // First attempt: the fan-out writes its row and then fails, so the row must not survive.

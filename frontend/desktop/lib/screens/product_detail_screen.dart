@@ -363,7 +363,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // ── Left column: Title → Images → Location+Date → Description → Map ──────────
+  // ── Left column: Title → Images+Location+Date → Description → Map ────────────
 
   Widget _buildLeftColumn(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
     return Column(
@@ -372,8 +372,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _buildTitleSection(isDark, textPrimary, textTertiary, primary),
         const SizedBox(height: 20),
         _buildImagesSection(isDark, textPrimary, textTertiary, primary),
-        const SizedBox(height: 20),
-        _buildLocationDateRow(isDark, textPrimary, textTertiary, primary),
         if (_product.description.isNotEmpty) ...[
           const SizedBox(height: 20),
           _buildDescriptionSection(isDark, textPrimary, textTertiary),
@@ -439,32 +437,37 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _buildLocationDateRow(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
-    final locationCard = _InfoCard(
-      icon: LucideIcons.mapPin,
-      label: 'Lokacija',
-      value: _product.city.label,
-      isDark: isDark,
-      primary: primary,
-    );
-
-    if (_product.date == null) return locationCard;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: locationCard),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _InfoCard(
-            icon: LucideIcons.calendarDays,
-            label: 'Datum',
-            value: _formatDateTime(_product.date!),
+  /// Location + date, shown as a side panel inside the images card. Date is only
+  /// present for SingleOccurrence products — DailyEntry/RecurringReservation have none.
+  Widget _buildLocationDatePanel(bool isDark, Color primary) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurfaceMuted : AppColors.lightSurfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoCard(
+            icon: LucideIcons.mapPin,
+            label: 'Lokacija',
+            value: _product.city.label,
             isDark: isDark,
             primary: primary,
           ),
-        ),
-      ],
+          if (_product.date != null) ...[
+            const SizedBox(height: 14),
+            _InfoCard(
+              icon: LucideIcons.calendarDays,
+              label: 'Datum i vrijeme',
+              value: _formatDateTime(_product.date!),
+              isDark: isDark,
+              primary: primary,
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -574,9 +577,43 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  /// One card holding the image gallery with location + date beside it; the
+  /// panel drops below the gallery when the card is too narrow for both.
   Widget _buildImagesSection(bool isDark, Color textPrimary, Color textTertiary, Color primary) {
     final images = _product.images;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+
+    final gallery = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Slike (${images.length}/$_maxImageCount)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
+        const SizedBox(height: 4),
+        Text('PNG ili JPEG, maksimalno 2MB po slici.', style: TextStyle(fontSize: 12, color: textTertiary)),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final image in images)
+              _ImageTile(
+                image: image,
+                isDark: isDark,
+                disabled: _isMutatingImage,
+                onDelete: () => _deleteImage(image),
+              ),
+            if (images.length < _maxImageCount)
+              _AddImageTile(
+                isDark: isDark,
+                primary: primary,
+                disabled: _isMutatingImage,
+                onTap: _addImage,
+              ),
+          ],
+        ),
+      ],
+    );
+    final infoPanel = _buildLocationDatePanel(isDark, primary);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -585,42 +622,34 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         border: Border.all(color: borderColor),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Slike (${images.length}/$_maxImageCount)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
-          const SizedBox(height: 4),
-          Text('PNG ili JPEG, maksimalno 2MB po slici.', style: TextStyle(fontSize: 12, color: textTertiary)),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 560) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: gallery),
+                const SizedBox(width: 20),
+                SizedBox(width: 240, child: infoPanel),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final image in images)
-                _ImageTile(
-                  image: image,
-                  isDark: isDark,
-                  disabled: _isMutatingImage,
-                  onDelete: () => _deleteImage(image),
-                ),
-              if (images.length < _maxImageCount)
-                _AddImageTile(
-                  isDark: isDark,
-                  primary: primary,
-                  disabled: _isMutatingImage,
-                  onTap: _addImage,
-                ),
+              gallery,
+              const SizedBox(height: 16),
+              infoPanel,
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-/// A small labeled info tile — used for the Location + Date row on the product
-/// detail screen's left column, side by side when both are present.
+/// A small labeled icon + value line — used for Location and Date inside the
+/// images card's side panel.
 class _InfoCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -640,42 +669,34 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final textTertiary = isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: primary),
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: primary.withValues(alpha: isDark ? 0.18 : 0.1),
+            borderRadius: BorderRadius.circular(10),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(fontSize: 11, color: textTertiary)),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+          child: Icon(icon, size: 18, color: primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontSize: 11, color: textTertiary)),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

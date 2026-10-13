@@ -163,6 +163,20 @@ public class RedisSectorCapacityLockTests
     }
 
     [Fact]
+    public async Task TryHoldAsync_WhenTheScriptReportsNoCounter_ReturnsCounterMissingAndWritesNoHoldInfo()
+    {
+        _db.Setup(d => d.ScriptEvaluateAsync(
+                It.IsAny<string>(), It.IsAny<RedisKey[]>(), It.IsAny<RedisValue[]>(), It.IsAny<CommandFlags>()))
+            .ReturnsAsync(RedisResult.Create((RedisValue)(-1)));
+
+        var result = await _sut.TryHoldAsync(SectorId, 500, 1, null, TimeSpan.FromMinutes(5), OwnerId);
+
+        result.Success.Should().BeFalse();
+        result.CounterMissing.Should().BeTrue();
+        _db.Invocations.Should().NotContain(i => i.Method.Name == nameof(IDatabase.StringSetAsync));
+    }
+
+    [Fact]
     public async Task PeekAsync_ForAnUnknownHold_ReturnsNull()
     {
         (await _sut.PeekAsync(HoldId)).Should().BeNull();
@@ -178,7 +192,7 @@ public class RedisSectorCapacityLockTests
 
         await _sut.ReleaseAsync(HoldId);
 
-        _db.Verify(d => d.HashDeleteAsync(CounterKey, HoldId, It.IsAny<CommandFlags>()), Times.Once);
+        VerifyScriptRanOn(CounterKey, HoldId);
         _db.Verify(d => d.KeyDeleteAsync($"holdinfo:{HoldId}", It.IsAny<CommandFlags>()), Times.Once);
     }
 
@@ -189,23 +203,18 @@ public class RedisSectorCapacityLockTests
 
         await _sut.ReleaseAsync(HoldId);
 
-        _db.Verify(d => d.HashDeleteAsync(CounterKey, HoldId, It.IsAny<CommandFlags>()), Times.Once);
+        VerifyScriptRanOn(CounterKey, HoldId);
     }
 
     [Fact]
-    public async Task ConfirmAsync_ForAVersionedValue_PersistsTheCounterKeyAndDropsTheHoldInfoPointer()
+    public async Task ConfirmAsync_ForAVersionedValue_RunsTheConfirmScriptOnTheCounterKeyAndDropsTheHoldInfoPointer()
     {
         GivenHoldInfo($"v2|{OwnerId:N}|{CounterKey}");
         GivenHoldField(CounterKey, 2);
 
         await _sut.ConfirmAsync(HoldId);
 
-        _db.Verify(
-            d => d.HashSetAsync(
-                CounterKey, HoldId, It.Is<RedisValue>(v => v.ToString()!.StartsWith("2:")),
-                It.IsAny<When>(), It.IsAny<CommandFlags>()),
-            Times.Once);
-        _db.Verify(d => d.KeyPersistAsync(CounterKey, It.IsAny<CommandFlags>()), Times.Once);
+        VerifyScriptRanOn(CounterKey, HoldId);
         _db.Verify(d => d.KeyDeleteAsync($"holdinfo:{HoldId}", It.IsAny<CommandFlags>()), Times.Once);
     }
 
@@ -217,10 +226,20 @@ public class RedisSectorCapacityLockTests
         await _sut.ConfirmAsync(HoldId);
 
         _db.Verify(
-            d => d.HashSetAsync(
-                It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<RedisValue>(),
-                It.IsAny<When>(), It.IsAny<CommandFlags>()),
+            d => d.ScriptEvaluateAsync(
+                It.IsAny<string>(), It.IsAny<RedisKey[]>(), It.IsAny<RedisValue[]>(), It.IsAny<CommandFlags>()),
             Times.Never);
-        _db.Verify(d => d.KeyPersistAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()), Times.Never);
     }
+
+    /// <summary>Release and confirm are Lua scripts over (hash, :used, :exp). What matters is that
+    /// they address the parsed counter key — never the raw "v2|..." value — and the right hold.</summary>
+    private void VerifyScriptRanOn(string counterKey, string holdId) =>
+        _db.Verify(
+            d => d.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.Is<RedisKey[]>(k => k.Length == 3 && k[0] == counterKey
+                    && k[1] == counterKey + ":used" && k[2] == counterKey + ":exp"),
+                It.Is<RedisValue[]>(v => v[0] == holdId),
+                It.IsAny<CommandFlags>()),
+            Times.Once);
 }

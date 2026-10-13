@@ -337,3 +337,10 @@ SPRINTS
 docs
 .claude/
 graphify-out/
+
+# ===========================
+# Load testing: scripts are tracked, run output is not
+# ===========================
+loadtests/results/
+frontend/mobile/android/build/
+.gradle/

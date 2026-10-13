@@ -29,6 +29,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseExceptionHandler();
+// Refuses overflow with 503 before any work is spent on it — see LoadSheddingMiddleware.
+app.UsePlatformLoadShedding();
 // Before UseAuthentication, and before the rate limiter that is the whole reason it is here:
 // everything downstream reads Connection.RemoteIpAddress, and until this runs that is the
 // Gateway's container address for every single request. See ForwardedHeadersExtensions.

@@ -105,7 +105,6 @@ public class ProductMappingTests
 
         var response = snapshot.Adapt<ModelSnapshotResponse>();
 
-        response.Id.Should().Be(snapshot.Id);
         response.TrainedAt.Should().Be(snapshot.TrainedAt);
         response.InteractionCount.Should().Be(1200);
         response.UserCount.Should().Be(300);

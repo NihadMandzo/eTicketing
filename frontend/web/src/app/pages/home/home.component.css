@@ -2,69 +2,6 @@
   width: 100%;
 }
 
-/* Hero Section */
-.hero-section {
-  position: relative;
-  padding: 120px 24px 100px;
-  overflow: hidden;
-}
-
-.hero-bg {
-  position: absolute;
-  inset: 0;
-  --hero-c1: color-mix(in srgb, var(--primary) 18%, transparent);
-  --hero-c2: color-mix(in srgb, var(--secondary) 18%, transparent);
-  --hero-c3: color-mix(in srgb, var(--accent) 18%, transparent);
-  background: linear-gradient(135deg, var(--hero-c1) 0%, var(--hero-c2) 50%, var(--hero-c3) 100%);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hero-bg {
-    animation: gradient-shift 10s ease infinite;
-  }
-}
-
-@keyframes gradient-shift {
-  0%, 100% {
-    background: linear-gradient(135deg, var(--hero-c1) 0%, var(--hero-c2) 50%, var(--hero-c3) 100%);
-  }
-  50% {
-    background: linear-gradient(135deg, var(--hero-c3) 0%, var(--hero-c1) 50%, var(--hero-c2) 100%);
-  }
-}
-
-.hero-content {
-  position: relative;
-  z-index: 10;
-  max-width: 900px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.hero-title {
-  font-size: 3.5rem;
-  margin-bottom: 24px;
-  line-height: 1.1;
-}
-
-.text-primary {
-  color: var(--primary);
-}
-
-.hero-subtitle {
-  font-size: 1.25rem;
-  color: var(--muted-foreground);
-  margin-bottom: 40px;
-  line-height: 1.6;
-}
-
-.hero-actions {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
 /* Page-specific button styles */
 .btn-accent {
   background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
@@ -112,8 +49,10 @@
   color: var(--muted-foreground);
 }
 
+/* Full container width, not a narrow column: the categories should sit in one row on desktop and
+   only wrap into further rows when the viewport runs out of room. */
 .category-cards-wrap {
-  max-width: 900px;
+  max-width: 100%;
   margin: 0 auto 36px;
 }
 
@@ -246,18 +185,6 @@
 /* Footer */
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .hero-section {
-    padding: 80px 16px 60px;
-  }
-  
-  .hero-title {
-    font-size: 2rem;
-  }
-  
-  .hero-subtitle {
-    font-size: 1rem;
-  }
-  
   .popular-events-section,
   .cta-section {
     padding: 60px 16px;

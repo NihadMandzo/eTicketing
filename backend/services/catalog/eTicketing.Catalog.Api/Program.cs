@@ -29,8 +29,12 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseExceptionHandler();
+// Refuses overflow with 503 before any work is spent on it — see LoadSheddingMiddleware.
+app.UsePlatformLoadShedding();
 app.UseAuthentication();
 app.UseAuthorization();
+// Serves the anonymous browse endpoints marked CachePublicly() — see PublicOutputCachePolicy.
+app.UseOutputCache();
 
 app.MapCategoryEndpoints();
 app.MapProductEndpoints();

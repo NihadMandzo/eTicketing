@@ -71,7 +71,6 @@ public class OrganizationSnapshotProjector : IOrganizationSnapshotProjector
         snapshot.Email = message.Email;
         snapshot.PhoneNumber = message.PhoneNumber;
         snapshot.SuperAdminEmail = message.SuperAdminEmail;
-        snapshot.IsActive = message.IsActive;
         snapshot.ChangedAt = message.ChangedAt;
     }
 }

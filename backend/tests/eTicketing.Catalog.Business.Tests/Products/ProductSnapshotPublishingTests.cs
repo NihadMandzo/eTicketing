@@ -45,11 +45,9 @@ public class ProductSnapshotPublishingTests : IDisposable
 
         var snapshot = CapturedSnapshot();
         snapshot.ProductId.Should().Be(created.Value!.Id);
-        snapshot.OrganizationId.Should().Be(_orgA);
         snapshot.Name.Should().Be("Ljetni Festival");
         snapshot.Status.Should().Be(PublishStatus.Draft);
         snapshot.City.Should().Be(City.Sarajevo);
-        snapshot.TicketingMode.Should().Be(TicketingMode.SingleOccurrence);
     }
 
     [Fact]
@@ -92,21 +90,6 @@ public class ProductSnapshotPublishingTests : IDisposable
         await _sut.UpdateAsync(created.Value.Id, Request(), Caller());
 
         CapturedSnapshot().ProductId.Should().Be(created.Value.Id);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_ThatMovesTheProductToACategoryWithAnotherTicketingMode_ReportsTheNewMode()
-    {
-        // TicketingMode lives on Category, so a recategorisation changes how every sector of this
-        // product behaves. A snapshot still saying SingleOccurrence would leave Ticketing branching
-        // on the wrong mode.
-        var created = await _sut.CreateAsync(Request(), Caller());
-        _fixture.EventPublisher.Invocations.Clear();
-
-        await _sut.UpdateAsync(
-            created.Value!.Id, Request() with { CategoryId = _parking.Id, Date = null }, Caller());
-
-        CapturedSnapshot().TicketingMode.Should().Be(TicketingMode.RecurringReservation);
     }
 
     [Fact]

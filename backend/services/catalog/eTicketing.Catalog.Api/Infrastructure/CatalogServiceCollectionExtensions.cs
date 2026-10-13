@@ -19,8 +19,11 @@ public static class CatalogServiceCollectionExtensions
     public static WebApplicationBuilder AddCatalogInfrastructure(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<CatalogDbContext>(opt => opt
-            .UseSqlServer(builder.Configuration.GetConnectionString("CatalogDb"))
+            .UseSqlServer(SqlConnectionPooling.WithPlatformPoolSize(builder.Configuration.GetConnectionString("CatalogDb"), builder.Configuration))
             .AddInterceptors(new AuditableEntitySaveChangesInterceptor()));
+
+        // In-process response cache for the anonymous browse endpoints (CachePublicly in Endpoints/).
+        builder.Services.AddOutputCache();
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CatalogDbContext>());
         builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();

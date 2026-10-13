@@ -4,17 +4,42 @@
 
 // ---------------------------------------------------------------------------- must be filled in
 
-#define GATE_WIFI_SSID "TvojWifi"
-#define GATE_WIFI_PASSWORD "TvojaLozinka"
+#define GATE_WIFI_SSID "Rezidencija Mandzo"
+#define GATE_WIFI_PASSWORD "Mandzo123"
 
 // Base URL of the API gateway, WITHOUT a trailing slash, INCLUDING the /api prefix.
 // Use the host machine's LAN address, not localhost — the ESP32 is a separate device.
 // Find it with `ipconfig` on Windows; the gateway is published on port 5000 by docker-compose.
-#define GATE_API_BASE_URL "http://192.168.1.10:5000/api"
+#define GATE_API_BASE_URL "http://192.168.0.34:5000/api"
 
+#define GATE_API_ROOT_CA \
+  "-----BEGIN CERTIFICATE-----\n" \
+  "MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh\n" \
+  "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
+  "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH\n" \
+  "MjAeFw0xMzA4MDExMjAwMDBaFw0zODAxMTUxMjAwMDBaMGExCzAJBgNVBAYTAlVT\n" \
+  "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n" \
+  "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEcyMIIBIjANBgkqhkiG\n" \
+  "9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuzfNNNx7a8myaJCtSnX/RrohCgiN9RlUyfuI\n" \
+  "2/Ou8jqJkTx65qsGGmvPrC3oXgkkRLpimn7Wo6h+4FR1IAWsULecYxpsMNzaHxmx\n" \
+  "1x7e/dfgy5SDN67sH0NO3Xss0r0upS/kqbitOtSZpLYl6ZtrAGCSYP9PIUkY92eQ\n" \
+  "q2EGnI/yuum06ZIya7XzV+hdG82MHauVBJVJ8zUtluNJbd134/tJS7SsVQepj5Wz\n" \
+  "tCO7TG1F8PapspUwtP1MVYwnSlcUfIKdzXOS0xZKBgyMUNGPHgm+F6HmIcr9g+UQ\n" \
+  "vIOlCsRnKPZzFBQ9RnbDhxSJITRNrw9FDKZJobq7nMWxM4MphQIDAQABo0IwQDAP\n" \
+  "BgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUTiJUIBiV\n" \
+  "5uNu5g/6+rkS7QYXjzkwDQYJKoZIhvcNAQELBQADggEBAGBnKJRvDkhj6zHd6mcY\n" \
+  "1Yl9PMWLSn/pvtsrF9+wX3N3KjITOYFnQoQj8kVnNeyIv/iPsGEMNKSuIEyExtv4\n" \
+  "NeF22d+mQrvHRAiGfzZ0JFrabA0UWTW98kndth/Jsw1HKj2ZL7tcu7XUIOGZX1NG\n" \
+  "Fdtom/DzMNU+MeKNhJ7jitralj41E6Vf8PlwUHBHQRFXGU7Aj64GxJUTFy8bJZ91\n" \
+  "8rGOmaFvE7FBcf6IKshPECBV1/MUReXgRPTqh5Uykw7+U0b6LJ3/iyK5S9kJRaTe\n" \
+  "pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl\n" \
+  "MrY=\n" \
+  "-----END CERTIFICATE-----\n"
+
+  
 // The API key shown ONCE when this gate was registered in the desktop back-office
 // (Ulazni uređaji → Novi uređaj). Rotate it there if it ever leaks; the old one dies instantly.
-#define GATE_DEVICE_KEY "etk_gate_xxxxxxxxxxxxxxxxxxxxxxx"
+#define GATE_DEVICE_KEY "etk_gate_zxLzjjxZL3bwKi9ZOz_rwzda4XLADLMU"
 
 // ------------------------------------------------------------------------------------- hardware
 //
@@ -22,7 +47,7 @@
 // GPIO16. These defaults assume the microSD slot is UNUSED, which frees GPIO 2/4/12/13/14/15.
 
 #define GATE_PIN_SERVO 12      // MG90S signal. MTDI strapping pin — see docs/wiring.md before rewiring.
-#define GATE_PIN_BUZZER 14     // Passive piezo. No boot-time role, unlike 12 and 15 either side of it.
+#define GATE_PIN_BUZZER 13     // Passive piezo. No boot-time role, unlike 12 and 15 either side of it.
 #define GATE_PIN_LED_GREEN 2   // Strapping pin; an LED to GND keeps it low at boot, which is safe.
 #define GATE_PIN_LED_RED 15    // MTDO strapping pin. An LED to GND holds it low at boot, which only
                                // silences the ROM bootloader's serial chatter — harmless here.
@@ -127,7 +152,9 @@
 // Halve the streamed frame to QVGA before encoding. A quarter of the pixels is roughly a quarter of
 // the encode time and a quarter of the bytes on the wire, and this preview only has to be good
 // enough to aim the lens — the decoder keeps reading full GATE_FRAME_SIZE frames either way. Set to
-// 0 to stream at the sensor's full resolution.
+// 0 to stream at the sensor's full resolution. At HVGA the loop is bound by the ~195ms sensor grab,
+// not the ~76ms encode, so halving buys well under a frame per second and costs half the preview's
+// resolution — not a trade worth making here. Turn it back on if GATE_FRAME_SIZE goes back up to VGA.
 #define GATE_DEBUG_STREAM_HALVE 0
 
 // Pause between streamed frames. The stream and the decoder pull from the same buffer pool, so

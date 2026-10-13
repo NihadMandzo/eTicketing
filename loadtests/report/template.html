@@ -1,0 +1,558 @@
+<title>eKarta Load Tests</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of measurement sections, each a finding sentence, then its charts, then its numbers. */
+:root {
+  --bg: #fafbfa;
+  --surface: #ffffff;
+  --ink: #101413;
+  --ink-2: #4a5350;
+  --ink-3: #79827f;
+  --rule: #e3e7e5;
+  --grid: #eceeed;
+  --accent: #0d7c66;          /* eKarta brand teal: page chrome only, never a data series */
+  --accent-soft: #e2f1ec;
+  --s-after: #2a78d6;         /* reference palette slot 1 */
+  --s-2: #eb6834;             /* slot 2 */
+  --s-3: #1baf7a;             /* slot 3 */
+  --s-before: #a7aeab;        /* de-emphasised "before" */
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --warning: #b97a00;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141716; --surface: #1a1a19; --ink: #f1f3f2; --ink-2: #b9c1be; --ink-3: #8a938f;
+    --rule: #2c312f; --grid: #262a29; --accent: #41c9b4; --accent-soft: #17332c;
+    --s-after: #3987e5; --s-2: #d95926; --s-3: #199e70; --s-before: #5d6562;
+    --good: #0ca30c; --critical: #e66767; --warning: #fab219;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141716; --surface: #1a1a19; --ink: #f1f3f2; --ink-2: #b9c1be; --ink-3: #8a938f;
+  --rule: #2c312f; --grid: #262a29; --accent: #41c9b4; --accent-soft: #17332c;
+  --s-after: #3987e5; --s-2: #d95926; --s-3: #199e70; --s-before: #5d6562;
+  --good: #0ca30c; --critical: #e66767; --warning: #fab219;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--font-body); }
+.page { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 64px; }
+h1, h2, h3 { font-family: var(--font-display); font-stretch: 82%; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); font-weight: 800; line-height: 1.02; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 750; line-height: 1.1; }
+h3 { font-size: 1.05rem; font-weight: 700; font-stretch: 90%; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--ink-2); }
+.eyebrow { font: 500 0.72rem/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: grid; gap: 18px; }
+.context { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 0.8rem/1.4 var(--font-mono); color: var(--ink-3); }
+.verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+.verdict { background: var(--surface); padding: 18px 20px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.verdict .label { font-size: 0.8rem; color: var(--ink-2); }
+.verdict .value { font: 700 2rem/1.1 var(--font-display); font-stretch: 85%; font-variant-numeric: tabular-nums; }
+.verdict .delta { font: 0.78rem/1.4 var(--font-mono); color: var(--ink-3); }
+
+section { display: grid; gap: 22px; }
+.section-head { display: grid; gap: 10px; }
+.finding { font-size: 1.05rem; color: var(--ink-2); max-width: 70ch; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 22px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 22px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 16px 12px; display: grid; gap: 8px; min-width: 0; }
+figcaption { display: grid; gap: 2px; }
+figcaption .title { font-weight: 600; font-size: 0.92rem; }
+figcaption .sub { font-size: 0.8rem; color: var(--ink-3); }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.78rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend i.line { height: 2px; width: 14px; border-radius: 1px; }
+
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font: 0.75rem/1.45 var(--font-mono); padding: 7px 9px; border-radius: 6px; white-space: nowrap; z-index: 5; transform: translate(-50%, calc(-100% - 10px)); }
+.tip[hidden] { display: none !important; }
+.tip b { font-weight: 500; }
+
+details.table { font-size: 0.82rem; }
+details.table summary { cursor: pointer; color: var(--ink-3); font-size: 0.78rem; width: fit-content; }
+.table-wrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 0.7rem/1.2 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+td { font-family: var(--font-mono); font-size: 0.8rem; }
+td.name { font-family: var(--font-body); }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font: 500 0.72rem/1 var(--font-mono); padding: 4px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.chip.pass { color: var(--good); }
+.chip.fail { color: var(--critical); }
+.checks { display: grid; gap: 6px; font: 0.8rem/1.5 var(--font-mono); background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+.checks .row { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: baseline; }
+.checks .ok { color: var(--good); }
+.checks .bad { color: var(--critical); }
+.checks .val { color: var(--ink-3); }
+
+.steps { display: grid; gap: 10px; counter-reset: s; padding: 0; margin: 0; list-style: none; }
+.steps li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; }
+.steps li::before { counter-increment: s; content: counter(s); font: 600 0.8rem/1.6 var(--font-mono); color: var(--accent); }
+.note { font-size: 0.85rem; color: var(--ink-2); border-left: 2px solid var(--accent); padding-left: 12px; max-width: 78ch; }
+footer { font-size: 0.8rem; color: var(--ink-3); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { .tip { transition: opacity .08s; } }
+</style>
+
+<main class="page">
+  <header class="top">
+    <span class="eyebrow">eTicketing · performance study</span>
+    <h1>eKarta under load</h1>
+    <p class="finding" id="hero-finding"></p>
+    <div class="context" id="context"></div>
+    <div class="verdicts" id="verdicts"></div>
+  </header>
+
+  <section id="before-after">
+    <div class="section-head">
+      <span class="eyebrow">Before and after</span>
+      <h2>What each round of fixes bought</h2>
+      <p class="finding">Same machine, same scripts, same 1,000 users. Round 1 is the original code; round 2 adds quieter logs, a public cache, load shedding and a bigger SQL pool; round 3 rewrites the Redis capacity lock.</p>
+    </div>
+    <div class="grid-2">
+      <figure><figcaption><span class="title">p95 latency at 1,000 users</span><span class="sub">milliseconds, lower is better</span></figcaption><div class="chart" id="c-rounds"></div></figure>
+      <figure><figcaption><span class="title">p95 per endpoint, original code → now</span><span class="sub">1,000 users · log scale, milliseconds</span></figcaption><div class="legend" id="l-dumbbell"></div><div class="chart" id="c-dumbbell"></div></figure>
+    </div>
+    <div class="grid-2">
+      <figure><figcaption><span class="title">Redis time per seat hold</span><span class="sub">milliseconds of Redis's single thread · log scale</span></figcaption><div class="chart" id="c-redis"></div></figure>
+      <figure><figcaption><span class="title">Every round, every tier</span><span class="sub">the full history of the study</span></figcaption><div class="table-wrap"><table id="t-history"></table></div></figure>
+    </div>
+  </section>
+
+  <section id="tier-1k">
+    <div class="section-head">
+      <span class="eyebrow">Tier 1 · 1,000 concurrent users</span>
+      <h2 id="h-1k">–</h2>
+      <p class="finding" id="f-1k"></p>
+    </div>
+    <div class="grid-3" id="m-1k"></div>
+    <figure><figcaption><span class="title">Every endpoint at 1,000 users</span><span class="sub">exact percentiles from every request</span></figcaption><div class="table-wrap"><table id="t-1k"></table></div></figure>
+  </section>
+
+  <section id="tier-5k">
+    <div class="section-head">
+      <span class="eyebrow">Tier 2 · 5,000 concurrent users</span>
+      <h2 id="h-5k">–</h2>
+      <p class="finding" id="f-5k"></p>
+    </div>
+    <div class="grid-3" id="m-5k"></div>
+    <div class="grid-2">
+      <figure><figcaption><span class="title">How every response ended</span><span class="sub">requests per second by outcome</span></figcaption><div class="legend" id="l-mix-5k"></div><div class="chart" id="c-mix-5k"></div></figure>
+      <figure><figcaption><span class="title">Where the CPU went</span><span class="sub">cores, average over the run (bar) and peak (tick) · 16 cores in total</span></figcaption><div class="chart" id="c-cpu-5k"></div></figure>
+    </div>
+    <div class="grid-2">
+      <figure><figcaption><span class="title">CPU demand, before and after the outbox fix</span><span class="sub">cores, average over the 3-minute hold at 5,000 users · round 3 vs final run</span></figcaption><div class="legend" id="l-cpu-cmp"></div><div class="chart" id="c-cpu-cmp"></div></figure>
+      <figure><figcaption><span class="title">Ticket events waiting to be published</span><span class="sub">Ticketing outbox, sampled every 10 s · dashed line: load stops</span></figcaption><div class="chart" id="c-outbox"></div><p class="note" id="n-outbox"></p></figure>
+    </div>
+  </section>
+
+  <section id="breakpoint">
+    <div class="section-head">
+      <span class="eyebrow">Stress · breakpoint</span>
+      <h2 id="h-bp">–</h2>
+      <p class="finding" id="f-bp"></p>
+    </div>
+    <div class="grid-3" id="m-bp"></div>
+  </section>
+
+  <section id="flash">
+    <div class="section-head">
+      <span class="eyebrow">Flash sale · 2,000 buyers, 500 seats</span>
+      <h2>A queue sells every seat</h2>
+      <p class="finding" id="f-flash"></p>
+    </div>
+    <div class="grid-2">
+      <figure><figcaption><span class="title">What happened to each buyer</span><span class="sub">2,000 buyers per run</span></figcaption><div class="legend" id="l-flash"></div><div class="chart" id="c-flash"></div></figure>
+      <figure><figcaption><span class="title">The on-sale moment</span><span class="sub">requests per second by outcome, from 10 s before the sale</span></figcaption><div class="legend" id="l-flash-t"></div><span class="sub">Everyone at once</span><div class="chart" id="c-flash-burst"></div><span class="sub">Queue, 100 buyers per second</span><div class="chart" id="c-flash-queue"></div></figure>
+    </div>
+    <div class="table-wrap"><table id="t-flash"></table></div>
+  </section>
+
+  <section id="correctness">
+    <div class="section-head">
+      <span class="eyebrow">Correctness</span>
+      <h2>Fast, and still never oversold</h2>
+      <p class="finding">Speed only counts if every seat is sold once. These checks run against the real Redis and SQL Server of the test stack through the public API. The second one wipes Redis completely after a sold-out sale, as a restart without persistence would.</p>
+    </div>
+    <div class="grid-2">
+      <div class="grid" style="display:grid;gap:8px"><h3>Redis capacity lock</h3><div class="checks" id="v-lock"></div></div>
+      <div class="grid" style="display:grid;gap:8px"><h3>Redis wiped after a sold-out sale</h3><div class="checks" id="v-recovery"></div></div>
+    </div>
+  </section>
+
+  <section id="method">
+    <div class="section-head">
+      <span class="eyebrow">Method</span>
+      <h2>How these numbers were made</h2>
+    </div>
+    <ol class="steps">
+      <li><span>An isolated copy of the platform in Docker (own database, Redis and broker), reached only through the public Gateway, exactly like the web and mobile apps. Payments on the Mock provider; email and PDF services off so no real email is sent.</span></li>
+      <li><span>k6 2.3.0 inside the same Docker network. In the mixed scenario every user browses with 1–3 s think time between clicks; every tenth registers and buys a ticket through hold → payment intent → purchase.</span></li>
+      <li><span>Percentiles on this page are computed from every individual request (k6 CSV output), in 5-second buckets for the time series. CPU comes from <span class="mono">docker stats</span> every 10 s, the event backlog from the outbox tables every 10 s.</span></li>
+      <li><span>One 16-core laptop ran the platform and the load generator together, so above a few thousand users they compete for the same CPU. Production numbers will differ; the scripts are ready to run against a staging deployment from a separate machine.</span></li>
+    </ol>
+    <p class="note">Reproduce: <span class="mono">loadtests/run-all.sh</span>, then <span class="mono">python loadtests/report/analyze.py</span> and <span class="mono">python loadtests/report/build.py</span>. Deployment risks: <span class="mono">docs/deployment-concerns.md</span>. Next improvements: <span class="mono">docs/performance-improvements.md</span>.</p>
+  </section>
+
+  <footer><span id="generated"></span></footer>
+</main>
+
+<script id="report-data" type="application/json">/*DATA*/</script>
+<script>
+(() => {
+  const R = JSON.parse(document.getElementById('report-data').textContent);
+  const runs = R.runs;
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = new Intl.NumberFormat('en-US');
+  const ms = (v) => v == null ? '–' : v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2) + ' s' : (v >= 100 ? Math.round(v) : v >= 10 ? v.toFixed(1) : v.toFixed(v < 1 ? 3 : 1)) + ' ms';
+  const n = (v) => v == null ? '–' : fmt.format(Math.round(v));
+  const pctf = (v) => v == null ? '–' : (v < 0.01 && v > 0 ? '<0.01' : v.toFixed(2)) + '%';
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+  const html = (id, s) => { const e = document.getElementById(id); if (e) e.innerHTML = s; };
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+  // History from rounds 1 and 2 (2026-10-07), measured with the same scripts. Round 3 comes from the data.
+  const HISTORY = {
+    p95_1k: [{ label: 'Round 1 · original code', v: 1610 }, { label: 'Round 2 · logs, cache, shedding, pool', v: 279.1 }],
+    endpoints_1k_before: { 'GET /products': 1100, 'GET /products/{id}': 974.6, 'GET /recommendations/popular': 1580, 'GET /sectors': 1810, 'POST /auth/register': 340.4, 'POST /sectors/{id}/hold': 3640, 'POST /purchases/payment-intent': 2620, 'POST /purchases': 7650 },
+    redis: [{ label: 'Original script (O(n²))', v: 44.9 }, { label: 'Rewritten (O(log n))', v: 0.108 }],
+    // Round 3, 5,000 users, average over the hold phase, cores (archive-2026-10-07/tier-5k-stats.txt).
+    cpu5k_round3: { k6: 7.70, rabbitmq: 4.74, gateway: 3.69, sqlserver: 2.84, ticketing: 2.83, identity: 1.71, catalog: 1.67, payment: 0.78, redis: 0.26 },
+    table: [
+      ['Original code', '1,000', '393', '0.00%', '1.61 s', '1,523'],
+      ['Original code', '10,000 (6,507 reached)', '28', '71.02%', '2 m 3 s', '102'],
+      ['Round 2', '1,000', '458', '0.00%', '279 ms', '1,891'],
+      ['Round 2', '10,000', '286', '11.39%', '33.6 s', '1,142'],
+      ['Round 3 · Redis lock', '1,000', '481', '0.00%', '38.5 ms', '2,126'],
+      ['Round 3 · Redis lock', '5,000', '613', '3.01%', '7.5 s', '2,254'],
+      ['Final · rebuild, outbox, retries', '1,000', '486', '0.00%', '22.5 ms', '2,141'],
+      ['Final · rebuild, outbox, retries', '5,000', '1,982', '0.06%', '623 ms', '9,516'],
+    ],
+  };
+
+  // ---------- tooltip ----------
+  function tipFor(container) {
+    let t = container.querySelector('.tip');
+    if (!t) { t = document.createElement('div'); t.className = 'tip'; t.hidden = true; container.appendChild(t); }
+    return {
+      show(x, y, content) { t.innerHTML = content; t.hidden = false; const w = container.clientWidth; const half = t.offsetWidth / 2; t.style.left = Math.min(Math.max(x, half), w - half) + 'px'; t.style.top = y + 'px'; },
+      hide() { t.hidden = true; },
+    };
+  }
+
+  function legend(id, items) {
+    html(id, items.map((i) => `<span><i class="${i.line ? 'line' : ''}" style="background:${i.color}"></i>${i.label}</span>`).join(''));
+  }
+
+  // ---------- axis helpers ----------
+  function niceMax(v) { if (!v || v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+  function ticks(max, count = 4) { const step = max / count; return Array.from({ length: count + 1 }, (_, i) => +(i * step).toFixed(6)); }
+
+  // ---------- line chart (one y axis, optional second line in same unit) ----------
+  function lineChart(id, { data, x = 't', lines, yFmt = (v) => n(v), height = 170, xFmt = mmss, yMax, marker }) {
+    const box = document.getElementById(id); if (!box || !data?.length) return;
+    box.innerHTML = '';
+    const W = 520, H = height, m = { l: 48, r: 12, t: 10, b: 24 };
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const xs = data.map((d) => d[x]); const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const vmax = yMax ?? niceMax(Math.max(...data.flatMap((d) => lines.map((l) => d[l.key] ?? 0))));
+    const sx = (v) => m.l + (v - x0) / ((x1 - x0) || 1) * (W - m.l - m.r);
+    const sy = (v) => H - m.b - (v / vmax) * (H - m.t - m.b);
+    for (const t of ticks(vmax)) {
+      el('line', { x1: m.l, x2: W - m.r, y1: sy(t), y2: sy(t), stroke: css('--grid'), 'stroke-width': 1 }, svg);
+      el('text', { x: m.l - 6, y: sy(t) + 3.5, 'text-anchor': 'end', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = yFmt(t);
+    }
+    const xt = 5; for (let i = 0; i <= xt; i++) { const v = x0 + (x1 - x0) * i / xt; el('text', { x: sx(v), y: H - 6, 'text-anchor': i === 0 ? 'start' : i === xt ? 'end' : 'middle', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = xFmt(v); }
+    if (marker != null) { el('line', { x1: sx(marker.x), x2: sx(marker.x), y1: m.t, y2: H - m.b, stroke: css('--ink-3'), 'stroke-dasharray': '3 3' }, svg); el('text', { x: sx(marker.x) + 4, y: m.t + 9, 'font-size': 10, fill: css('--ink-2') }, svg).textContent = marker.label; }
+    for (const l of lines) {
+      const pts = data.filter((d) => d[l.key] != null).map((d) => [sx(d[x]), sy(d[l.key])]);
+      if (!pts.length) continue;
+      if (l.area) el('path', { d: `M${pts[0][0]},${sy(0)} ` + pts.map((p) => `L${p[0]},${p[1]}`).join(' ') + ` L${pts.at(-1)[0]},${sy(0)} Z`, fill: l.color, 'fill-opacity': 0.12 }, svg);
+      el('path', { d: 'M' + pts.map((p) => p.join(',')).join(' L'), fill: 'none', stroke: l.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+      const last = pts.at(-1); el('circle', { cx: last[0], cy: last[1], r: 3, fill: l.color, stroke: css('--surface'), 'stroke-width': 2 }, svg);
+    }
+    const cross = el('line', { y1: m.t, y2: H - m.b, stroke: css('--ink-3'), 'stroke-width': 1, visibility: 'hidden' }, svg);
+    const dots = lines.map((l) => el('circle', { r: 4, fill: l.color, stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden' }, svg));
+    const hit = el('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' }, svg);
+    const tip = tipFor(box);
+    const move = (ev) => {
+      const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width;
+      let best = data[0], bd = Infinity; for (const d of data) { const dd = Math.abs(sx(d[x]) - px); if (dd < bd) { bd = dd; best = d; } }
+      cross.setAttribute('x1', sx(best[x])); cross.setAttribute('x2', sx(best[x])); cross.setAttribute('visibility', 'visible');
+      lines.forEach((l, i) => { const v = best[l.key]; if (v == null) { dots[i].setAttribute('visibility', 'hidden'); return; } dots[i].setAttribute('cx', sx(best[x])); dots[i].setAttribute('cy', sy(v)); dots[i].setAttribute('visibility', 'visible'); });
+      const yTop = Math.min(...lines.map((l) => best[l.key] != null ? sy(best[l.key]) : H));
+      tip.show(sx(best[x]) * r.width / W, yTop * r.height / H, `<b>${xFmt(best[x])}</b><br>` + lines.map((l) => `${l.label}: ${yFmt(best[l.key])}`).join('<br>'));
+    };
+    hit.addEventListener('pointermove', move); hit.addEventListener('pointerleave', () => { tip.hide(); cross.setAttribute('visibility', 'hidden'); dots.forEach((d) => d.setAttribute('visibility', 'hidden')); });
+  }
+
+  // ---------- stacked columns over time ----------
+  function stackedTime(id, { data, keys, height = 190, xFmt = mmss, unit = 'req/s', bucket }) {
+    const box = document.getElementById(id); if (!box || !data?.length) return;
+    box.innerHTML = '';
+    const W = 520, H = height, m = { l: 48, r: 12, t: 10, b: 24 };
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const totals = data.map((d) => keys.reduce((s, k) => s + (d[k.key] || 0), 0) / bucket);
+    const vmax = niceMax(Math.max(...totals));
+    const sy = (v) => H - m.b - (v / vmax) * (H - m.t - m.b);
+    const bw = (W - m.l - m.r) / data.length;
+    for (const t of ticks(vmax)) { el('line', { x1: m.l, x2: W - m.r, y1: sy(t), y2: sy(t), stroke: css('--grid') }, svg); el('text', { x: m.l - 6, y: sy(t) + 3.5, 'text-anchor': 'end', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = n(t); }
+    const tip = tipFor(box);
+    data.forEach((d, i) => {
+      let acc = 0; const x = m.l + i * bw;
+      const g = el('g', {}, svg);
+      for (const k of keys) { const v = (d[k.key] || 0) / bucket; if (v <= 0) continue; const y0 = sy(acc), y1 = sy(acc + v); el('rect', { x: x + 0.5, y: y1, width: Math.max(bw - 1, 0.6), height: Math.max(y0 - y1, 0.5), fill: k.color }, g); acc += v; }
+      const hit = el('rect', { x, y: m.t, width: bw, height: H - m.t - m.b, fill: 'transparent' }, svg);
+      hit.addEventListener('pointermove', () => { const r = svg.getBoundingClientRect(); tip.show((x + bw / 2) * r.width / W, sy(acc) * r.height / H, `<b>${xFmt(d.t)}</b><br>` + keys.map((k) => `${k.label}: ${n((d[k.key] || 0) / bucket)} ${unit}`).join('<br>')); });
+      hit.addEventListener('pointerleave', () => tip.hide());
+    });
+    const xt = 5; const x0 = data[0].t, x1 = data.at(-1).t;
+    for (let i = 0; i <= xt; i++) { const v = x0 + (x1 - x0) * i / xt; const px = m.l + (v - x0) / ((x1 - x0) || 1) * (W - m.l - m.r); el('text', { x: px, y: H - 6, 'text-anchor': i === 0 ? 'start' : i === xt ? 'end' : 'middle', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = xFmt(v); }
+  }
+
+  // ---------- horizontal bars ----------
+  function hbars(id, { rows, max, fmt: f = n, log = false, color = css('--s-after'), peak, labelW = 150 }) {
+    const box = document.getElementById(id); if (!box || !rows.length) return;
+    box.innerHTML = '';
+    const rowH = 30, W = 520, m = { l: labelW, r: 70, t: 4, b: 18 }, H = m.t + rows.length * rowH + m.b;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const vmax = max ?? niceMax(Math.max(...rows.map((r) => Math.max(r.v, r.peak ?? 0))));
+    const vmin = log ? Math.pow(10, Math.floor(Math.log10(Math.min(...rows.map((r) => r.v))))) : 0;
+    const sx = (v) => m.l + (log ? (Math.log10(Math.max(v, vmin)) - Math.log10(vmin)) / (Math.log10(vmax) - Math.log10(vmin)) : v / vmax) * (W - m.l - m.r);
+    const tip = tipFor(box);
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH;
+      el('text', { x: m.l - 8, y: y + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--ink-2') }, svg).textContent = r.label;
+      const w = Math.max(sx(r.v) - m.l, 2);
+      el('path', { d: `M${m.l},${y + 7} h${w - 4} q4,0 4,4 v${rowH - 22} q0,4 -4,4 h${-(w - 4)} Z`, fill: r.color ?? color }, svg);
+      if (r.peak != null) el('line', { x1: sx(r.peak), x2: sx(r.peak), y1: y + 4, y2: y + rowH - 4, stroke: css('--ink'), 'stroke-width': 2 }, svg);
+      el('text', { x: Math.max(sx(r.v), r.peak != null ? sx(r.peak) : 0) + 6, y: y + rowH / 2 + 4, 'font-size': 11, fill: css('--ink'), 'font-family': css('--font-mono') }, svg).textContent = f(r.v);
+      const hit = el('rect', { x: 0, y, width: W, height: rowH, fill: 'transparent' }, svg);
+      hit.addEventListener('pointermove', () => { const b = svg.getBoundingClientRect(); tip.show(sx(r.v) * b.width / W, (y + 6) * b.height / H, `<b>${r.label}</b><br>${r.tip ?? f(r.v)}`); });
+      hit.addEventListener('pointerleave', () => tip.hide());
+    });
+    if (log) { for (let p = vmin; p <= vmax * 1.0001; p *= 10) el('text', { x: sx(p), y: H - 4, 'text-anchor': 'middle', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = f(p); }
+  }
+
+  // ---------- dumbbell, log scale ----------
+  function dumbbell(id, rows) {
+    const box = document.getElementById(id); if (!box || !rows.length) return;
+    box.innerHTML = '';
+    const rowH = 28, W = 520, m = { l: 190, r: 16, t: 6, b: 22 }, H = m.t + rows.length * rowH + m.b;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const lo = 1, hi = 10000;
+    const sx = (v) => m.l + (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (W - m.l - m.r);
+    for (const t of [1, 10, 100, 1000, 10000]) { el('line', { x1: sx(t), x2: sx(t), y1: m.t, y2: H - m.b, stroke: css('--grid') }, svg); el('text', { x: sx(t), y: H - 6, 'text-anchor': 'middle', 'font-size': 10, fill: css('--ink-3'), 'font-family': css('--font-mono') }, svg).textContent = ms(t); }
+    const tip = tipFor(box);
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH + rowH / 2;
+      el('text', { x: m.l - 8, y: y + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--ink-2'), 'font-family': css('--font-mono') }, svg).textContent = r.label;
+      el('line', { x1: sx(r.after), x2: sx(r.before), y1: y, y2: y, stroke: css('--s-before'), 'stroke-width': 2 }, svg);
+      el('circle', { cx: sx(r.before), cy: y, r: 5, fill: css('--s-before'), stroke: css('--surface'), 'stroke-width': 2 }, svg);
+      el('circle', { cx: sx(r.after), cy: y, r: 5, fill: css('--s-after'), stroke: css('--surface'), 'stroke-width': 2 }, svg);
+      const hit = el('rect', { x: 0, y: y - rowH / 2, width: W, height: rowH, fill: 'transparent' }, svg);
+      hit.addEventListener('pointermove', () => { const b = svg.getBoundingClientRect(); tip.show(sx(r.before) * b.width / W, (y - 6) * b.height / H, `<b>${r.label}</b><br>original: ${ms(r.before)}<br>now: ${ms(r.after)}<br>${Math.round(r.before / r.after)}× faster`); });
+      hit.addEventListener('pointerleave', () => tip.hide());
+    });
+  }
+
+  // ---------- stacked horizontal outcome bars ----------
+  function outcomeBars(id, rows, keys) {
+    const box = document.getElementById(id); if (!box) return;
+    box.innerHTML = '';
+    const rowH = 44, W = 520, m = { l: 110, r: 10, t: 4, b: 4 }, H = m.t + rows.length * rowH + m.b;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const tip = tipFor(box);
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH; const total = keys.reduce((s, k) => s + (r[k.key] || 0), 0) || 1;
+      el('text', { x: m.l - 8, y: y + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--ink-2') }, svg).textContent = r.label;
+      let acc = 0;
+      for (const k of keys) {
+        const v = r[k.key] || 0; if (!v) continue;
+        const x = m.l + acc / total * (W - m.l - m.r); const w = v / total * (W - m.l - m.r);
+        el('rect', { x: x + 1, y: y + 8, width: Math.max(w - 2, 1), height: rowH - 16, fill: k.color, rx: 2 }, svg);
+        if (w > 44) el('text', { x: x + w / 2, y: y + rowH / 2 + 4, 'text-anchor': 'middle', 'font-size': 11, fill: '#ffffff', 'font-family': css('--font-mono') }, svg).textContent = n(v);
+        const hit = el('rect', { x, y, width: w, height: rowH, fill: 'transparent' }, svg);
+        hit.addEventListener('pointermove', () => { const b = svg.getBoundingClientRect(); tip.show((x + w / 2) * b.width / W, (y + 8) * b.height / H, `<b>${r.label}</b><br>${k.label}: ${n(v)} of ${n(total)}`); });
+        hit.addEventListener('pointerleave', () => tip.hide());
+        acc += v;
+      }
+    });
+  }
+
+  // ---------- paired horizontal bars (before / after) ----------
+  function pairedBars(id, rows, fmt) {
+    const box = document.getElementById(id); if (!box || !rows.length) return;
+    box.innerHTML = '';
+    const rowH = 30, W = 520, m = { l: 96, r: 70, t: 4, b: 4 }, H = m.t + rows.length * rowH + m.b;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, box);
+    const vmax = niceMax(Math.max(...rows.flatMap((r) => [r.a, r.b])));
+    const sx = (v) => m.l + v / vmax * (W - m.l - m.r);
+    const tip = tipFor(box);
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH;
+      el('text', { x: m.l - 8, y: y + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--ink-2') }, svg).textContent = r.label;
+      [[r.a, css('--s-before'), 6], [r.b, css('--s-after'), 16]].forEach(([v, c, off]) => {
+        el('rect', { x: m.l, y: y + off - 2, width: Math.max(sx(v) - m.l, 1.5), height: 8, rx: 2, fill: c }, svg);
+      });
+      el('text', { x: Math.max(sx(r.a), sx(r.b)) + 6, y: y + rowH / 2 + 4, 'font-size': 10.5, fill: css('--ink'), 'font-family': css('--font-mono') }, svg).textContent = `${fmt(r.a)} → ${fmt(r.b)}`;
+      const hit = el('rect', { x: 0, y, width: W, height: rowH, fill: 'transparent' }, svg);
+      hit.addEventListener('pointermove', () => { const b = svg.getBoundingClientRect(); tip.show(sx(Math.max(r.a, r.b)) * b.width / W, y * b.height / H, `<b>${r.label}</b><br>round 3: ${fmt(r.a)} cores<br>final: ${fmt(r.b)} cores`); });
+      hit.addEventListener('pointerleave', () => tip.hide());
+    });
+  }
+
+  // ---------- small multiples for a tier ----------
+  function tierMultiples(containerId, run, label) {
+    const c = document.getElementById(containerId); if (!c || !run) return;
+    const s = run.series;
+    c.innerHTML = ['users', 'rps', 'lat'].map((k) => `<figure><figcaption><span class="title">${{ users: 'Concurrent users', rps: 'Requests per second', lat: 'Latency' }[k]}</span><span class="sub">${{ users: 'virtual users active', rps: 'all endpoints, 5 s buckets', lat: 'p50 and p95, all endpoints' }[k]}</span></figcaption>${k === 'lat' ? `<div class="legend" id="${containerId}-l"></div>` : ''}<div class="chart" id="${containerId}-${k}"></div></figure>`).join('');
+    lineChart(`${containerId}-users`, { data: s, lines: [{ key: 'vus', label: 'users', color: css('--s-after'), area: true }] });
+    lineChart(`${containerId}-rps`, { data: s, lines: [{ key: 'rps', label: 'req/s', color: css('--s-after'), area: true }] });
+    lineChart(`${containerId}-lat`, { data: s, lines: [{ key: 'p95', label: 'p95', color: css('--s-2') }, { key: 'p50', label: 'p50', color: css('--s-after') }], yFmt: ms });
+    legend(`${containerId}-l`, [{ label: 'p95', color: css('--s-2'), line: true }, { label: 'p50', color: css('--s-after'), line: true }]);
+  }
+
+  function endpointTable(id, run) {
+    if (!run) return;
+    const rows = run.endpoints.filter((e) => e.name);
+    html(id, `<thead><tr><th>Endpoint</th><th>Requests</th><th>p50</th><th>p95</th><th>p99</th><th>2xx</th><th>503 refused</th><th>Failed</th></tr></thead><tbody>` +
+      rows.map((e) => `<tr><td class="mono">${e.name}</td><td>${n(e.count)}</td><td>${ms(e.p50)}</td><td>${ms(e.p95)}</td><td>${ms(e.p99)}</td><td>${n(e.ok)}</td><td>${n(e.shed)}</td><td>${n(e.failed)}</td></tr>`).join('') + '</tbody>');
+  }
+
+  function checks(id, text) {
+    const box = document.getElementById(id); if (!box) return;
+    if (!text) { box.textContent = 'Not run.'; return; }
+    const lines = text.split(/\r?\n/).filter((l) => /^\s*(PASS|FAIL)\s/.test(l) || /^\d\./.test(l) || /RESULT/.test(l));
+    box.innerHTML = lines.map((l) => {
+      const m = l.match(/^\s*(PASS|FAIL)\s+(.*?)(?:\s\((.*)\))?$/);
+      if (m) return `<div class="row"><span class="${m[1] === 'PASS' ? 'ok' : 'bad'}">${m[1] === 'PASS' ? '✓ pass' : '✗ fail'}</span><span>${m[2].replace(/</g, '&lt;')}</span><span class="val">${(m[3] ?? '').replace(/</g, '&lt;')}</span></div>`;
+      if (/RESULT/.test(l)) { const ok = /, 0 failed/.test(l); return `<div style="margin-top:6px"><span class="chip ${ok ? 'pass' : 'fail'}">${ok ? '✓' : '✗'} ${l.replace('RESULT: ', '')}</span></div>`; }
+      return `<div style="color:var(--ink-2);margin-top:4px">${l.replace(/</g, '&lt;')}</div>`;
+    }).join('');
+  }
+
+  const cpuAvg = (run, name, from, to = from + 180) => { const pts = (run?.cpu ?? []).filter((p) => p.t >= from && p.t <= to); return pts.reduce((a, p) => a + (p.cpu[name] ?? 0), 0) / Math.max(pts.length, 1); };
+
+  function render() {
+    const t1 = runs['tier-1k'], t5 = runs['tier-5k'], bp = runs['breakpoint'], fb = runs['flash-burst'], fq = runs['flash-queue'];
+    const s1 = t1?.summary, s5 = t5?.summary;
+
+    html('context', ['16 logical cores · 15.6 GB RAM (7.5 GB to Docker)', 'k6 2.3.0 in the same Docker network', 'Mock payments · email/PDF off', `measured ${R.generated ?? ''}`].map((s) => `<span>${s}</span>`).join(''));
+    html('hero-finding', `The platform went from 1.61&nbsp;s at 1,000 concurrent users to <strong>${s1 ? ms(s1.p95) : '–'}</strong>, serves 5,000 users at <strong>${s5 ? n(s5.rps) : '–'} requests per second</strong> with ${s5 ? pctf(s5.errorRate) : '–'} errors, and sells all 500 seats of a 2,000-buyer flash sale without overselling one.`);
+    const fqSold = fq?.summary?.purchases_completed ?? 0;
+    html('verdicts', [
+      ['p95 at 1,000 users', s1 ? ms(s1.p95) : '–', 'was 1.61 s on the original code'],
+      ['Throughput at 5,000 users', s5 ? `${n(s5.rps)} req/s` : '–', s5 ? `${pctf(s5.errorRate)} refused or failed` : ''],
+      ['Flash sale through a queue', fq ? `${n(fqSold)} / 500 sold` : '–', fq ? `${n(fq.summary.shed_503 ?? 0)} refusals · 0 oversold` : ''],
+      ['Redis time per seat hold', '0.108 ms', 'was 44.9 ms, about 400× less'],
+    ].map(([l, v, d]) => `<div class="verdict"><span class="label">${l}</span><span class="value">${v}</span><span class="delta">${d}</span></div>`).join(''));
+
+    // before/after
+    const rounds = [...HISTORY.p95_1k, { label: 'Round 3 · Redis lock rewritten', v: s1?.p95 ?? 0 }];
+    hbars('c-rounds', { rows: rounds.map((r, i) => ({ label: r.label.split(' · ')[0], v: r.v, color: i === rounds.length - 1 ? css('--s-after') : css('--s-before'), tip: `${r.label}<br>p95 ${ms(r.v)}` })), fmt: ms, labelW: 90 });
+    if (t1) {
+      const now = Object.fromEntries(t1.endpoints.map((e) => [e.name, e.p95]));
+      dumbbell('c-dumbbell', Object.entries(HISTORY.endpoints_1k_before).filter(([k]) => now[k] != null).map(([k, v]) => ({ label: k.replace('/recommendations', '/recs').replace('/purchases/payment-intent', '/payment-intent'), before: v, after: now[k] })));
+      legend('l-dumbbell', [{ label: 'original code', color: css('--s-before') }, { label: 'now', color: css('--s-after') }]);
+    }
+    hbars('c-redis', { rows: HISTORY.redis.map((r, i) => ({ label: r.label, v: r.v, color: i ? css('--s-after') : css('--s-before') })), fmt: ms, log: true, max: 100, labelW: 160 });
+    html('t-history', `<thead><tr><th>Code</th><th>Users</th><th>req/s</th><th>Errors</th><th>p95</th><th>Tickets</th></tr></thead><tbody>` + HISTORY.table.map((r) => `<tr><td class="name">${r[0]}</td>${r.slice(1).map((c) => `<td>${c}</td>`).join('')}</tr>`).join('') + '</tbody>');
+
+    // 1k
+    if (s1) {
+      const passed = s1.thresholds.filter((t) => t.ok).length;
+      html('h-1k', `Every target met: p95 ${ms(s1.p95)}, ${pctf(s1.errorRate)} errors`);
+      html('f-1k', `${n(s1.requests)} requests at ${n(s1.rps)} per second over the run, ${n(s1.purchases_completed)} tickets sold through the full Mock payment flow, ${passed} of ${s1.thresholds.length} pass/fail thresholds met. p99 ${ms(s1.p99)}.`);
+      tierMultiples('m-1k', t1); endpointTable('t-1k', t1);
+    }
+    // 5k
+    if (s5) {
+      const shedTotal = t5.series.reduce((a, d) => a + d.shed, 0), errTotal = t5.series.reduce((a, d) => a + d.error5xx + d.network, 0);
+      const holdCpu = t5.cpu.filter((p) => p.t >= 180 && p.t <= 360);
+      const avgCpu = (nm) => holdCpu.reduce((a, p) => a + (p.cpu[nm] ?? 0), 0) / Math.max(holdCpu.length, 1);
+      const r3 = HISTORY.cpu5k_round3; const r3Total = Object.values(r3).reduce((a, b) => a + b, 0);
+      const finalTotal = Object.keys(r3).reduce((a, k) => a + avgCpu(k), 0);
+      html('h-5k', s5.errorRate < 1 ? `${n(s5.rps)} requests per second, ${pctf(s5.errorRate)} errors` : `Degrades with refusals, not timeouts`);
+      html('f-5k', `${n(s5.requests)} requests, ${n(s5.purchases_completed)} tickets sold, median ${ms(s5.p50)}, p95 ${ms(s5.p95)}. ${n(shedTotal)} requests got the deliberate 503 "overloaded" refusal and ${n(errTotal)} were real errors or timeouts. That is three times the round-3 throughput. Round 3 asked for ${r3Total.toFixed(1)} cores on a 16-core machine, much of it a broker kept busy retrying thousands of stuck outbox events every 5 seconds; with the outbox fix the same load asks for ${finalTotal.toFixed(1)}. The final run also started from an empty database, so not all of the gain belongs to the fix.`);
+      pairedBars('c-cpu-cmp', Object.keys(r3).map((k) => ({ label: k === 'k6' ? 'k6 (generator)' : k, a: r3[k], b: avgCpu(k) })), (v) => v.toFixed(1));
+      legend('l-cpu-cmp', [{ label: 'round 3', color: css('--s-before') }, { label: 'final', color: css('--s-after') }]);
+      tierMultiples('m-5k', t5);
+      const mix = [{ key: 'ok', label: 'succeeded', color: css('--s-after') }, { key: 'shed', label: '503 overloaded (refused fast)', color: css('--s-2') }, { key: 'error5xx', label: 'error', color: css('--critical') }, { key: 'network', label: 'timeout / network', color: css('--ink-3') }];
+      stackedTime('c-mix-5k', { data: t5.series, keys: mix, bucket: R.bucketSeconds });
+      legend('l-mix-5k', mix);
+      const cpu = t5.cpu; const names = [...new Set(cpu.flatMap((p) => Object.keys(p.cpu)))];
+      const rowsCpu = names.map((nm) => { const v = cpu.map((p) => p.cpu[nm] ?? 0); return { label: nm === 'k6' ? 'k6 (load generator)' : nm, v: v.reduce((a, b) => a + b, 0) / v.length, peak: Math.max(...v) }; }).sort((a, b) => b.v - a.v)
+        .map((r) => ({ ...r, color: r.label.startsWith('k6') ? css('--s-before') : css('--s-after'), tip: `average ${r.v.toFixed(2)} cores<br>peak ${r.peak.toFixed(2)} cores` }));
+      hbars('c-cpu-5k', { rows: rowsCpu, fmt: (v) => v.toFixed(1), max: 16, labelW: 140 });
+      if (t5.outbox?.length) {
+        const ob = t5.outbox.filter((d) => d.t >= 0);
+        const loadEnd = t5.series.filter((d) => (d.vus ?? 0) > 0).at(-1)?.t ?? 0;
+        const peakOb = ob.reduce((a, d) => (d.ticketing_pending > a.ticketing_pending ? d : a), ob[0]);
+        const drained = ob.find((d) => d.t > peakOb.t && d.ticketing_pending === 0);
+        lineChart('c-outbox', { data: ob, lines: [{ key: 'ticketing_pending', label: 'waiting', color: css('--s-after'), area: true }], height: 150, marker: { x: loadEnd, label: 'load stops' } });
+        html('n-outbox', `Nothing is stuck any more: every waiting event is eventually published. Under full load, though, the dispatcher fell behind, peaking at ${n(peakOb.ticketing_pending)} waiting events, and caught up ${drained ? mmss(drained.t - loadEnd) : '–'} after the load stopped, so confirmation emails and PDFs would arrive minutes late at peak. The publisher opens a RabbitMQ channel for every event; reusing one is the next fix (performance-improvements.md, item 3).`);
+      }
+    }
+    // breakpoint
+    if (bp) {
+      const sb = bp.summary; const s = bp.series;
+      const good = s.filter((d) => d.p95 != null && d.p95 < 1000 && (d.shed + d.error5xx + d.network) / Math.max(d.ok + d.shed + d.error5xx + d.network, 1) < 0.01);
+      const best = good.reduce((a, d) => (d.rps > (a?.rps ?? 0) ? d : a), null);
+      const peak = s.reduce((a, d) => (d.rps > a.rps ? d : a), s[0]);
+      html('h-bp', best ? `${n(best.rps)} requests per second${best.t === peak.t ? ', and still not broken' : ' with p95 under one second'}` : 'Breakpoint');
+      const neverBroke = best && best.t === peak.t;
+      html('f-bp', neverBroke
+        ? `An open-model ramp of anonymous browsing traffic, from 50 to 6,000 new requests per second over 10 minutes, set to stop the moment errors pass 5% or p95 passes 2 s. It never stopped: the last 5-second window still served ${n(peak.rps)} req/s with p95 ${ms(peak.p95)}. So the ceiling of this machine for browsing traffic lies above that. The cache is why: over the last three minutes SQL Server averaged ${cpuAvg(bp, 'sqlserver', 420).toFixed(2)} cores, while the Gateway used ${cpuAvg(bp, 'gateway', 420).toFixed(1)} and k6 itself ${cpuAvg(bp, 'k6', 420).toFixed(1)}. ${n(sb.requests)} requests in total, ${pctf(sb.errorRate)} not successful.`
+        : `An open-model ramp of anonymous browsing traffic, raising the arrival rate until errors or latency cross their limits. ${best ? `The highest 5-second window with p95 under 1 s and under 1% errors served ${n(best.rps)} req/s at ${mmss(best.t)}; ` : ''}peak throughput reached ${n(peak.rps)} req/s. ${n(sb.requests)} requests in total, ${pctf(sb.errorRate)} not successful.`);
+      const c = document.getElementById('m-bp');
+      c.innerHTML = `<figure><figcaption><span class="title">Throughput</span><span class="sub">requests per second served</span></figcaption><div class="chart" id="bp-rps"></div></figure><figure><figcaption><span class="title">Latency</span><span class="sub">p50 and p95</span></figcaption><div class="legend" id="bp-l"></div><div class="chart" id="bp-lat"></div></figure><figure><figcaption><span class="title">Outcome</span><span class="sub">requests per second by outcome</span></figcaption><div class="chart" id="bp-mix"></div></figure>`;
+      lineChart('bp-rps', { data: s, lines: [{ key: 'rps', label: 'req/s', color: css('--s-after'), area: true }], marker: best ? { x: best.t, label: 'best window' } : null });
+      lineChart('bp-lat', { data: s, lines: [{ key: 'p95', label: 'p95', color: css('--s-2') }, { key: 'p50', label: 'p50', color: css('--s-after') }], yFmt: ms });
+      legend('bp-l', [{ label: 'p95', color: css('--s-2'), line: true }, { label: 'p50', color: css('--s-after'), line: true }]);
+      stackedTime('bp-mix', { data: s, keys: [{ key: 'ok', label: 'succeeded', color: css('--s-after') }, { key: 'shed', label: '503 overloaded', color: css('--s-2') }, { key: 'error5xx', label: 'error', color: css('--critical') }, { key: 'network', label: 'timeout', color: css('--ink-3') }], bucket: R.bucketSeconds });
+    }
+    // flash
+    const flashRow = (label, r) => { if (!r) return null; const s = r.summary; const bought = s.purchases_completed ?? 0, soldout = s.sold_out_409 ?? 0, held = Math.max((s.holds_granted ?? 0) - bought, 0); return { label, bought, soldout, held, other: Math.max(2000 - bought - soldout - held, 0) }; };
+    const rowsF = [flashRow('Everyone at once', fb), flashRow('Queue, 100/s', fq)].filter(Boolean);
+    const fkeys = [{ key: 'bought', label: 'bought a ticket', color: css('--s-after') }, { key: 'soldout', label: 'told "sold out" (409)', color: css('--s-3') }, { key: 'held', label: 'held a seat, did not finish paying', color: css('--s-before') }, { key: 'other', label: 'never got a hold or a 409 (gave up after 3 × 503)', color: css('--s-2') }];
+    outcomeBars('c-flash', rowsF, fkeys); legend('l-flash', fkeys);
+    const saleWindow = (r) => { if (!r) return []; const s = r.series; const i = s.findIndex((d) => d.rps > 0 && (d.soldout + d.shed + (d.holds_granted ?? 0)) > 0); const from = Math.max(0, i - 2); return s.slice(from, from + 18).map((d) => ({ ...d, t: d.t - s[from + 2]?.t })); };
+    const tkeys = [{ key: 'ok', label: 'succeeded', color: css('--s-after') }, { key: 'soldout', label: 'sold out (409)', color: css('--s-3') }, { key: 'shed', label: '503 overloaded', color: css('--s-2') }, { key: 'error5xx', label: 'error', color: css('--critical') }];
+    const sec = (v) => (v >= 0 ? '+' : '') + Math.round(v) + ' s';
+    stackedTime('c-flash-burst', { data: saleWindow(fb), keys: tkeys, bucket: R.bucketSeconds, height: 130, xFmt: sec });
+    stackedTime('c-flash-queue', { data: saleWindow(fq), keys: tkeys, bucket: R.bucketSeconds, height: 130, xFmt: sec });
+    legend('l-flash-t', tkeys);
+    if (fb || fq) {
+      const hold = (r) => r?.endpoints.find((e) => e.name === 'POST /sectors/{id}/hold');
+      html('f-flash', `Buyers sign up during the first 150 s, then all try to buy at the same instant. Run A lets all 2,000 in at once; run B admits them 100 per second, as a virtual waiting room would. Both sell exactly the seats that exist. ${fq ? `With the queue, ${n(fqSold)} of 500 seats sold and hold p95 was ${ms(hold(fq)?.p95)}.` : ''} ${fb ? `Without it, ${n(fb.summary.purchases_completed)} sold and buyers were refused ${n(fb.summary.shed_503)} times on the way.` : ''}`);
+      html('t-flash', `<thead><tr><th>Run</th><th>Sold</th><th>Holds</th><th>Sold out (409)</th><th>503 refusals</th><th>Gave up</th><th>Real 5xx</th><th>Hold p95</th><th>Time to ticket p95</th></tr></thead><tbody>` +
+        [['Everyone at once', fb], ['Queue, 100/s', fq]].filter(([, r]) => r).map(([l, r]) => { const s = r.summary; return `<tr><td class="name">${l}</td><td>${n(s.purchases_completed)}</td><td>${n(s.holds_granted)}</td><td>${n(s.sold_out_409)}</td><td>${n(s.shed_503)}</td><td>${n(s.gave_up_after_503)}</td><td>${n(s.server_errors)}</td><td>${ms(hold(r)?.p95)}</td><td>${ms(s.time_to_ticket_p95)}</td></tr>`; }).join('') + '</tbody>');
+    }
+    checks('v-lock', R['verify-redis-lock']); checks('v-recovery', R['verify-recovery']);
+    html('generated', `Generated from loadtests/results on ${R.generated ?? ''}. Every chart has a hover readout; the tables carry the same numbers.`);
+  }
+
+  render();
+  let raf; const rerender = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerender);
+  new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>

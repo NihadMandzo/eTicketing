@@ -1,5 +1,3 @@
-using eTicketing.Contracts.Persistence;
-
 namespace eTicketing.Catalog.Data.Entities;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace eTicketing.Catalog.Data.Entities;
 /// the desktop back-office screen. Second, it is how a restarting service finds the model to load:
 /// the single row with <see cref="IsActive"/> set names the blob to pull.
 /// </summary>
-public class RecommendationModelSnapshot : BaseEntity
+public class RecommendationModelSnapshot
 {
     public Guid Id { get; set; }
 

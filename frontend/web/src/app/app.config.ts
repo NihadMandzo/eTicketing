@@ -20,6 +20,7 @@ import { provideClientHydration, withEventReplay } from '@angular/platform-brows
 import { authRefreshInterceptor } from './core/interceptors/auth-refresh.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { loadingInterceptor } from './core/interceptors/loading.interceptor';
+import { overloadRetryInterceptor } from './core/interceptors/overload-retry.interceptor';
 import { AuthService } from './core/services/auth.service';
 import { ThemeService } from './core/services/theme.service';
 
@@ -49,7 +50,7 @@ export const appConfig: ApplicationConfig = {
     // second time and clobbering this configuration when the two configs are merged.
     provideHttpClient(
       withFetch(),
-      withInterceptors([loadingInterceptor, credentialsInterceptor, authRefreshInterceptor]),
+      withInterceptors([loadingInterceptor, credentialsInterceptor, authRefreshInterceptor, overloadRetryInterceptor]),
       withInterceptorsFromDi(),
     ),
     // Restores auth state from the session cookie on every page load/refresh, so a logged-in user

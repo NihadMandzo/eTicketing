@@ -10,5 +10,4 @@ public record OrganizationSnapshotRow(
     string Address,
     string Email,
     string PhoneNumber,
-    string? SuperAdminEmail,
-    bool IsActive);
+    string? SuperAdminEmail);

@@ -134,4 +134,12 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     /// not mint a second parking ticket for a month that was only paid for once.
     /// </summary>
     Task<bool> ExistsForSubscriptionPeriodAsync(Guid subscriptionId, DateOnly periodStart, CancellationToken ct = default);
+
+    /// <summary>
+    /// Seats this sector has actually given out — every ticket on it that is not Cancelled, for one
+    /// calendar date when <paramref name="validDate"/> is given (DailyEntry counts per day). The
+    /// database's answer to "how full is this counter", used to rebuild the Redis capacity counter
+    /// when Redis has lost it; see ISoldCapacityCounter.
+    /// </summary>
+    Task<int> CountOccupyingSeatsAsync(Guid sectorId, DateOnly? validDate, CancellationToken ct = default);
 }

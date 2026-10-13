@@ -8,7 +8,6 @@ public sealed record GateConfigResponse(
     string DeviceName,
     Guid ProductId,
     string ProductName,
-    DateTime? ProductDate,
     bool AllSectors,
     IReadOnlyList<GateDeviceSectorResponse> Sectors,
     DateTime ServerTime);

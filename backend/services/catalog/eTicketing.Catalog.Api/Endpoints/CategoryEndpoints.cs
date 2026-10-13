@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Business.Categories;
+using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using Microsoft.AspNetCore.Mvc;
@@ -11,19 +12,19 @@ public static class CategoryEndpoints
     {
         var group = app.MapGroup("/categories").WithTags("Categories");
 
-        group.MapGet("", GetAll).AllowAnonymous().WithValidation<CategoryQuery>();
-        group.MapGet("/{id:int}", GetById).AllowAnonymous();
+        group.MapGet("", GetAll).AllowAnonymous().WithValidation<CategoryQuery>().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
+        group.MapGet("/{id:int}", GetById).AllowAnonymous().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
 
-        group.MapPost("", Create).RequireAuthorization("PlatformStaff").WithValidation<CreateCategoryRequest>();
-        group.MapPut("/{id:int}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateCategoryRequest>();
-        group.MapDelete("/{id:int}", Delete).RequireAuthorization("PlatformStaff");
+        group.MapPost("", Create).RequireAuthorization("PlatformStaff").WithValidation<CreateCategoryRequest>().EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapPut("/{id:int}", Update).RequireAuthorization("PlatformStaff").WithValidation<UpdateCategoryRequest>().EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapDelete("/{id:int}", Delete).RequireAuthorization("PlatformStaff").EvictsPublicCache(CatalogPublicCache.Tag);
 
         // Icons are managed exclusively through these two dedicated multipart endpoints, never
         // bundled into Create/Update above — see Category.IconBlobName / CategoryService.
         group.MapPost("/{id:int}/icon", UploadIcon).RequireAuthorization("PlatformStaff")
-            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery();
+            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery().EvictsPublicCache(CatalogPublicCache.Tag);
         group.MapPut("/{id:int}/icon", ReplaceIcon).RequireAuthorization("PlatformStaff")
-            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery();
+            .WithValidation<CategoryIconUploadRequest>().DisableAntiforgery().EvictsPublicCache(CatalogPublicCache.Tag);
     }
 
     private static async Task<IResult> GetAll([AsParameters] CategoryQuery query, ICategoryService service, CancellationToken ct)

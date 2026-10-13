@@ -296,3 +296,13 @@ h4 {
   color: var(--success);
   border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
 }
+
+/* Used by RecommendationRowComponent's marquee. Global on purpose — see the note there. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

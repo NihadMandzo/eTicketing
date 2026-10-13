@@ -4,6 +4,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'api_config.dart';
+import 'overload_retry_interceptor.dart';
 
 /// The single shared HTTP client for the whole app. Auth is httpOnly-cookie
 /// based — the cookie jar attaches/receives `eticketing_at`/`eticketing_rt`
@@ -29,4 +30,6 @@ Future<void> initApiClient() async {
     storage: FileStorage('${dir.path}/.cookies/'),
   );
   apiClient.interceptors.add(CookieManager(jar));
+  // Rides out the backend's 503 "server.overloaded" refusals; see OverloadRetryInterceptor.
+  apiClient.interceptors.add(OverloadRetryInterceptor(apiClient));
 }

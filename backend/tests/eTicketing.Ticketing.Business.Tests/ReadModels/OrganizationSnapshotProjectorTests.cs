@@ -36,9 +36,8 @@ public class OrganizationSnapshotProjectorTests : IDisposable
         string email = "kontakt@sarajevo-events.ba",
         string phoneNumber = "+387 33 123 456",
         string? superAdminEmail = "emir@sarajevo-events.ba",
-        bool isActive = true,
         DateTime? changedAt = null) =>
-        new(_organizationId, name, address, email, phoneNumber, superAdminEmail, isActive, changedAt ?? Noon);
+        new(_organizationId, name, address, email, phoneNumber, superAdminEmail, changedAt ?? Noon);
 
     private Task<OrganizationSnapshot?> StoredAsync() =>
         _fixture.DbContext.OrganizationSnapshots.AsNoTracking()
@@ -56,7 +55,6 @@ public class OrganizationSnapshotProjectorTests : IDisposable
         stored.Email.Should().Be("kontakt@sarajevo-events.ba");
         stored.PhoneNumber.Should().Be("+387 33 123 456");
         stored.SuperAdminEmail.Should().Be("emir@sarajevo-events.ba");
-        stored.IsActive.Should().BeTrue();
         stored.ChangedAt.Should().Be(Noon);
     }
 

@@ -24,5 +24,4 @@ public record OrganizationSnapshotChanged(
     string Email,
     string PhoneNumber,
     string? SuperAdminEmail,
-    bool IsActive,
     DateTime ChangedAt);
