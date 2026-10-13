@@ -274,8 +274,6 @@ Verdict validate(const String &scannedCode) {
         verdict.message = "Neispravan odgovor servera.";
         return verdict;
       }
-      // The one field that decides whether the barrier moves. Absent or non-boolean is treated as
-      // false — a malformed success body must never be read as permission to open.
       verdict.outcome = (doc["isValid"] | false) ? Outcome::Valid : Outcome::Invalid;
       verdict.code = str(doc["code"]);
       verdict.message = str(doc["message"]);
