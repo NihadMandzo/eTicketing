@@ -44,6 +44,7 @@ public class TicketPrintService : ITicketPrintService
     private readonly ITicketRepository _ticketRepository;
     private readonly ITicketPrintBatchRepository _batchRepository;
     private readonly ISectorCapacityLock _capacityLock;
+    private readonly ISoldCapacityCounter _soldCapacity;
     private readonly ICatalogClient _catalogClient;
     private readonly ITicketPrintQueue _queue;
     private readonly IUnitOfWork _unitOfWork;
@@ -55,6 +56,7 @@ public class TicketPrintService : ITicketPrintService
         ITicketRepository ticketRepository,
         ITicketPrintBatchRepository batchRepository,
         ISectorCapacityLock capacityLock,
+        ISoldCapacityCounter soldCapacity,
         ICatalogClient catalogClient,
         ITicketPrintQueue queue,
         IUnitOfWork unitOfWork,
@@ -65,6 +67,7 @@ public class TicketPrintService : ITicketPrintService
         _ticketRepository = ticketRepository;
         _batchRepository = batchRepository;
         _capacityLock = capacityLock;
+        _soldCapacity = soldCapacity;
         _catalogClient = catalogClient;
         _queue = queue;
         _unitOfWork = unitOfWork;
@@ -186,8 +189,8 @@ public class TicketPrintService : ITicketPrintService
             // the organizer to sell at the door, so there is no account to bind the hold to, and
             // the hold ids never leave this method: it releases or confirms every one of them
             // before returning, so nothing outside can present one.
-            var hold = await _capacityLock.TryHoldAsync(
-                sector.Id, sector.Capacity, quantity, request.ValidDate, CapacityHoldTtl, null, ct);
+            var hold = await _capacityLock.TryHoldRecoveringAsync(
+                _soldCapacity, sector, quantity, request.ValidDate, CapacityHoldTtl, null, ct);
 
             if (!hold.Success)
             {

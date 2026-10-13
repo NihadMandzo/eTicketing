@@ -31,6 +31,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseExceptionHandler();
+// Refuses overflow with 503 before any work is spent on it — see LoadSheddingMiddleware.
+app.UsePlatformLoadShedding();
 
 app.MapPaymentEndpoints();
 app.MapHealthChecks("/health");

@@ -37,7 +37,6 @@ public class OrganizationRepository : Repository<Organization, Guid>, IOrganizat
                 o.Users
                     .Where(u => u.Role == RoleType.OrganizationSuperAdmin)
                     .Select(u => u.Email)
-                    .FirstOrDefault(),
-                o.IsActive))
+                    .FirstOrDefault()))
             .ToListAsync(ct);
 }

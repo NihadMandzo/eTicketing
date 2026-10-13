@@ -16,4 +16,9 @@ public interface ISubscriptionRepository : IRepository<Subscription, Guid>
 
     /// <summary>One subscription with its Sector, for ownership checks and cancellation.</summary>
     Task<Subscription?> GetByIdWithSectorAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>How many subscriptions still hold a space on this RecurringReservation sector —
+    /// every one that is not Cancelled (cancelling is what gives the space back). Used to rebuild
+    /// the Redis capacity counter when Redis has lost it; see ISoldCapacityCounter.</summary>
+    Task<int> CountHoldingSpaceAsync(Guid sectorId, CancellationToken ct = default);
 }

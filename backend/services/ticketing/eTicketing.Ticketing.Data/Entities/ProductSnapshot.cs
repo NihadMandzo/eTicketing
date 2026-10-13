@@ -19,13 +19,11 @@ namespace eTicketing.Ticketing.Data.Entities;
 /// "not published" — the safe direction: the worst case is a sector temporarily not listed, rather
 /// than a deleted event still taking people's money.</para>
 /// </summary>
-public class ProductSnapshot : BaseEntity
+public class ProductSnapshot
 {
     /// <summary>The primary key. One row per product, so a redelivery overwrites rather than
     /// duplicates, and the projection needs no surrogate id of its own.</summary>
     public Guid ProductId { get; set; }
-
-    public Guid OrganizationId { get; set; }
 
     public string Name { get; set; } = string.Empty;
 
@@ -36,11 +34,9 @@ public class ProductSnapshot : BaseEntity
 
     public PublishStatus Status { get; set; }
 
-    public TicketingMode TicketingMode { get; set; }
-
     /// <summary>When Catalog produced the state this row holds — copied from the event, never from
     /// the local clock. It is what makes the projection safe under at-least-once delivery: an event
-    /// older than this is dropped instead of being allowed to resurrect a stale status.
-    /// <c>UpdatedAt</c> cannot do this job; it records when *this database* last wrote the row.</summary>
+    /// older than this is dropped instead of being allowed to resurrect a stale status. A local
+    /// write timestamp could not do this job — it records when *this database* wrote the row.</summary>
     public DateTime ChangedAt { get; set; }
 }

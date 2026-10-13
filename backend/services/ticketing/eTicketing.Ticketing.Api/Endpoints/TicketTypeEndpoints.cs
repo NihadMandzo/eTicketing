@@ -1,3 +1,4 @@
+using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using eTicketing.Ticketing.Business.Sectors;
@@ -11,9 +12,9 @@ public static class TicketTypeEndpoints
         var group = app.MapGroup("/sectors/{sectorId:guid}/ticket-types").WithTags("TicketTypes");
 
         group.MapGet("", GetBySector).AllowAnonymous();
-        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertTicketTypeRequest>();
-        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertTicketTypeRequest>();
-        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
+        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertTicketTypeRequest>().EvictsPublicCache(SectorPublicCache.Tag);
+        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertTicketTypeRequest>().EvictsPublicCache(SectorPublicCache.Tag);
+        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer").EvictsPublicCache(SectorPublicCache.Tag);
     }
 
     // AllowAnonymous, but the handler still reads http.User: UseAuthentication populates it from

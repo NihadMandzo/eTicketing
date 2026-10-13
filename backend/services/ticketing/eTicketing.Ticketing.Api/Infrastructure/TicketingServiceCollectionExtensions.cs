@@ -42,8 +42,11 @@ public static class TicketingServiceCollectionExtensions
     public static WebApplicationBuilder AddTicketingInfrastructure(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<TicketingDbContext>(opt => opt
-            .UseSqlServer(builder.Configuration.GetConnectionString("TicketingDb"))
+            .UseSqlServer(SqlConnectionPooling.WithPlatformPoolSize(builder.Configuration.GetConnectionString("TicketingDb"), builder.Configuration))
             .AddInterceptors(new AuditableEntitySaveChangesInterceptor()));
+
+        // In-process response cache for the public sector list (CachePublicly in SectorEndpoints).
+        builder.Services.AddOutputCache();
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<TicketingDbContext>());
         builder.Services.AddScoped<ISectorRepository, SectorRepository>();
@@ -58,6 +61,12 @@ public static class TicketingServiceCollectionExtensions
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
         builder.Services.AddSingleton<ISectorCapacityLock, RedisSectorCapacityLock>();
+        // Rebuilds a capacity counter Redis has lost from the Tickets/Subscriptions tables before the
+        // next hold — see CapacityHoldRecovery.
+        builder.Services.AddScoped<ISoldCapacityCounter, SoldCapacityCounter>();
+        // Clears the 24 h TTL the first version of the lock left on capacity counters, so a counter
+        // holding sold seats can never expire — see CapacityCounterTtlRemovalWorker.
+        builder.Services.AddHostedService<CapacityCounterTtlRemovalWorker>();
         builder.Services.AddSingleton<ITicketValidationLock, RedisTicketValidationLock>();
 
         // GET /tickets/{id}/pdf renders the buyer's sheet on demand rather than serving a stored

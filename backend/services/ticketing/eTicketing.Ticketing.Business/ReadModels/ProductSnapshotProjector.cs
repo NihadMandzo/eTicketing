@@ -124,8 +124,7 @@ public class ProductSnapshotProjector : IProductSnapshotProjector
     /// backfill and by SectorService's opportunistic fill, which both have a
     /// <see cref="CatalogProductResponse"/> rather than an event in hand.</summary>
     public static ProductSnapshotChanged FromCatalog(CatalogProductResponse product, DateTime readAt) =>
-        new(product.Id, product.OrganizationId, product.Name, product.Date, product.City,
-            product.Status, product.TicketingMode, readAt);
+        new(product.Id, product.Name, product.Date, product.City, product.Status, readAt);
 
     private static ProductSnapshot ToEntity(ProductSnapshotChanged message)
     {
@@ -136,12 +135,10 @@ public class ProductSnapshotProjector : IProductSnapshotProjector
 
     private static void CopyInto(ProductSnapshotChanged message, ProductSnapshot snapshot)
     {
-        snapshot.OrganizationId = message.OrganizationId;
         snapshot.Name = message.Name;
         snapshot.Date = message.Date;
         snapshot.City = message.City;
         snapshot.Status = message.Status;
-        snapshot.TicketingMode = message.TicketingMode;
         snapshot.ChangedAt = message.ChangedAt;
     }
 }

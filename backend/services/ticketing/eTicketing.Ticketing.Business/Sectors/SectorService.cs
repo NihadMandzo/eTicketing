@@ -23,6 +23,7 @@ public class SectorService : ISectorService
     private readonly IProductSnapshotProjector _snapshotProjector;
     private readonly ICatalogClient _catalogClient;
     private readonly ISectorCapacityLock _capacityLock;
+    private readonly ISoldCapacityCounter _soldCapacity;
     private readonly IUnitOfWork _unitOfWork;
 
     public SectorService(
@@ -31,6 +32,7 @@ public class SectorService : ISectorService
         IProductSnapshotProjector snapshotProjector,
         ICatalogClient catalogClient,
         ISectorCapacityLock capacityLock,
+        ISoldCapacityCounter soldCapacity,
         IUnitOfWork unitOfWork)
     {
         _sectorRepository = sectorRepository;
@@ -38,6 +40,7 @@ public class SectorService : ISectorService
         _snapshotProjector = snapshotProjector;
         _catalogClient = catalogClient;
         _capacityLock = capacityLock;
+        _soldCapacity = soldCapacity;
         _unitOfWork = unitOfWork;
     }
 
@@ -250,8 +253,8 @@ public class SectorService : ISectorService
             return Result<HoldSectorResponse>.Failure(Error.Validation("sector.date_not_applicable", "Datum se ne unosi za ovaj tip sektora."));
         }
 
-        var hold = await _capacityLock.TryHoldAsync(
-            sector.Id, sector.Capacity, request.Quantity, request.Date, HoldTtl, user.TryGetUserId(), ct);
+        var hold = await _capacityLock.TryHoldRecoveringAsync(
+            _soldCapacity, sector, request.Quantity, request.Date, HoldTtl, user.TryGetUserId(), ct);
         if (!hold.Success)
             return Result<HoldSectorResponse>.Failure(Error.Conflict("sector.no_capacity", "Nema dovoljno slobodnog kapaciteta."));
 

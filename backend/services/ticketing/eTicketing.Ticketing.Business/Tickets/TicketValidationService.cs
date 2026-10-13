@@ -6,6 +6,7 @@ using eTicketing.Ticketing.Business.Security;
 using eTicketing.Ticketing.Business.Time;
 using eTicketing.Ticketing.Data.Entities;
 using eTicketing.Ticketing.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace eTicketing.Ticketing.Business.Tickets;
@@ -40,7 +41,12 @@ namespace eTicketing.Ticketing.Business.Tickets;
 ///    is an exit, and the ticket stays Confirmed for its whole ValidFrom..ValidTo window. Because
 ///    that toggle is the only way in, the same ticket can never be used to enter twice without an
 ///    exit in between - which is exactly the rule this mode needs.
-/// 5. <b>Nothing here calls another service.</b> A SingleOccurrence ticket's showing date comes
+/// 5. <b>The database has the last word on "admitted once".</b> The Redis lock keeps two scans of
+///    the same ticket apart while it holds; it is an optimization that turns a race into a friendly
+///    "try again". Correctness does not rest on it: Status and IsInside are concurrency tokens
+///    (TicketConfiguration), so an admission whose read went stale before its write (the lock
+///    lapsed, Redis restarted) changes nothing and is answered with the same 409 as a busy lock.
+/// 6. <b>Nothing here calls another service.</b> A SingleOccurrence ticket's showing date comes
 ///    from the local <see cref="ProductSnapshot"/> read model, not from Catalog, so a Catalog
 ///    outage cannot close every door of a venue. A scan touches only this service's database and
 ///    the Redis lock.
@@ -159,8 +165,7 @@ public class TicketValidationService : ITicketValidationService
             // Someone else is mid-validation on this exact ticket right now. 409 rather than an
             // IsValid=false card: this says nothing about the ticket, only about timing, so the
             // scanner should invite a retry instead of turning the holder away.
-            return Result<TicketValidationResponse>.Failure(Error.Conflict(
-                "ticket.validation_in_progress", "Ova ulaznica se trenutno provjerava na drugom uređaju. Pokušajte ponovo."));
+            return ValidationInProgress();
         }
 
         try
@@ -225,7 +230,8 @@ public class TicketValidationService : ITicketValidationService
         Ticket ticket, ValidationScope scope, CancellationToken ct)
     {
         ticket.MarkValidated(scope.ValidatedByUserId, _clock.UtcNow, scope.ValidatedByDeviceId);
-        await _unitOfWork.SaveChangesAsync(ct);
+        if (!await TryCommitAdmissionAsync(ticket.Id, ct))
+            return ValidationInProgress();
 
         _logger.LogInformation(
             "Ulaznica {TicketId} za proizvod {ProductId} validirana od strane {UserId} (uređaj: {DeviceId}).",
@@ -253,7 +259,8 @@ public class TicketValidationService : ITicketValidationService
         else
             ticket.RegisterEntry(scope.ValidatedByUserId, now, scope.ValidatedByDeviceId);
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        if (!await TryCommitAdmissionAsync(ticket.Id, ct))
+            return ValidationInProgress();
 
         _logger.LogInformation(
             "Pretplatnička ulaznica {TicketId} za proizvod {ProductId}: {Direction} zabilježen od strane {UserId} (uređaj: {DeviceId}).",
@@ -263,6 +270,39 @@ public class TicketValidationService : ITicketValidationService
             ? Valid("ticket.exit_recorded", "Izlaz zabilježen. Ulaznica je ponovo spremna za ulaz.", ticket, GatePassageDirection.Exit)
             : Valid("ticket.valid", "Ulaznica je validna. Ulaz odobren.", ticket, GatePassageDirection.Entry);
     }
+
+    /// <summary>
+    /// Commits an admission with the database as the final arbiter. Status and IsInside are
+    /// concurrency tokens (TicketConfiguration), so the UPDATE matches only while the row still
+    /// holds what this request read. If another scan committed first, which can only happen when
+    /// the Redis lock was lost, nothing is written and the caller answers "try again", the same as
+    /// for a busy lock. The retry reads the row afresh and gets the true verdict: "already used",
+    /// or, for a parking subscription, the exit that the second scan really is.
+    /// </summary>
+    private async Task<bool> TryCommitAdmissionAsync(Guid ticketId, CancellationToken ct)
+    {
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // Refresh the stale copy so that nothing else saved through this unit of work later in
+            // the request (the gate's LastSeenAt stamp) tries to write the losing admission again.
+            foreach (var entry in ex.Entries)
+                await entry.ReloadAsync(ct);
+
+            _logger.LogWarning(
+                "Ulaznica {TicketId} je u međuvremenu validirana na drugom uređaju; upis je odbijen, skener treba ponoviti.",
+                ticketId);
+            return false;
+        }
+    }
+
+    private static Result<TicketValidationResponse> ValidationInProgress() =>
+        Result<TicketValidationResponse>.Failure(Error.Conflict(
+            "ticket.validation_in_progress", "Ova ulaznica se trenutno provjerava na drugom uređaju. Pokušajte ponovo."));
 
     /// <summary>Mode-aware "is today inside this ticket's window". DailyEntry and
     /// RecurringReservation answer from their own columns; SingleOccurrence has to look up the

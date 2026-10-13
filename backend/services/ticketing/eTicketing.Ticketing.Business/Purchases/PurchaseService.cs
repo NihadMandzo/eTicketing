@@ -352,9 +352,6 @@ public class PurchaseService : IPurchaseService
                     _qrCodec.Sign(t.Id),
                     TicketTypeNameOf(t, ticketTypesById),
                     t.PricePaid, t.ValidDate, t.ValidFrom, t.ValidTo)).ToList(),
-                // Carried on the event so eTicketing.PdfGeneration can print a real event name,
-                // date and city without a catalogue lookup of its own — and carried as of *now*,
-                // which is what a ticket should show even if the product is renamed later.
                 order.Product.Name, order.Product.Date, order.Product.City),
             ct);
 

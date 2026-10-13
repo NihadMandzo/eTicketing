@@ -217,7 +217,6 @@ public class GateDeviceService : IGateDeviceService
             DeviceName: device.Name,
             ProductId: device.ProductId,
             ProductName: product.Name,
-            ProductDate: product.Date,
             AllSectors: device.AllSectors,
             Sectors: sectors,
             ServerTime: _timeProvider.GetUtcNow().UtcDateTime));

@@ -67,8 +67,7 @@ public class SubscriptionRenewalServiceTests : IDisposable
         // more, so a renewal that does not carry these prints a generic heading on next month's
         // parking ticket.
         var (sector, _) = await SeedActiveSubscriptionAsync();
-        await _fixture.SeedProductSnapshotAsync(
-            sector.ProductId, name: "Parking Skenderija", ticketingMode: TicketingMode.RecurringReservation);
+        await _fixture.SeedProductSnapshotAsync(sector.ProductId, name: "Parking Skenderija");
 
         await _sut.RenewAsync(Renewal(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
 

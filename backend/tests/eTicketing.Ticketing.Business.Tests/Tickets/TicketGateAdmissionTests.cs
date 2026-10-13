@@ -39,7 +39,7 @@ public class TicketGateAdmissionTests : IDisposable
     public TicketGateAdmissionTests()
     {
         _sut = _fixture.CreateTicketValidationService();
-        SeedProduct(TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
+        SeedProduct(Today.ToDateTime(new TimeOnly(20, 0)));
     }
 
     // ------------------------------------------- RecurringReservation: the entry/exit toggle
@@ -233,7 +233,7 @@ public class TicketGateAdmissionTests : IDisposable
     {
         // The bright line between the two behaviours: a museum day pass is one admission, so its
         // second scan must be the "already used" refusal, never the exit a parking pass would get.
-        SeedProduct(TicketingMode.DailyEntry, date: null);
+        SeedProduct(date: null);
         var ticket = await SeedOneShotTicketAsync(TicketingMode.DailyEntry, validDate: Today);
         var code = _fixture.QrCodec.Sign(ticket.Id);
         await _sut.ValidateAsync(Request(code), OrganizerOf(_orgA));
@@ -332,8 +332,8 @@ public class TicketGateAdmissionTests : IDisposable
         return await _fixture.DbContext.Tickets.AsNoTracking().FirstAsync(t => t.Id == ticketId);
     }
 
-    private void SeedProduct(TicketingMode mode, DateTime? date) =>
-        _fixture.UpsertProductSnapshot(_productId, _orgA, mode, date);
+    private void SeedProduct(DateTime? date) =>
+        _fixture.UpsertProductSnapshot(_productId, date);
 
     private ClaimsPrincipal OrganizerOf(Guid organizationId)
     {

@@ -1,5 +1,3 @@
-using eTicketing.Contracts.Persistence;
-
 namespace eTicketing.Ticketing.Data.Entities;
 
 /// <summary>
@@ -17,7 +15,7 @@ namespace eTicketing.Ticketing.Data.Entities;
 /// This is the opposite default from <see cref="ProductSnapshot"/>, where an unknown row blocks the
 /// sale; the difference is that a wrong label is cosmetic and a wrong sale is not.</para>
 /// </summary>
-public class OrganizationSnapshot : BaseEntity
+public class OrganizationSnapshot
 {
     public Guid OrganizationId { get; set; }
 
@@ -36,9 +34,7 @@ public class OrganizationSnapshot : BaseEntity
     /// invariant says cannot happen, and which this reads defensively anyway.</summary>
     public string? SuperAdminEmail { get; set; }
 
-    public bool IsActive { get; set; }
-
-    /// <summary>When Identity produced this state; see ProductSnapshot.ChangedAt for why UpdatedAt
-    /// cannot serve instead.</summary>
+    /// <summary>When Identity produced this state; see ProductSnapshot.ChangedAt for why a local
+    /// write timestamp cannot serve instead.</summary>
     public DateTime ChangedAt { get; set; }
 }

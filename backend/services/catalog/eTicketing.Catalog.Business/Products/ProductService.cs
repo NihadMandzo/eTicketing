@@ -81,7 +81,7 @@ public class ProductService : IProductService
         };
 
         await _productRepository.AddAsync(product, ct);
-        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
+        await PublishSnapshotAsync(product, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         product.Category = validation.Value;
@@ -102,7 +102,7 @@ public class ProductService : IProductService
 
         // The transition eTicketing.Ticketing cares about most: until its snapshot says Published,
         // this product's sectors are not listed and cannot be held.
-        await PublishSnapshotAsync(product, product.Category!.TicketingMode, ct);
+        await PublishSnapshotAsync(product, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return Result<ProductResponse>.Success(ToResponse(product));
@@ -156,7 +156,7 @@ public class ProductService : IProductService
         // Unconditional, unlike the notification above: a projection that only hears about changes
         // somebody decided were worth emailing about is a projection that quietly goes stale. A
         // draft edit produces no email and still produces a snapshot.
-        await PublishSnapshotAsync(product, validation.Value!.TicketingMode, ct);
+        await PublishSnapshotAsync(product, ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -173,12 +173,11 @@ public class ProductService : IProductService
     /// display strings. This one is state: always, typed. Folding them together would mean either
     /// emailing buyers about draft edits or letting the projection miss half of them.</para>
     /// </summary>
-    private Task PublishSnapshotAsync(Product product, TicketingMode ticketingMode, CancellationToken ct) =>
+    private Task PublishSnapshotAsync(Product product, CancellationToken ct) =>
         _eventPublisher.PublishAsync(
             EventNames.ProductSnapshotChanged,
             new ProductSnapshotChanged(
-                product.Id, product.OrganizationId, product.Name, product.Date, product.City,
-                product.Status, ticketingMode, DateTime.UtcNow),
+                product.Id, product.Name, product.Date, product.City, product.Status, DateTime.UtcNow),
             ct);
 
     public async Task<Result> DeleteAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)

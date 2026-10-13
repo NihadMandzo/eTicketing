@@ -1,3 +1,4 @@
+using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using eTicketing.Ticketing.Business.Sectors;
@@ -10,15 +11,15 @@ public static class SectorEndpoints
     {
         var group = app.MapGroup("/sectors").WithTags("Sectors");
 
-        group.MapGet("", GetPublished).AllowAnonymous().WithValidation<SectorQuery>();
+        group.MapGet("", GetPublished).AllowAnonymous().WithValidation<SectorQuery>().CachePublicly(SectorPublicCache.Duration, SectorPublicCache.Tag);
         group.MapGet("/mine", GetMine).RequireAuthorization("Organizer").WithValidation<SectorQuery>();
         group.MapGet("/all", GetAll).RequireAuthorization("PlatformStaff").WithValidation<SectorQuery>();
 
         group.MapPost("/preview", Preview).RequireAuthorization("Organizer").WithValidation<UpsertSectorRequest>();
-        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertSectorRequest>();
-        group.MapPost("/{id:guid}/publish", Publish).RequireAuthorization("Organizer");
-        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertSectorRequest>();
-        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
+        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertSectorRequest>().EvictsPublicCache(SectorPublicCache.Tag);
+        group.MapPost("/{id:guid}/publish", Publish).RequireAuthorization("Organizer").EvictsPublicCache(SectorPublicCache.Tag);
+        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertSectorRequest>().EvictsPublicCache(SectorPublicCache.Tag);
+        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer").EvictsPublicCache(SectorPublicCache.Tag);
 
         group.MapPost("/{id:guid}/hold", Hold).RequireAuthorization().WithValidation<HoldSectorRequest>();
         group.MapPost("/holds/{holdId}/release", ReleaseHold).RequireAuthorization();

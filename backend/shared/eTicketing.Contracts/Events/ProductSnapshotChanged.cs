@@ -25,10 +25,8 @@ namespace eTicketing.Contracts.Events;
 /// </param>
 public record ProductSnapshotChanged(
     Guid ProductId,
-    Guid OrganizationId,
     string Name,
     DateTime? Date,
     City City,
     PublishStatus Status,
-    TicketingMode TicketingMode,
     DateTime ChangedAt);

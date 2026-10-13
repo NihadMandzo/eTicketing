@@ -31,4 +31,9 @@ public class SubscriptionRepository : Repository<Subscription, Guid>, ISubscript
         => DbSet
             .Include(s => s.Sector)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
+
+    public Task<int> CountHoldingSpaceAsync(Guid sectorId, CancellationToken ct = default)
+        => DbSet
+            .AsNoTracking()
+            .CountAsync(s => s.SectorId == sectorId && s.Status != SubscriptionStatus.Cancelled, ct);
 }

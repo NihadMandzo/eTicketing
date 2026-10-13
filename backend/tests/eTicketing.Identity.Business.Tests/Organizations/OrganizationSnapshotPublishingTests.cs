@@ -91,7 +91,6 @@ public class OrganizationSnapshotPublishingTests : IDisposable
         snapshot.Email.Should().Be("info@acme.example.com");
         snapshot.PhoneNumber.Should().Be("+387 61 000 000");
         snapshot.SuperAdminEmail.Should().Be("alice@acme.example.com");
-        snapshot.IsActive.Should().BeTrue();
     }
 
     [Fact]
@@ -132,7 +131,6 @@ public class OrganizationSnapshotPublishingTests : IDisposable
         snapshot.Address.Should().Be("Titova 5");
         snapshot.Email.Should().Be("kontakt@acme.example.com");
         snapshot.PhoneNumber.Should().Be("+387 33 111 222");
-        snapshot.IsActive.Should().BeFalse();
         // Still resolved from the Users table, not dropped just because this request cannot change it.
         snapshot.SuperAdminEmail.Should().Be("alice@acme.example.com");
     }

@@ -46,7 +46,7 @@ public static class IdentityServiceCollectionExtensions
         }
 
         builder.Services.AddDbContext<IdentityDbContext>(opt => opt
-            .UseSqlServer(identityConnectionString)
+            .UseSqlServer(SqlConnectionPooling.WithPlatformPoolSize(identityConnectionString, builder.Configuration))
             .AddInterceptors(new AuditableEntitySaveChangesInterceptor()));
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());
@@ -104,6 +104,11 @@ public static class IdentityServiceCollectionExtensions
         // they did before. See ForwardedHeadersExtensions for the trust boundary that involves.
         builder.Services.AddPlatformForwardedHeaders(builder.Configuration);
 
+        // Configurable only so an isolated load-test stack can lift it: every k6 virtual user
+        // arrives from one container IP, so at 20/minute a login
+        // storm would measure this limiter instead of the login path. Unset means 20, as before.
+        var authAttemptsPerMinute = builder.Configuration.GetValue("RateLimiting:AuthAttemptsPerMinute", 20);
+
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -141,7 +146,7 @@ public static class IdentityServiceCollectionExtensions
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
                     Window = TimeSpan.FromMinutes(1),
-                    PermitLimit = 20,
+                    PermitLimit = authAttemptsPerMinute,
                     QueueLimit = 0
                 }));
 

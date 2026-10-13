@@ -182,7 +182,9 @@ public class Ticket : BaseEntity
     /// <summary>Admits this ticket at the gate: records who scanned it and when, and moves it to
     /// the terminal <see cref="TicketStatus.Used"/> so a second scan of the same QR is rejected.
     /// Callers must already hold the per-ticket Redis validation lock and must already have
-    /// checked the ticket is currently admittable — this method does not re-check, it commits.
+    /// checked the ticket is currently admittable. This method does not re-check; the database does,
+    /// at save time: Status is a concurrency token (TicketConfiguration), so if another scan burnt
+    /// the ticket after this caller read it, the save matches no row and throws.
     ///
     /// SingleOccurrence and DailyEntry only. A RecurringReservation ticket must go through
     /// <see cref="RegisterEntry"/>/<see cref="RegisterExit"/> instead — burning it would end a

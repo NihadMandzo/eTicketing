@@ -229,10 +229,7 @@ public class RecommendationService : IRecommendationService
 
         if (historyCount < _options.MinInteractionsForPersonalized || !_model.IsTrained)
             return RecommendationSource.ContentBased;
-
-        // Having enough history isn't sufficient — the user may have accumulated it entirely since
-        // the last nightly retrain, in which case the model has never seen them and TryScore
-        // returns false for every candidate. Reporting Personalized then would be a lie.
+            
         var modelKnowsThisUser = candidates.Any(p => _model.TryScore(userId, p.Id, out _));
         return modelKnowsThisUser ? RecommendationSource.Personalized : RecommendationSource.ContentBased;
     }

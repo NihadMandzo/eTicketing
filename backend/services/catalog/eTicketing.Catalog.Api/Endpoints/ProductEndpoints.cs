@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Business.Products;
+using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 using Microsoft.AspNetCore.Mvc;
@@ -11,24 +12,24 @@ public static class ProductEndpoints
     {
         var group = app.MapGroup("/products").WithTags("Products");
 
-        group.MapGet("", GetPublished).AllowAnonymous().WithValidation<ProductQuery>();
-        group.MapGet("/{id:guid}", GetById).AllowAnonymous();
+        group.MapGet("", GetPublished).AllowAnonymous().WithValidation<ProductQuery>().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
+        group.MapGet("/{id:guid}", GetById).AllowAnonymous().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
         group.MapGet("/mine", GetMine).RequireAuthorization("Organizer").WithValidation<ProductQuery>();
         group.MapGet("/all", GetAll).RequireAuthorization("PlatformStaff").WithValidation<ProductQuery>();
         group.MapGet("/organization-ids", GetOrganizationIds).RequireAuthorization("PlatformStaff")
             .WithValidation<ProductOrganizationIdsQuery>();
 
         group.MapPost("/preview", Preview).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>();
-        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>();
-        group.MapPost("/{id:guid}/publish", Publish).RequireAuthorization("Organizer");
-        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>();
-        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer");
+        group.MapPost("", Create).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>().EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapPost("/{id:guid}/publish", Publish).RequireAuthorization("Organizer").EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapPut("/{id:guid}", Update).RequireAuthorization("Organizer").WithValidation<UpsertProductRequest>().EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Organizer").EvictsPublicCache(CatalogPublicCache.Tag);
 
         // Images are managed exclusively through these two dedicated multipart endpoints, never
         // bundled into Create/Update above — see Product.Images / ProductService.
         group.MapPost("/{id:guid}/images", UploadImage).RequireAuthorization("Organizer")
-            .WithValidation<ProductImageUploadRequest>().DisableAntiforgery();
-        group.MapDelete("/{id:guid}/images/{imageId:guid}", DeleteImage).RequireAuthorization("Organizer");
+            .WithValidation<ProductImageUploadRequest>().DisableAntiforgery().EvictsPublicCache(CatalogPublicCache.Tag);
+        group.MapDelete("/{id:guid}/images/{imageId:guid}", DeleteImage).RequireAuthorization("Organizer").EvictsPublicCache(CatalogPublicCache.Tag);
 
         // Not routed through the Gateway — see docs/gateway-tok.md §1. Consumed only by
         // eTicketing.Ticketing's internal Catalog client.

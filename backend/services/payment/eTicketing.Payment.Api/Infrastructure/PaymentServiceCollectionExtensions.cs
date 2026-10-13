@@ -17,7 +17,7 @@ public static class PaymentServiceCollectionExtensions
     public static WebApplicationBuilder AddPaymentInfrastructure(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<PaymentDbContext>(opt => opt
-            .UseSqlServer(builder.Configuration.GetConnectionString("PaymentDb"))
+            .UseSqlServer(SqlConnectionPooling.WithPlatformPoolSize(builder.Configuration.GetConnectionString("PaymentDb"), builder.Configuration))
             .AddInterceptors(new AuditableEntitySaveChangesInterceptor()));
 
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PaymentDbContext>());

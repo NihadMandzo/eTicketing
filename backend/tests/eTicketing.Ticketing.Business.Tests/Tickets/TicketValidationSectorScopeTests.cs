@@ -291,8 +291,7 @@ public class TicketValidationSectorScopeTests : IDisposable
     // ------------------------------------------------------------------------------- test helpers
 
     private void SeedProduct(Guid productId) =>
-        _fixture.UpsertProductSnapshot(
-            productId, _orgA, TicketingMode.SingleOccurrence, Today.ToDateTime(new TimeOnly(20, 0)));
+        _fixture.UpsertProductSnapshot(productId, Today.ToDateTime(new TimeOnly(20, 0)));
 
     private async Task<Sector> SeedSectorAsync(string name, Guid? productId = null, Guid? organizationId = null)
     {

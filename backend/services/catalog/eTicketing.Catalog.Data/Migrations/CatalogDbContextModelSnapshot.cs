@@ -291,9 +291,6 @@ namespace eTicketing.Catalog.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<int>("InteractionCount")
                         .HasColumnType("int");
 
@@ -308,9 +305,6 @@ namespace eTicketing.Catalog.Data.Migrations
 
                     b.Property<int>("TrainingDurationMs")
                         .HasColumnType("int");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<int>("UserCount")
                         .HasColumnType("int");

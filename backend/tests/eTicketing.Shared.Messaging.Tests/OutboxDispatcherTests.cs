@@ -19,6 +19,7 @@ public class OutboxDispatcherTests : IDisposable
     private readonly OutboxTestContext _fixture = new();
     private readonly RecordingRawPublisher _publisher = new();
     private readonly Mock<IOutboxDispatchLock> _dispatchLock = new();
+    private readonly ManualTimeProvider _clock = new();
     private readonly OutboxDispatcher<OutboxTestDbContext> _sut;
 
     public OutboxDispatcherTests()
@@ -30,7 +31,7 @@ public class OutboxDispatcherTests : IDisposable
 
         _sut = new OutboxDispatcher<OutboxTestDbContext>(
             _fixture.ScopeFactory, _publisher, _dispatchLock.Object,
-            NullLogger<OutboxDispatcher<OutboxTestDbContext>>.Instance);
+            NullLogger<OutboxDispatcher<OutboxTestDbContext>>.Instance, _clock);
     }
 
     /// <summary>Captures what reached the broker, and can be told to fail — the two things every
@@ -41,10 +42,16 @@ public class OutboxDispatcherTests : IDisposable
         public List<(string RoutingKey, string Payload, Guid MessageId)> Published { get; } = [];
         public Exception? FailWith { get; set; }
 
+        /// <summary>Routing keys the broker refuses as unroutable — the per-message failure.</summary>
+        public HashSet<string> Refuse { get; } = [];
+
         public Task PublishRawAsync(string routingKey, string payloadJson, Guid messageId, CancellationToken ct = default)
         {
             if (FailWith is not null)
                 return Task.FromException(FailWith);
+
+            if (Refuse.Contains(routingKey))
+                return Task.FromException(new EventRejectedException(routingKey, new InvalidOperationException("NO_ROUTE")));
 
             Published.Add((routingKey, payloadJson, messageId));
             return Task.CompletedTask;
@@ -107,17 +114,142 @@ public class OutboxDispatcherTests : IDisposable
     }
 
     [Fact]
-    public async Task DispatchPending_AfterAFailedPass_RetriesOnTheNextOne()
+    public async Task DispatchPending_AfterAFailedPass_DoesNotRetryBeforeTheBackoff()
     {
         await SeedAsync();
         _publisher.FailWith = new InvalidOperationException("broker je nedostupan");
         await DispatchAsync();
 
         _publisher.FailWith = null;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        await DispatchAsync();
+
+        _publisher.Published.Should().BeEmpty();
+        (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DispatchPending_AfterAFailedPass_RetriesOnceTheBackoffHasPassed()
+    {
+        await SeedAsync();
+        _publisher.FailWith = new InvalidOperationException("broker je nedostupan");
+        await DispatchAsync();
+
+        _publisher.FailWith = null;
+        _clock.Advance(TimeSpan.FromMinutes(2));
         await DispatchAsync();
 
         _publisher.Published.Should().ContainSingle();
         (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenTheBrokerRefusesOneMessage_PublishesTheRestOfTheBatch()
+    {
+        // The regression: one unroutable payment.failed row used to hold 5,370 ticket.purchased
+        // events behind it for good.
+        await SeedAsync("payment.failed");
+        await SeedAsync("ticket.purchased");
+        await SeedAsync("ticket.purchased");
+        _publisher.Refuse.Add("payment.failed");
+
+        await DispatchAsync();
+
+        _publisher.Published.Select(p => p.RoutingKey).Should().Equal("ticket.purchased", "ticket.purchased");
+        var stored = await _fixture.DbContext.OutboxMessages.AsNoTracking().SingleAsync();
+        stored.RoutingKey.Should().Be("payment.failed");
+        stored.AttemptCount.Should().Be(1);
+        stored.LastError.Should().Contain("NO_ROUTE");
+    }
+
+    [Fact]
+    public async Task DispatchPending_RefusedRow_GoesOutOnceItsQueueExists()
+    {
+        await SeedAsync("payment.failed");
+        _publisher.Refuse.Add("payment.failed");
+        await DispatchAsync();
+
+        _publisher.Refuse.Clear();
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        await DispatchAsync();
+
+        _publisher.Published.Should().ContainSingle(p => p.RoutingKey == "payment.failed");
+        (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DispatchPending_FreshRowsGoAheadOfRowsDueForRetry()
+    {
+        // A pile of rows the broker keeps refusing must never crowd new events out of a batch.
+        await SeedManyAsync(OutboxDispatcher<OutboxTestDbContext>.BatchSize, "payment.failed");
+        _publisher.Refuse.Add("payment.failed");
+        await DispatchAsync();
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        var fresh = await SeedAsync("ticket.purchased");
+        await DispatchAsync();
+
+        _publisher.Published.Should().ContainSingle(p => p.MessageId == fresh.Id);
+    }
+
+    [Fact]
+    public async Task DispatchPending_RowRefusedManyTimes_IsRetriedHourly()
+    {
+        await SeedAsync("payment.failed");
+        await _fixture.DbContext.OutboxMessages.ExecuteUpdateAsync(s => s.SetProperty(m => m.AttemptCount, 25));
+
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        await DispatchAsync();
+        _publisher.Published.Should().BeEmpty();
+
+        _clock.Advance(TimeSpan.FromMinutes(31));
+        await DispatchAsync();
+        _publisher.Published.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DispatchPending_WithABacklogLargerThanABatch_DrainsItInOneTick()
+    {
+        // One batch per 5-second tick capped every service at about ten events a second.
+        const int backlog = OutboxDispatcher<OutboxTestDbContext>.BatchSize * 3 + 7;
+        await SeedManyAsync(backlog);
+
+        await DispatchAsync();
+
+        _publisher.Published.Should().HaveCount(backlog);
+        (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DispatchPending_StopsDrainingAtTheCapPerTick()
+    {
+        const int cap = OutboxDispatcher<OutboxTestDbContext>.BatchSize * OutboxDispatcher<OutboxTestDbContext>.MaxPassesPerTick;
+        await SeedManyAsync(cap + 30);
+
+        await DispatchAsync();
+
+        _publisher.Published.Should().HaveCount(cap);
+        (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(30);
+    }
+
+    [Fact]
+    public async Task DispatchPending_WhenTheBrokerFailsMidBacklog_StopsDraining()
+    {
+        await SeedManyAsync(OutboxDispatcher<OutboxTestDbContext>.BatchSize * 2);
+        _publisher.FailWith = new InvalidOperationException("veza prekinuta");
+
+        await DispatchAsync();
+
+        _publisher.Published.Should().BeEmpty();
+        (await _fixture.DbContext.OutboxMessages.AsNoTracking().CountAsync(m => m.AttemptCount == 1)).Should().Be(1);
+    }
+
+    private async Task SeedManyAsync(int count, string? routingKey = null)
+    {
+        for (var i = 0; i < count; i++)
+            _fixture.DbContext.OutboxMessages.Add(new OutboxMessage { Id = Guid.NewGuid(), RoutingKey = routingKey ?? $"event.{i}", Payload = "{}" });
+        await _fixture.DbContext.SaveChangesAsync();
+        _fixture.DbContext.ChangeTracker.Clear();
     }
 
     [Fact]

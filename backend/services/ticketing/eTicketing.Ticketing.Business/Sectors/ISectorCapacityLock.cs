@@ -58,4 +58,12 @@ public interface ISectorCapacityLock
     /// <see cref="TryHoldAsync"/> re-checks atomically rather than trusting a number read here.
     /// Used to show an organizer how many physical tickets a sector still has room for.</summary>
     Task<int> GetRemainingAsync(Guid sectorId, int capacity, DateOnly? date, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a missing counter already holding <paramref name="occupied"/> seats — the count the
+    /// database says are taken (ISoldCapacityCounter). Called after <see cref="TryHoldAsync"/>
+    /// reports <see cref="HoldResult.CounterMissing"/>. Does nothing if the counter exists by the
+    /// time it runs, so two callers racing to rebuild the same counter cannot both apply it.
+    /// </summary>
+    Task SeedAsync(Guid sectorId, DateOnly? date, int occupied, CancellationToken ct = default);
 }

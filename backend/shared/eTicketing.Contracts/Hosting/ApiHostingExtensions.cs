@@ -7,7 +7,7 @@ namespace eTicketing.Contracts.Hosting;
 
 /// <summary>
 /// Cross-cutting API boilerplate shared by every web-facing service (Identity, Catalog,
-/// Ticketing, Payment): global exception handling, health checks, OpenAPI. Keeps each
+/// Ticketing, Payment): global exception handling, health checks, OpenAPI, load shedding. Keeps each
 /// service's own Program.cs minimal.
 /// </summary>
 public static class ApiHostingExtensions
@@ -19,6 +19,7 @@ public static class ApiHostingExtensions
         builder.Services.AddProblemDetails();
         builder.Services.AddHealthChecks().AddDbContextCheck<TContext>("database");
         builder.Services.AddOpenApi();
+        builder.Services.AddPlatformLoadShedding(builder.Configuration);
 
         return builder;
     }

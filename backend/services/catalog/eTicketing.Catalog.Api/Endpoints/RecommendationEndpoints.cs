@@ -1,4 +1,5 @@
 using eTicketing.Catalog.Business.Recommendations;
+using eTicketing.Contracts.Hosting;
 using eTicketing.Contracts.Results;
 using eTicketing.Contracts.Validation;
 
@@ -20,8 +21,8 @@ public static class RecommendationEndpoints
 
         // Anonymous: neither needs a user history, and both run on the public storefront before
         // anyone has logged in.
-        group.MapGet("/similar/{productId:guid}", GetSimilar).AllowAnonymous().WithValidation<SimilarProductsQuery>();
-        group.MapGet("/popular", GetPopular).AllowAnonymous().WithValidation<PopularProductsQuery>();
+        group.MapGet("/similar/{productId:guid}", GetSimilar).AllowAnonymous().WithValidation<SimilarProductsQuery>().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
+        group.MapGet("/popular", GetPopular).AllowAnonymous().WithValidation<PopularProductsQuery>().CachePublicly(CatalogPublicCache.Duration, CatalogPublicCache.Tag);
 
         // Back-office: model state and a manual retrain, for the desktop "Preporuke" screen.
         group.MapGet("/status", GetStatus).RequireAuthorization("PlatformStaff");

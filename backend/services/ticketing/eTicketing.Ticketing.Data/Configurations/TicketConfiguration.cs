@@ -12,6 +12,18 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.UserEmail).HasMaxLength(320);
         builder.Property(t => t.PricePaid).HasColumnType("decimal(10,2)");
 
+        // The two columns a gate scan decides on. As concurrency tokens, every UPDATE of a ticket
+        // carries "WHERE Status = <what was read> AND IsInside = <what was read>", so a write based
+        // on a read that has since gone stale matches no row and throws
+        // DbUpdateConcurrencyException instead of silently overwriting. That makes the database,
+        // not the Redis validation lock, the final arbiter of "admitted once": the lock keeps two
+        // scans apart while it holds, and this catches the case where it did not (a stall past its
+        // 10 s lifetime, a Redis restart). It also stops a late TicketPdfReady from turning a ticket
+        // that was scanned in the meantime from Used back to Ready. No schema change: a concurrency
+        // token on an ordinary column only changes the WHERE clause EF Core generates.
+        builder.Property(t => t.Status).IsConcurrencyToken();
+        builder.Property(t => t.IsInside).IsConcurrencyToken();
+
         // SectorId is required (non-nullable), so plain Restrict is unambiguous here: the delete
         // is always rejected by the database, there's no nullable client-side fallback for EF to
         // reach for.

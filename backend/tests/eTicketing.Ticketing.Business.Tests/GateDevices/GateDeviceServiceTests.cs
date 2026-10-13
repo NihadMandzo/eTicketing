@@ -437,18 +437,17 @@ public class GateDeviceServiceTests : IDisposable
     [Fact]
     public async Task GetConfigAsync_ReadsTheProductFromTheSnapshot_WithoutCallingCatalog()
     {
-        // The device's own path must keep working while Catalog is down, so the name and date come
-        // from the local read model. Registration (above) is what still asks Catalog.
+        // The device's own path must keep working while Catalog is down, so the name comes from the
+        // local read model. Registration (above) is what still asks Catalog.
         var created = (await _sut.CreateAsync(Request(allSectors: true, sectorIds: []), OrganizerOf(_orgA))).Value!;
         var device = (await _fixture.GateDeviceRepository.GetByIdWithSectorsAsync(created.Device.Id))!;
         var showing = new DateTime(2026, 8, 24, 19, 30, 0);
-        _fixture.UpsertProductSnapshot(_productId, _orgA, TicketingMode.SingleOccurrence, showing, name: "Koncert u Zetri");
+        _fixture.UpsertProductSnapshot(_productId, showing, name: "Koncert u Zetri");
         _fixture.CatalogClient.Invocations.Clear();
 
         var result = await _sut.GetConfigAsync(device);
 
         result.Value!.ProductName.Should().Be("Koncert u Zetri");
-        result.Value.ProductDate.Should().Be(showing);
         _fixture.CatalogClient.Verify(
             c => c.GetProductAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -501,8 +500,7 @@ public class GateDeviceServiceTests : IDisposable
     /// <summary>The device's config path reads the local read model, not Catalog, so the config
     /// tests need a row there as well as the Catalog mock registration uses.</summary>
     private void SeedSnapshot(Guid productId) =>
-        _fixture.UpsertProductSnapshot(
-            productId, _orgA, TicketingMode.SingleOccurrence, new DateTime(2026, 8, 24, 20, 0, 0));
+        _fixture.UpsertProductSnapshot(productId, new DateTime(2026, 8, 24, 20, 0, 0));
 
     private UpsertGateDeviceRequest Request(
         List<Guid> sectorIds,

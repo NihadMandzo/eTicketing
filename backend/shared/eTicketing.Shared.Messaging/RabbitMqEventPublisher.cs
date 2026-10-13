@@ -4,6 +4,7 @@ using eTicketing.Contracts.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 
 namespace eTicketing.Shared.Messaging;
 
@@ -76,11 +77,9 @@ public sealed class RabbitMqEventPublisher : IEventPublisher, IRawEventPublisher
         await channel.BasicPublishAsync(
             exchange: EventNames.Exchange,
             routingKey: routingKey,
-            // Unroutable must fail, not confirm. See the class comment.
             mandatory: true,
             basicProperties: new BasicProperties
             {
-                // Survive a broker restart. See the class comment — durable queues alone do not.
                 Persistent = true,
                 MessageId = Guid.NewGuid().ToString("N"),
                 ContentType = "application/json",
@@ -102,18 +101,27 @@ public sealed class RabbitMqEventPublisher : IEventPublisher, IRawEventPublisher
         await channel.ExchangeDeclareAsync(
             EventNames.Exchange, ExchangeType.Topic, durable: true, cancellationToken: ct);
 
-        await channel.BasicPublishAsync(
-            exchange: EventNames.Exchange,
-            routingKey: routingKey,
-            mandatory: true,
-            basicProperties: new BasicProperties
-            {
-                Persistent = true,
-                MessageId = messageId.ToString("N"),
-                ContentType = "application/json",
-            },
-            body: Encoding.UTF8.GetBytes(payloadJson),
-            cancellationToken: ct);
+        try
+        {
+            await channel.BasicPublishAsync(
+                exchange: EventNames.Exchange,
+                routingKey: routingKey,
+                mandatory: true,
+                basicProperties: new BasicProperties
+                {
+                    Persistent = true,
+                    MessageId = messageId.ToString("N"),
+                    ContentType = "application/json",
+                },
+                body: Encoding.UTF8.GetBytes(payloadJson),
+                cancellationToken: ct);
+        }
+        catch (PublishException ex)
+        {
+            // Returned as unroutable (PublishReturnException derives from this) or nacked: the broker
+            // is up and refused this message. The dispatcher skips the row instead of stopping.
+            throw new EventRejectedException(routingKey, ex);
+        }
     }
 
     private async Task<IConnection> GetConnectionAsync(CancellationToken ct)

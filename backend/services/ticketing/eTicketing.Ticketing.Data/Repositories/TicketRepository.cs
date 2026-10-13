@@ -276,4 +276,11 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
 
     public Task<bool> ExistsForSubscriptionPeriodAsync(Guid subscriptionId, DateOnly periodStart, CancellationToken ct = default)
         => DbSet.AnyAsync(t => t.SubscriptionId == subscriptionId && t.ValidFrom == periodStart, ct);
+
+    public Task<int> CountOccupyingSeatsAsync(Guid sectorId, DateOnly? validDate, CancellationToken ct = default)
+        => DbSet
+            .AsNoTracking()
+            .Where(t => t.SectorId == sectorId && t.Status != TicketStatus.Cancelled)
+            .Where(t => validDate == null || t.ValidDate == validDate)
+            .CountAsync(ct);
 }

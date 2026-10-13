@@ -63,6 +63,10 @@ public sealed class TicketingTestContext : IDisposable
     public Mock<ICatalogClient> CatalogClient { get; } = new();
 
     public Mock<ISectorCapacityLock> CapacityLock { get; } = new();
+
+    /// <summary>The real counter over this fixture's repositories: what it counts is exactly what
+    /// rebuilding a lost Redis counter depends on.</summary>
+    public ISoldCapacityCounter SoldCapacityCounter => new SoldCapacityCounter(TicketRepository, SubscriptionRepository);
     public Mock<IPaymentClient> PaymentClient { get; } = new();
     public Mock<IEventPublisher> EventPublisher { get; } = new();
 
@@ -130,7 +134,7 @@ public sealed class TicketingTestContext : IDisposable
     public ISectorService CreateSectorService() =>
         new SectorService(
             SectorRepository, ProductSnapshotRepository, CreateProductSnapshotProjector(),
-            CatalogClient.Object, CapacityLock.Object, UnitOfWork);
+            CatalogClient.Object, CapacityLock.Object, SoldCapacityCounter, UnitOfWork);
 
     /// <summary>The real projector over this fixture's own context — it is a projection onto a
     /// table, so a mock would assert nothing about whether the table ends up right.</summary>
@@ -143,19 +147,16 @@ public sealed class TicketingTestContext : IDisposable
     /// checks before listing, holding or selling a sector. Sector tests that are not *about* product
     /// status call this so their sector is actually on sale.</summary>
     public async Task<ProductSnapshot> SeedProductSnapshotAsync(
-        Guid productId, PublishStatus status = PublishStatus.Published, Guid? organizationId = null,
-        string name = "Testni proizvod", DateTime? date = null,
-        TicketingMode ticketingMode = TicketingMode.SingleOccurrence)
+        Guid productId, PublishStatus status = PublishStatus.Published,
+        string name = "Testni proizvod", DateTime? date = null)
     {
         var snapshot = new ProductSnapshot
         {
             ProductId = productId,
-            OrganizationId = organizationId ?? Guid.NewGuid(),
             Name = name,
             Date = date,
             City = City.Sarajevo,
             Status = status,
-            TicketingMode = ticketingMode,
             ChangedAt = Clock.GetUtcNow().UtcDateTime,
         };
 
@@ -199,8 +200,7 @@ public sealed class TicketingTestContext : IDisposable
     /// constructors can call it. Overwriting is the point: a test that moves a showing to another
     /// day re-seeds a product the constructor already seeded.</summary>
     public void UpsertProductSnapshot(
-        Guid productId, Guid organizationId, TicketingMode ticketingMode, DateTime? date,
-        string name = "Test proizvod")
+        Guid productId, DateTime? date, string name = "Test proizvod")
     {
         var snapshot = DbContext.ProductSnapshots.Find(productId);
         if (snapshot is null)
@@ -209,12 +209,10 @@ public sealed class TicketingTestContext : IDisposable
             DbContext.ProductSnapshots.Add(snapshot);
         }
 
-        snapshot.OrganizationId = organizationId;
         snapshot.Name = name;
         snapshot.Date = date;
         snapshot.City = City.Sarajevo;
         snapshot.Status = PublishStatus.Published;
-        snapshot.TicketingMode = ticketingMode;
         snapshot.ChangedAt = Clock.GetUtcNow().UtcDateTime;
 
         DbContext.SaveChanges();
@@ -253,7 +251,6 @@ public sealed class TicketingTestContext : IDisposable
             Email = email,
             PhoneNumber = phoneNumber,
             SuperAdminEmail = superAdminEmail,
-            IsActive = true,
             ChangedAt = Clock.GetUtcNow().UtcDateTime,
         };
 
@@ -270,7 +267,7 @@ public sealed class TicketingTestContext : IDisposable
     public ITicketPrintService CreateTicketPrintService() =>
         new TicketPrintService(
             SectorRepository, TicketRepository, TicketPrintBatchRepository, CapacityLock.Object,
-            CatalogClient.Object, PrintQueue, UnitOfWork, PlatformClock,
+            SoldCapacityCounter, CatalogClient.Object, PrintQueue, UnitOfWork, PlatformClock,
             NullLogger<TicketPrintService>.Instance);
 
     public ITicketPrintRenderer CreateTicketPrintRenderer() =>
